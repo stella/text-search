@@ -170,9 +170,7 @@ bun run format
 bun run build
 ```
 
-## Acknowledgements
-
-Built on:
+## Built on
 - [@stll/regex-set](https://github.com/stella/regex-set) —
   NAPI-RS bindings to Rust regex-automata
 - [@stll/aho-corasick](https://github.com/stella/aho-corasick) —
