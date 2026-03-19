@@ -5,6 +5,7 @@
     "": {
       "name": "@stll/text-search",
       "dependencies": {
+        "@stll/aho-corasick": "file:../aho-corasick",
         "@stll/regex-set": "file:../regex-set",
       },
       "devDependencies": {
@@ -258,6 +259,20 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.56.0", "", { "os": "win32", "cpu": "x64" }, "sha512-ZHa0clocjLmIDr+1LwoWtxRcoYniAvERotvwKUYKhH41NVfl0Y4LNbyQkwMZzwDvKklKGvGZ5+DAG58/Ik47tQ=="],
 
+    "@stll/aho-corasick": ["@stll/aho-corasick@file:../aho-corasick", { "devDependencies": { "@emnapi/core": "^1.9.0", "@emnapi/runtime": "^1.9.0", "@napi-rs/cli": "^3.0.0", "@napi-rs/wasm-runtime": "^1.1.1", "@tybys/wasm-util": "^0.10.1", "@types/node": "^25.5.0", "bun-types": "^1.3.10", "emnapi": "^1.9.0", "fast-check": "^4.6.0", "oxfmt": "^0.40.0", "oxlint": "^1.55.0" }, "optionalDependencies": { "@stll/aho-corasick-darwin-arm64": "0.1.2", "@stll/aho-corasick-darwin-x64": "0.1.2", "@stll/aho-corasick-linux-arm64-gnu": "0.1.2", "@stll/aho-corasick-linux-x64-gnu": "0.1.2", "@stll/aho-corasick-linux-x64-musl": "0.1.2", "@stll/aho-corasick-win32-x64-msvc": "0.1.2" } }],
+
+    "@stll/aho-corasick-darwin-arm64": ["@stll/aho-corasick-darwin-arm64@0.1.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-VjlAROg8EHzBm0Sdta/vEjN55ITtUEP40/GIVYlQSSLcaiRKnroKD73GFtv5fDt8QLBG7r7vAlsIFgCjFBIaFQ=="],
+
+    "@stll/aho-corasick-darwin-x64": ["@stll/aho-corasick-darwin-x64@0.1.2", "", { "os": "darwin", "cpu": "x64" }, "sha512-PUbTq9/hu+YZLVkVqsTLrTzXf4R8joSlO9wv+oj2h9lUwFPIHWK3+fwYL/wSsdHY5wK++dVdKCK0XmMgg7g/uQ=="],
+
+    "@stll/aho-corasick-linux-arm64-gnu": ["@stll/aho-corasick-linux-arm64-gnu@0.1.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-kx+Snf1JzGGdbrWu91apnfGByWNdZjDPiEYXD9hjIbefrwzp1Pr90R+8BOcBh1El0/ASt5IhW2xjex4lCzYYCQ=="],
+
+    "@stll/aho-corasick-linux-x64-gnu": ["@stll/aho-corasick-linux-x64-gnu@0.1.2", "", { "os": "linux", "cpu": "x64" }, "sha512-7UWf34/7iLRogOfAFa7IIvrR7nWX8y0dpsLgOW7ir79SRp5JXM4zo59Mh5OLUwGwX1t9f6nP3QP5KJBhmu7/eA=="],
+
+    "@stll/aho-corasick-linux-x64-musl": ["@stll/aho-corasick-linux-x64-musl@0.1.2", "", { "os": "linux", "cpu": "x64" }, "sha512-XtzF5r2C2EiMEHMWhOlhZR+3VrjCGJXz1IqEF6ewEod0OSfaP1xYdBx8s3ui+I0aRyhWZ6981B5Af1KDSeDXxA=="],
+
+    "@stll/aho-corasick-win32-x64-msvc": ["@stll/aho-corasick-win32-x64-msvc@0.1.2", "", { "os": "win32", "cpu": "x64" }, "sha512-NVhl68XNSiUOn3K4CBtH6ce715WRZIiHDA/o8hhS8pmERjFxxphSHlU8/F3boKX42C2lPxTvF1z8gYcHvyWOug=="],
+
     "@stll/regex-set": ["@stll/regex-set@file:../regex-set", { "devDependencies": { "@napi-rs/cli": "^3.0.0", "@types/node": "^25.5.0", "bun-types": "^1.3.10", "fast-check": "^4.6.0", "oxfmt": "^0.40.0", "oxlint": "^1.55.0" }, "optionalDependencies": { "@stll/regex-set-darwin-arm64": "0.3.2", "@stll/regex-set-darwin-x64": "0.3.2", "@stll/regex-set-linux-arm64-gnu": "0.3.2", "@stll/regex-set-linux-x64-gnu": "0.3.2", "@stll/regex-set-linux-x64-musl": "0.3.2", "@stll/regex-set-win32-x64-msvc": "0.3.2" } }],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
@@ -328,7 +343,11 @@
 
     "universal-user-agent": ["universal-user-agent@7.0.3", "", {}, "sha512-TmnEAEAsBJVZM/AADELsK76llnwcf9vMKuPz8JflO1frO8Lchitr0fNaN9d+Ap0BjKtqWqd/J17qeDnXh8CL2A=="],
 
+    "@stll/aho-corasick/@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
+
     "@stll/regex-set/@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
+
+    "@stll/aho-corasick/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "@stll/regex-set/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
   }

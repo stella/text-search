@@ -16,7 +16,45 @@ export type ClassifiedPattern = {
    * be isolated into their own RegexSet instance.
    */
   alternationCount: number;
+  /**
+   * True if the pattern is a pure literal string
+   * (no regex metacharacters). These can be routed
+   * to Aho-Corasick for SIMD-accelerated matching.
+   */
+  isLiteral: boolean;
 };
+
+/**
+ * Check if a string is a pure literal (no regex
+ * metacharacters). Pure literals are routed to
+ * Aho-Corasick instead of the regex DFA.
+ */
+export function isLiteralPattern(
+  pattern: string,
+): boolean {
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i]!;
+    if (
+      ch === "\\" ||
+      ch === "." ||
+      ch === "^" ||
+      ch === "$" ||
+      ch === "*" ||
+      ch === "+" ||
+      ch === "?" ||
+      ch === "{" ||
+      ch === "}" ||
+      ch === "(" ||
+      ch === ")" ||
+      ch === "[" ||
+      ch === "]" ||
+      ch === "|"
+    ) {
+      return false;
+    }
+  }
+  return pattern.length > 0;
+}
 
 /**
  * Count top-level alternation branches in a regex
@@ -71,6 +109,7 @@ export function classifyPatterns(
         originalIndex: i,
         pattern: entry,
         alternationCount: countAlternations(entry),
+        isLiteral: isLiteralPattern(entry),
       };
     }
 
@@ -81,6 +120,7 @@ export function classifyPatterns(
         alternationCount: countAlternations(
           entry.source,
         ),
+        isLiteral: false, // RegExp is never literal
       };
     }
 
@@ -94,6 +134,9 @@ export function classifyPatterns(
       name: entry.name,
       alternationCount:
         countAlternations(source),
+      isLiteral:
+        typeof pat === "string" &&
+        isLiteralPattern(pat),
     };
   });
 }

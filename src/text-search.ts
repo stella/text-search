@@ -1,3 +1,4 @@
+import { AhoCorasick } from "@stll/aho-corasick";
 import { RegexSet } from "@stll/regex-set";
 
 import type { ClassifiedPattern } from "./classify";
@@ -10,16 +11,23 @@ import type {
 } from "./types";
 
 /**
- * An engine instance: a RegexSet with its pattern
- * index mapping back to the original input array.
+ * An engine instance with pattern index mapping.
  */
-type EngineSlot = {
+type RegexSlot = {
+  type: "regex";
   rs: RegexSet;
-  /** Maps engine-local index → original index. */
   indexMap: number[];
-  /** Maps engine-local index → name. */
   nameMap: (string | undefined)[];
 };
+
+type AcSlot = {
+  type: "ac";
+  ac: AhoCorasick;
+  indexMap: number[];
+  nameMap: (string | undefined)[];
+};
+
+type EngineSlot = RegexSlot | AcSlot;
 
 /**
  * Multi-engine text search orchestrator.
@@ -46,13 +54,18 @@ export class TextSearch {
     const maxAlt = options?.maxAlternations ?? 50;
     const classified = classifyPatterns(patterns);
 
-    // Split: large alternations get isolated engines,
-    // normal patterns share one engine.
+    // Three buckets:
+    // 1. Pure literals → Aho-Corasick (SIMD)
+    // 2. Normal regex → shared RegexSet (DFA)
+    // 3. Large alternations → isolated RegexSet
+    const literals: ClassifiedPattern[] = [];
     const shared: ClassifiedPattern[] = [];
     const isolated: ClassifiedPattern[] = [];
 
     for (const cp of classified) {
-      if (cp.alternationCount > maxAlt) {
+      if (cp.isLiteral) {
+        literals.push(cp);
+      } else if (cp.alternationCount > maxAlt) {
         isolated.push(cp);
       } else {
         shared.push(cp);
@@ -65,17 +78,24 @@ export class TextSearch {
       wholeWords: options?.wholeWords ?? false,
     };
 
-    // Build shared engine (if any normal patterns)
-    if (shared.length > 0) {
+    // Build AC engine for pure literals
+    if (literals.length > 0) {
       this.engines.push(
-        buildEngine(shared, rsOptions),
+        buildAcEngine(literals, rsOptions),
       );
     }
 
-    // Build isolated engines (one per large pattern)
+    // Build shared regex engine
+    if (shared.length > 0) {
+      this.engines.push(
+        buildRegexEngine(shared, rsOptions),
+      );
+    }
+
+    // Build isolated regex engines
     for (const cp of isolated) {
       this.engines.push(
-        buildEngine([cp], rsOptions),
+        buildRegexEngine([cp], rsOptions),
       );
     }
   }
@@ -88,7 +108,7 @@ export class TextSearch {
   /** Returns true if any pattern matches. */
   isMatch(haystack: string): boolean {
     for (const engine of this.engines) {
-      if (engine.rs.isMatch(haystack)) {
+      if (engineIsMatch(engine, haystack)) {
         return true;
       }
     }
@@ -98,17 +118,18 @@ export class TextSearch {
   /** Find all non-overlapping matches. */
   findIter(haystack: string): Match[] {
     if (this.engines.length === 1) {
-      // Fast path: single engine, no merge needed
       return remapMatches(
-        this.engines[0]!.rs.findIter(haystack),
+        engineFindIter(this.engines[0]!, haystack),
         this.engines[0]!,
       );
     }
 
-    // Collect from all engines
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engine.rs.findIter(haystack);
+      const matches = engineFindIter(
+        engine,
+        haystack,
+      );
       all.push(...remapMatches(matches, engine));
     }
 
@@ -120,9 +141,13 @@ export class TextSearch {
     const seen = new Set<number>();
 
     for (const engine of this.engines) {
-      const which = engine.rs.whichMatch(haystack);
-      for (const localIdx of which) {
-        seen.add(engine.indexMap[localIdx]!);
+      // AC doesn't have whichMatch — use findIter
+      const matches = engineFindIter(
+        engine,
+        haystack,
+      );
+      for (const m of matches) {
+        seen.add(engine.indexMap[m.pattern]!);
       }
     }
 
@@ -162,13 +187,13 @@ export class TextSearch {
 /**
  * Build a RegexSet engine from classified patterns.
  */
-function buildEngine(
+function buildRegexEngine(
   patterns: ClassifiedPattern[],
   options: {
     unicodeBoundaries: boolean;
     wholeWords: boolean;
   },
-): EngineSlot {
+): RegexSlot {
   const rsPatterns: (string | RegExp | {
     pattern: string | RegExp;
     name?: string;
@@ -191,7 +216,60 @@ function buildEngine(
 
   const rs = new RegexSet(rsPatterns, options);
 
-  return { rs, indexMap, nameMap };
+  return { type: "regex", rs, indexMap, nameMap };
+}
+
+/**
+ * Build an Aho-Corasick engine from literal patterns.
+ */
+function buildAcEngine(
+  patterns: ClassifiedPattern[],
+  options: {
+    unicodeBoundaries: boolean;
+    wholeWords: boolean;
+  },
+): AcSlot {
+  const literals: string[] = [];
+  const indexMap: number[] = [];
+  const nameMap: (string | undefined)[] = [];
+
+  for (const cp of patterns) {
+    literals.push(cp.pattern as string);
+    indexMap.push(cp.originalIndex);
+    nameMap.push(cp.name);
+  }
+
+  const ac = new AhoCorasick(literals, {
+    wholeWords: options.wholeWords,
+  });
+
+  return { type: "ac", ac, indexMap, nameMap };
+}
+
+/**
+ * Dispatch isMatch to the correct engine.
+ */
+function engineIsMatch(
+  engine: EngineSlot,
+  haystack: string,
+): boolean {
+  if (engine.type === "ac") {
+    return engine.ac.isMatch(haystack);
+  }
+  return engine.rs.isMatch(haystack);
+}
+
+/**
+ * Dispatch findIter to the correct engine.
+ */
+function engineFindIter(
+  engine: EngineSlot,
+  haystack: string,
+): Match[] {
+  if (engine.type === "ac") {
+    return engine.ac.findIter(haystack);
+  }
+  return engine.rs.findIter(haystack);
 }
 
 /**

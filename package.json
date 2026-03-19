@@ -29,6 +29,7 @@
     "format": "oxfmt ."
   },
   "dependencies": {
+    "@stll/aho-corasick": "file:../aho-corasick",
     "@stll/regex-set": "file:../regex-set"
   },
   "devDependencies": {
