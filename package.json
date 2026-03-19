@@ -1,7 +1,19 @@
 {
   "name": "@stll/text-search",
   "version": "0.1.0",
-  "description": "Multi-engine text search orchestrator. Routes patterns to the optimal engine: Aho-Corasick for literals, regex-set for regex, with auto-optimization for large alternations.",
+  "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
+  "keywords": [
+    "text-search",
+    "multi-pattern",
+    "aho-corasick",
+    "regex",
+    "fuzzy",
+    "orchestrator"
+  ],
+  "homepage": "https://github.com/stella/text-search#readme",
+  "bugs": {
+    "url": "https://github.com/stella/text-search/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

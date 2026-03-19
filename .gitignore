@@ -1,3 +1,24 @@
-node_modules/
-dist/
+# Dependencies
+node_modules
+
+# Build outputs
+dist
 *.tsbuildinfo
+
+# Env
+.env
+.env.*
+
+# Debug
+npm-debug.log*
+
+# Misc
+.DS_Store
+*.pem
+
+# Turbo / cache
+.turbo
+.cache
+
+# Lock files (text-based bun.lock is committed)
+bun.lockb
