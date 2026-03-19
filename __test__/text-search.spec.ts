@@ -152,3 +152,73 @@ describe("options", () => {
     );
   });
 });
+
+// ─── Fuzzy matching ──────────────────────────
+
+describe("fuzzy matching", () => {
+  test("fuzzy pattern matches with edit distance", () => {
+    const ts = new TextSearch([
+      { pattern: "Smith", distance: 1 },
+      "exact",
+    ]);
+    const matches = ts.findIter(
+      "Smi1h and exact here",
+    );
+    const texts = matches.map((m) => m.text);
+    expect(texts).toContain("Smi1h");
+    expect(texts).toContain("exact");
+  });
+
+  test("fuzzy pattern indices preserved", () => {
+    const ts = new TextSearch([
+      "literal",
+      { pattern: "Novak", distance: 1 },
+      "\\d+",
+    ]);
+    const matches = ts.findIter(
+      "literal Nowak 42",
+    );
+    const byPattern = new Map(
+      matches.map((m) => [m.pattern, m.text]),
+    );
+    expect(byPattern.get(0)).toBe("literal");
+    expect(byPattern.get(1)).toBe("Nowak");
+    expect(byPattern.get(2)).toBe("42");
+  });
+
+  test("fuzzy with auto distance", () => {
+    const ts = new TextSearch([
+      { pattern: "Gaislerova", distance: "auto" },
+    ]);
+    // auto: 10 chars → distance 2
+    expect(
+      ts.isMatch("Gais1erova"),
+    ).toBe(true);
+  });
+
+  test("fuzzy named patterns", () => {
+    const ts = new TextSearch([
+      {
+        pattern: "Praha",
+        distance: 1,
+        name: "city",
+      },
+    ]);
+    const matches = ts.findIter("Praha here");
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.name).toBe("city");
+    expect(matches[0]!.text).toBe("Praha");
+  });
+
+  test("replaceAll with mixed fuzzy + exact", () => {
+    const ts = new TextSearch([
+      { pattern: "Smith", distance: 1 },
+      "exact",
+    ]);
+    const result = ts.replaceAll(
+      "Smi1h and exact",
+      ["[NAME]", "[WORD]"],
+    );
+    expect(result).toBe("[NAME] and [WORD]");
+  });
+});

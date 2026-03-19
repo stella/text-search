@@ -22,6 +22,11 @@ export type ClassifiedPattern = {
    * to Aho-Corasick for SIMD-accelerated matching.
    */
   isLiteral: boolean;
+  /**
+   * Fuzzy distance if this is a fuzzy pattern.
+   * Routes to @stll/fuzzy-search.
+   */
+  fuzzyDistance?: number | "auto";
 };
 
 /**
@@ -121,6 +126,18 @@ export function classifyPatterns(
           entry.source,
         ),
         isLiteral: false, // RegExp is never literal
+      };
+    }
+
+    // Fuzzy pattern: has `distance` field
+    if ("distance" in entry) {
+      return {
+        originalIndex: i,
+        pattern: entry.pattern,
+        name: entry.name,
+        alternationCount: 0,
+        isLiteral: false,
+        fuzzyDistance: entry.distance,
       };
     }
 

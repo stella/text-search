@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@stll/aho-corasick": "file:../aho-corasick",
+    "@stll/fuzzy-search": "file:/Users/sok0/coding_projects/fuzzy-search",
     "@stll/regex-set": "file:../regex-set"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 import { AhoCorasick } from "@stll/aho-corasick";
+import { FuzzySearch } from "@stll/fuzzy-search";
 import { RegexSet } from "@stll/regex-set";
 
 import type { ClassifiedPattern } from "./classify";
@@ -27,7 +28,14 @@ type AcSlot = {
   nameMap: (string | undefined)[];
 };
 
-type EngineSlot = RegexSlot | AcSlot;
+type FuzzySlot = {
+  type: "fuzzy";
+  fs: FuzzySearch;
+  indexMap: number[];
+  nameMap: (string | undefined)[];
+};
+
+type EngineSlot = RegexSlot | AcSlot | FuzzySlot;
 
 /**
  * Multi-engine text search orchestrator.
@@ -54,16 +62,20 @@ export class TextSearch {
     const maxAlt = options?.maxAlternations ?? 50;
     const classified = classifyPatterns(patterns);
 
-    // Three buckets:
-    // 1. Pure literals → Aho-Corasick (SIMD)
-    // 2. Normal regex → shared RegexSet (DFA)
-    // 3. Large alternations → isolated RegexSet
+    // Four buckets:
+    // 1. Fuzzy patterns → FuzzySearch (Levenshtein)
+    // 2. Pure literals → Aho-Corasick (SIMD)
+    // 3. Normal regex → shared RegexSet (DFA)
+    // 4. Large alternations → isolated RegexSet
+    const fuzzy: ClassifiedPattern[] = [];
     const literals: ClassifiedPattern[] = [];
     const shared: ClassifiedPattern[] = [];
     const isolated: ClassifiedPattern[] = [];
 
     for (const cp of classified) {
-      if (cp.isLiteral) {
+      if (cp.fuzzyDistance !== undefined) {
+        fuzzy.push(cp);
+      } else if (cp.isLiteral) {
         literals.push(cp);
       } else if (cp.alternationCount > maxAlt) {
         isolated.push(cp);
@@ -77,6 +89,22 @@ export class TextSearch {
         options?.unicodeBoundaries ?? true,
       wholeWords: options?.wholeWords ?? false,
     };
+
+    // Build fuzzy engine
+    if (fuzzy.length > 0) {
+      this.engines.push(
+        buildFuzzyEngine(fuzzy, {
+          unicodeBoundaries:
+            rsOptions.unicodeBoundaries,
+          wholeWords: rsOptions.wholeWords,
+          metric: options?.fuzzyMetric,
+          normalizeDiacritics:
+            options?.normalizeDiacritics,
+          caseInsensitive:
+            options?.caseInsensitive,
+        }),
+      );
+    }
 
     // Build AC engine for pure literals
     if (literals.length > 0) {
@@ -247,16 +275,63 @@ function buildAcEngine(
 }
 
 /**
+ * Build a FuzzySearch engine from fuzzy patterns.
+ */
+function buildFuzzyEngine(
+  patterns: ClassifiedPattern[],
+  options: {
+    unicodeBoundaries: boolean;
+    wholeWords: boolean;
+    metric?: "levenshtein" | "damerau-levenshtein";
+    normalizeDiacritics?: boolean;
+    caseInsensitive?: boolean;
+  },
+): FuzzySlot {
+  const fsPatterns: {
+    pattern: string;
+    distance?: number | "auto";
+    name?: string;
+  }[] = [];
+  const indexMap: number[] = [];
+  const nameMap: (string | undefined)[] = [];
+
+  for (const cp of patterns) {
+    fsPatterns.push({
+      pattern: cp.pattern as string,
+      distance: cp.fuzzyDistance,
+      name: cp.name,
+    });
+    indexMap.push(cp.originalIndex);
+    nameMap.push(cp.name);
+  }
+
+  const fs = new FuzzySearch(fsPatterns, {
+    unicodeBoundaries: options.unicodeBoundaries,
+    wholeWords: options.wholeWords,
+    metric: options.metric,
+    normalizeDiacritics:
+      options.normalizeDiacritics,
+    caseInsensitive: options.caseInsensitive,
+  });
+
+  return { type: "fuzzy", fs, indexMap, nameMap };
+}
+
+/**
  * Dispatch isMatch to the correct engine.
  */
 function engineIsMatch(
   engine: EngineSlot,
   haystack: string,
 ): boolean {
-  if (engine.type === "ac") {
-    return engine.ac.isMatch(haystack);
+  switch (engine.type) {
+    case "ac":
+      return engine.ac.isMatch(haystack);
+    case "fuzzy":
+      return engine.fs.isMatch(haystack);
+    case "regex":
+      return engine.rs.isMatch(haystack);
   }
-  return engine.rs.isMatch(haystack);
 }
 
 /**
@@ -266,10 +341,14 @@ function engineFindIter(
   engine: EngineSlot,
   haystack: string,
 ): Match[] {
-  if (engine.type === "ac") {
-    return engine.ac.findIter(haystack);
+  switch (engine.type) {
+    case "ac":
+      return engine.ac.findIter(haystack);
+    case "fuzzy":
+      return engine.fs.findIter(haystack);
+    case "regex":
+      return engine.rs.findIter(haystack);
   }
-  return engine.rs.findIter(haystack);
 }
 
 /**

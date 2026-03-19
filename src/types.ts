@@ -22,6 +22,13 @@ export type PatternEntry =
   | {
       pattern: string | RegExp;
       name?: string;
+    }
+  | {
+      pattern: string;
+      name?: string;
+      /** Fuzzy matching distance. Routes to
+       *  @stll/fuzzy-search instead of regex. */
+      distance: number | "auto";
     };
 
 /** Options for TextSearch. */
@@ -46,4 +53,22 @@ export type TextSearchOptions = {
    * @default 50
    */
   maxAlternations?: number;
+
+  /**
+   * Fuzzy matching metric.
+   * @default "levenshtein"
+   */
+  fuzzyMetric?: "levenshtein" | "damerau-levenshtein";
+
+  /**
+   * Normalize diacritics for fuzzy matching.
+   * @default false
+   */
+  normalizeDiacritics?: boolean;
+
+  /**
+   * Case-insensitive fuzzy matching.
+   * @default false
+   */
+  caseInsensitive?: boolean;
 };
