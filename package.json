@@ -1,0 +1,43 @@
+{
+  "name": "@stll/text-search",
+  "version": "0.1.0",
+  "description": "Multi-engine text search orchestrator. Routes patterns to the optimal engine: Aho-Corasick for literals, regex-set for regex, with auto-optimization for large alternations.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stella/text-search"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "test": "bun test",
+    "lint": "oxlint .",
+    "format": "oxfmt ."
+  },
+  "dependencies": {
+    "@stll/regex-set": "file:../regex-set"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "bun-types": "^1.3.10",
+    "oxfmt": "^0.40.0",
+    "oxlint": "^1.55.0"
+  },
+  "engines": {
+    "node": ">= 18"
+  }
+}
