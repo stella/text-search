@@ -167,6 +167,18 @@ describe("fuzzy matching", () => {
     const texts = matches.map((m) => m.text);
     expect(texts).toContain("Smi1h");
     expect(texts).toContain("exact");
+
+    // distance is preserved on fuzzy matches
+    const fuzzyMatch = matches.find(
+      (m) => m.text === "Smi1h",
+    );
+    expect(fuzzyMatch!.distance).toBe(1);
+
+    // exact matches have no distance
+    const exactMatch = matches.find(
+      (m) => m.text === "exact",
+    );
+    expect(exactMatch!.distance).toBeUndefined();
   });
 
   test("fuzzy pattern indices preserved", () => {

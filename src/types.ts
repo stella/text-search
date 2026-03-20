@@ -13,6 +13,8 @@ export type Match = {
   text: string;
   /** Pattern name (if provided). */
   name?: string;
+  /** Edit distance (fuzzy matches only). */
+  distance?: number;
 };
 
 /** A pattern entry for TextSearch. */
@@ -67,7 +69,9 @@ export type TextSearchOptions = {
   normalizeDiacritics?: boolean;
 
   /**
-   * Case-insensitive fuzzy matching.
+   * Case-insensitive matching. Applied to all
+   * engines: RegexSet (ASCII via `(?i-u:...)`),
+   * Aho-Corasick (ASCII), FuzzySearch (Unicode).
    * @default false
    */
   caseInsensitive?: boolean;

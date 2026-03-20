@@ -88,6 +88,8 @@ export class TextSearch {
       unicodeBoundaries:
         options?.unicodeBoundaries ?? true,
       wholeWords: options?.wholeWords ?? false,
+      caseInsensitive:
+        options?.caseInsensitive ?? false,
     };
 
     // Build fuzzy engine
@@ -220,6 +222,7 @@ function buildRegexEngine(
   options: {
     unicodeBoundaries: boolean;
     wholeWords: boolean;
+    caseInsensitive: boolean;
   },
 ): RegexSlot {
   const rsPatterns: (string | RegExp | {
@@ -255,6 +258,7 @@ function buildAcEngine(
   options: {
     unicodeBoundaries: boolean;
     wholeWords: boolean;
+    caseInsensitive: boolean;
   },
 ): AcSlot {
   const literals: string[] = [];
@@ -269,6 +273,8 @@ function buildAcEngine(
 
   const ac = new AhoCorasick(literals, {
     wholeWords: options.wholeWords,
+    unicodeBoundaries: options.unicodeBoundaries,
+    caseInsensitive: options.caseInsensitive,
   });
 
   return { type: "ac", ac, indexMap, nameMap };
@@ -371,6 +377,10 @@ function remapMatches(
     };
     if (name !== undefined) {
       result.name = name;
+    }
+    // Preserve edit distance from fuzzy matches
+    if ("distance" in m && m.distance !== undefined) {
+      result.distance = m.distance as number;
     }
     return result;
   });
