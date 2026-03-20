@@ -46,16 +46,16 @@ export type ClassifiedPattern = {
 export function isLiteralPattern(
   pattern: string,
 ): boolean {
-  // Characters NOT treated as metacharacters:
-  // "." — AC matches dots literally (s.r.o., č.p.)
-  // "(", ")" — AC matches parens literally (MŠMT)
-  // "[", "]" — AC matches brackets literally
-  // These allow dictionary entries with punctuation
-  // to use the faster AC path instead of RegexSet.
+  // All standard regex metacharacters cause a
+  // pattern to be classified as regex (→ RegexSet).
+  // To force literal AC routing for patterns with
+  // dots/parens (e.g., "s.r.o.", "č.p."), use the
+  // explicit { literal: true } PatternEntry flag.
   for (let i = 0; i < pattern.length; i++) {
     const ch = pattern[i]!;
     if (
       ch === "\\" ||
+      ch === "." ||
       ch === "^" ||
       ch === "$" ||
       ch === "*" ||
@@ -63,6 +63,10 @@ export function isLiteralPattern(
       ch === "?" ||
       ch === "{" ||
       ch === "}" ||
+      ch === "(" ||
+      ch === ")" ||
+      ch === "[" ||
+      ch === "]" ||
       ch === "|"
     ) {
       return false;
@@ -135,14 +139,18 @@ export function countAlternations(
  */
 export function classifyPatterns(
   entries: PatternEntry[],
+  allLiteral = false,
 ): ClassifiedPattern[] {
   return entries.map((entry, i) => {
     if (typeof entry === "string") {
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: countAlternations(entry),
-        isLiteral: isLiteralPattern(entry),
+        alternationCount: allLiteral
+          ? 0
+          : countAlternations(entry),
+        isLiteral: allLiteral ||
+          isLiteralPattern(entry),
       };
     }
 
