@@ -20,12 +20,14 @@ describe("countAlternations", () => {
     ).toBe(2);
   });
 
-  test("all inside one group", () => {
+  test("all inside one group — counts nested", () => {
+    // Now counts max alternations at ANY depth,
+    // not just top level, to catch DFA explosion
     expect(
       countAlternations(
         "(?:Ing\\.|Mgr\\.|Dr\\.)",
       ),
-    ).toBe(1);
+    ).toBe(3);
   });
 
   test("escaped pipe", () => {
