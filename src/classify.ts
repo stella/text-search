@@ -206,11 +206,13 @@ export function classifyPatterns(
       originalIndex: i,
       pattern: pat,
       name: entry.name,
-      alternationCount:
-        countAlternations(source),
+      alternationCount: allLiteral
+        ? 0
+        : countAlternations(source),
       isLiteral:
-        typeof pat === "string" &&
-        isLiteralPattern(pat),
+        allLiteral ||
+        (typeof pat === "string" &&
+          isLiteralPattern(pat)),
     };
   });
 }

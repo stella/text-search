@@ -167,11 +167,11 @@ export class TextSearch {
         rsOptions,
       );
       // Probe: 1KB of mixed content
-      const probe =
+      const probe = (
         "Hello World 123 test@example.com " +
         "2025-01-01 +420 123 456 789 " +
         "Ing. Jan Novák, s.r.o. Praha 1 "
-          .repeat(10);
+      ).repeat(10);
       const t0 = performance.now();
       combined.rs.findIter(probe);
       const combinedMs = performance.now() - t0;
@@ -324,7 +324,20 @@ export class TextSearch {
       );
     }
 
-    const matches = this.findIter(haystack);
+    // Always use non-overlapping matches for
+    // replacement, even if overlapStrategy is "all".
+    const all: Match[] = [];
+    for (const engine of this.engines) {
+      const matches = engineFindIter(
+        engine,
+        haystack,
+      );
+      for (const m of remapMatches(matches, engine)) {
+        all.push(m);
+      }
+    }
+    const matches = mergeAndSelect(all);
+
     let result = "";
     let last = 0;
 
