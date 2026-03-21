@@ -53,14 +53,27 @@ type EngineSlot = RegexSlot | AcSlot | FuzzySlot;
 export class TextSearch {
   private engines: EngineSlot[] = [];
   private patternCount: number;
+  private overlapAll: boolean;
+  /**
+   * True when there's exactly one engine and all
+   * patterns map to identity indices (0→0, 1→1, ...).
+   * Enables zero-overhead findIter: return raw engine
+   * output without remapping or object allocation.
+   */
+  private zeroOverhead: boolean = false;
 
   constructor(
     patterns: PatternEntry[],
     options?: TextSearchOptions,
   ) {
     this.patternCount = patterns.length;
+    this.overlapAll =
+      options?.overlapStrategy === "all";
     const maxAlt = options?.maxAlternations ?? 50;
-    const classified = classifyPatterns(patterns);
+    const classified = classifyPatterns(
+      patterns,
+      options?.allLiteral ?? false,
+    );
 
     // Four buckets:
     // 1. Fuzzy patterns → FuzzySearch (Levenshtein)
@@ -108,25 +121,108 @@ export class TextSearch {
       );
     }
 
-    // Build AC engine for pure literals
+    // Build AC engine(s) for pure literals.
+    // Group by per-pattern AC options so patterns
+    // with different caseInsensitive/wholeWords
+    // settings get separate AC instances.
     if (literals.length > 0) {
-      this.engines.push(
-        buildAcEngine(literals, rsOptions),
-      );
+      const groups = new Map<
+        string,
+        ClassifiedPattern[]
+      >();
+      for (const cp of literals) {
+        const ci =
+          cp.acOptions?.caseInsensitive ??
+          rsOptions.caseInsensitive;
+        const ww =
+          cp.acOptions?.wholeWords ??
+          rsOptions.wholeWords;
+        const key = `${ci ? 1 : 0}:${ww ? 1 : 0}`;
+        const group = groups.get(key);
+        if (group) {
+          group.push(cp);
+        } else {
+          groups.set(key, [cp]);
+        }
+      }
+      for (const [key, group] of groups) {
+        const [ci, ww] = key.split(":");
+        this.engines.push(
+          buildAcEngine(group, {
+            ...rsOptions,
+            caseInsensitive: ci === "1",
+            wholeWords: ww === "1",
+          }),
+        );
+      }
     }
 
-    // Build shared regex engine
-    if (shared.length > 0) {
+    // Adaptive regex grouping: try combining shared
+    // patterns, measure actual search time on a
+    // probe string. If combined is slower than
+    // individual, fall back to isolation.
+    if (shared.length > 1) {
+      const combined = buildRegexEngine(
+        shared,
+        rsOptions,
+      );
+      // Probe: 1KB of mixed content
+      const probe = (
+        "Hello World 123 test@example.com " +
+        "2025-01-01 +420 123 456 789 " +
+        "Ing. Jan Novák, s.r.o. Praha 1 "
+      ).repeat(10);
+      const t0 = performance.now();
+      combined.rs.findIter(probe);
+      const combinedMs = performance.now() - t0;
+
+      // Individual baseline (sum of isolated scans)
+      let individualMs = 0;
+      const individualEngines: RegexSlot[] = [];
+      for (const cp of shared) {
+        const eng = buildRegexEngine(
+          [cp],
+          rsOptions,
+        );
+        const t1 = performance.now();
+        eng.rs.findIter(probe);
+        individualMs += performance.now() - t1;
+        individualEngines.push(eng);
+      }
+
+      if (combinedMs > individualMs * 1.5) {
+        // Combined is >1.5x slower — isolate
+        for (const eng of individualEngines) {
+          this.engines.push(eng);
+        }
+      } else {
+        this.engines.push(combined);
+      }
+    } else if (shared.length === 1) {
       this.engines.push(
         buildRegexEngine(shared, rsOptions),
       );
     }
 
-    // Build isolated regex engines
     for (const cp of isolated) {
       this.engines.push(
         buildRegexEngine([cp], rsOptions),
       );
+    }
+
+    // Zero-overhead fast path: when all patterns
+    // land in a single engine, the indexMap is
+    // identity (0→0, 1→1, ...) and no names need
+    // attaching. findIter can return raw engine
+    // output without any JS-side remapping.
+    if (this.engines.length === 1) {
+      const engine = this.engines[0]!;
+      const hasNames = engine.nameMap.some(
+        (n) => n !== undefined,
+      );
+      if (!hasNames) {
+        this.zeroOverhead = true;
+      }
     }
   }
 
@@ -145,8 +241,27 @@ export class TextSearch {
     return false;
   }
 
-  /** Find all non-overlapping matches. */
+  /**
+   * Find matches in text.
+   *
+   * With `overlapStrategy: "longest"` (default):
+   * returns non-overlapping matches, longest wins.
+   *
+   * With `overlapStrategy: "all"`: returns all
+   * matches including overlaps, sorted by position.
+   */
   findIter(haystack: string): Match[] {
+    // Fast path: single engine, identity indexMap,
+    // no names → return raw engine output directly.
+    // Zero JS overhead: no remapping, no allocation.
+    if (this.zeroOverhead) {
+      return engineFindIter(
+        this.engines[0]!,
+        haystack,
+      );
+    }
+
+    // Single engine but needs name remapping
     if (this.engines.length === 1) {
       return remapMatches(
         engineFindIter(this.engines[0]!, haystack),
@@ -154,13 +269,23 @@ export class TextSearch {
       );
     }
 
+    // Multi-engine: collect from all, remap in-place
     const all: Match[] = [];
     for (const engine of this.engines) {
       const matches = engineFindIter(
         engine,
         haystack,
       );
-      all.push(...remapMatches(matches, engine));
+      // In-place remapping avoids .map() allocation
+      for (const m of remapMatches(matches, engine)) {
+        all.push(m);
+      }
+    }
+
+    if (this.overlapAll) {
+      return all.sort(
+        (a, b) => a.start - b.start,
+      );
     }
 
     return mergeAndSelect(all);
@@ -199,7 +324,20 @@ export class TextSearch {
       );
     }
 
-    const matches = this.findIter(haystack);
+    // Always use non-overlapping matches for
+    // replacement, even if overlapStrategy is "all".
+    const all: Match[] = [];
+    for (const engine of this.engines) {
+      const matches = engineFindIter(
+        engine,
+        haystack,
+      );
+      for (const m of remapMatches(matches, engine)) {
+        all.push(m);
+      }
+    }
+    const matches = mergeAndSelect(all);
+
     let result = "";
     let last = 0;
 

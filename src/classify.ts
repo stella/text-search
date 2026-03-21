@@ -27,6 +27,15 @@ export type ClassifiedPattern = {
    * Routes to @stll/fuzzy-search.
    */
   fuzzyDistance?: number | "auto";
+  /**
+   * Per-pattern AC options. When set, this literal
+   * is grouped with others that have the same
+   * options into a separate AC engine instance.
+   */
+  acOptions?: {
+    caseInsensitive?: boolean;
+    wholeWords?: boolean;
+  };
 };
 
 /**
@@ -37,6 +46,11 @@ export type ClassifiedPattern = {
 export function isLiteralPattern(
   pattern: string,
 ): boolean {
+  // All standard regex metacharacters cause a
+  // pattern to be classified as regex (→ RegexSet).
+  // To force literal AC routing for patterns with
+  // dots/parens (e.g., "s.r.o.", "č.p."), use the
+  // explicit { literal: true } PatternEntry flag.
   for (let i = 0; i < pattern.length; i++) {
     const ch = pattern[i]!;
     if (
@@ -62,26 +76,33 @@ export function isLiteralPattern(
 }
 
 /**
- * Count top-level alternation branches in a regex
- * string. Tracks parenthesis depth to avoid counting
- * alternations inside groups.
+ * Count the maximum alternation branches at any
+ * depth in a regex string. Used to detect patterns
+ * with large alternations (even nested inside
+ * groups) that should be isolated into their own
+ * RegexSet to prevent DFA state explosion.
  *
  * "a|b|c" → 3
- * "(a|b)|c" → 2 (inner | is inside group)
- * "(?:Ing\\.|Mgr\\.|Dr\\.)" → 1 (all inside group)
+ * "(a|b)|c" → 2 (max of top=2, depth1=2)
+ * "(?:Ing\\.|Mgr\\.|Dr\\.)" → 3 (depth 1)
  */
 export function countAlternations(
   pattern: string,
 ): number {
   let depth = 0;
-  let count = 1;
   let inClass = false;
   let i = 0;
+
+  // Track max alternation count seen at any depth.
+  // Each time we enter a group, start a fresh count.
+  // When we leave, update the global max.
+  let max = 1;
+  let currentCount = 1; // count for current group
+  const stack: number[] = []; // saved counts
 
   while (i < pattern.length) {
     const ch = pattern[i];
 
-    // Skip escaped characters
     if (ch === "\\" && i + 1 < pattern.length) {
       i += 2;
       continue;
@@ -91,15 +112,26 @@ export function countAlternations(
     if (ch === "]") inClass = false;
 
     if (!inClass) {
-      if (ch === "(") depth++;
-      if (ch === ")") depth--;
-      if (ch === "|" && depth === 0) count++;
+      if (ch === "(") {
+        stack.push(currentCount);
+        currentCount = 1;
+        depth++;
+      }
+      if (ch === ")") {
+        if (currentCount > max) max = currentCount;
+        currentCount = stack.pop() ?? 1;
+        depth--;
+      }
+      if (ch === "|") {
+        currentCount++;
+      }
     }
 
     i++;
   }
-
-  return count;
+  // Check top-level count too
+  if (currentCount > max) max = currentCount;
+  return max;
 }
 
 /**
@@ -107,14 +139,18 @@ export function countAlternations(
  */
 export function classifyPatterns(
   entries: PatternEntry[],
+  allLiteral = false,
 ): ClassifiedPattern[] {
   return entries.map((entry, i) => {
     if (typeof entry === "string") {
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: countAlternations(entry),
-        isLiteral: isLiteralPattern(entry),
+        alternationCount: allLiteral
+          ? 0
+          : countAlternations(entry),
+        isLiteral: allLiteral ||
+          isLiteralPattern(entry),
       };
     }
 
@@ -141,6 +177,27 @@ export function classifyPatterns(
       };
     }
 
+    // Explicit literal: skip metachar detection
+    if ("literal" in entry && entry.literal) {
+      const hasPerPatternOpts =
+        "caseInsensitive" in entry ||
+        "wholeWords" in entry;
+      return {
+        originalIndex: i,
+        pattern: entry.pattern,
+        name: entry.name,
+        alternationCount: 0,
+        isLiteral: true,
+        acOptions: hasPerPatternOpts
+          ? {
+              caseInsensitive:
+                entry.caseInsensitive,
+              wholeWords: entry.wholeWords,
+            }
+          : undefined,
+      };
+    }
+
     const pat = entry.pattern;
     const source =
       pat instanceof RegExp ? pat.source : pat;
@@ -149,11 +206,12 @@ export function classifyPatterns(
       originalIndex: i,
       pattern: pat,
       name: entry.name,
-      alternationCount:
-        countAlternations(source),
+      alternationCount: allLiteral
+        ? 0
+        : countAlternations(source),
       isLiteral:
         typeof pat === "string" &&
-        isLiteralPattern(pat),
+        (allLiteral || isLiteralPattern(pat)),
     };
   });
 }

@@ -31,6 +31,21 @@ export type PatternEntry =
       /** Fuzzy matching distance. Routes to
        *  @stll/fuzzy-search instead of regex. */
       distance: number | "auto";
+    }
+  | {
+      pattern: string;
+      name?: string;
+      /** Force literal matching via Aho-Corasick.
+       *  Skips regex metacharacter detection so
+       *  patterns like "č.p." or "s.r.o." are
+       *  matched literally, not as regex. */
+      literal: true;
+      /** Per-pattern case-insensitive for AC.
+       *  Overrides the global option for this
+       *  pattern only. */
+      caseInsensitive?: boolean;
+      /** Per-pattern whole-word matching for AC. */
+      wholeWords?: boolean;
     };
 
 /** Options for TextSearch. */
@@ -69,10 +84,31 @@ export type TextSearchOptions = {
   normalizeDiacritics?: boolean;
 
   /**
-   * Case-insensitive matching. Applied to all
-   * engines: RegexSet (ASCII via `(?i-u:...)`),
-   * Aho-Corasick (ASCII), FuzzySearch (Unicode).
+   * Case-insensitive matching for AC literals
+   * and fuzzy patterns.
    * @default false
    */
   caseInsensitive?: boolean;
+
+  /**
+   * How to handle overlapping matches from
+   * different engines or patterns.
+   *
+   * - "longest": keep longest non-overlapping match
+   *   at each position (default).
+   * - "all": return all matches including overlaps.
+   *   Useful when the caller applies its own dedup.
+   *
+   * @default "longest"
+   */
+  overlapStrategy?: "longest" | "all";
+
+  /**
+   * Treat ALL string patterns as literals (route
+   * to AC, skip metacharacter detection). Useful
+   * for deny-list patterns where "s.r.o." means
+   * the literal string, not a regex with wildcards.
+   * @default false
+   */
+  allLiteral?: boolean;
 };
