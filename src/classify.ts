@@ -210,9 +210,8 @@ export function classifyPatterns(
         ? 0
         : countAlternations(source),
       isLiteral:
-        allLiteral ||
-        (typeof pat === "string" &&
-          isLiteralPattern(pat)),
+        typeof pat === "string" &&
+        (allLiteral || isLiteralPattern(pat)),
     };
   });
 }
