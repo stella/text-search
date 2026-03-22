@@ -1,0 +1,36 @@
+# @stll/text-search
+
+Multi-engine text search orchestrator. Routes
+patterns to optimal engines automatically.
+
+## Engines
+
+- **Aho-Corasick**: pure literal patterns (fastest)
+- **RegexSet**: regex patterns (DFA, backtrack-immune)
+- **FuzzySearch**: approximate matching (Levenshtein)
+
+## API
+
+```typescript
+import { TextSearch } from '@stll/text-search'
+
+const ts = new TextSearch([
+  "exact literal",           // → Aho-Corasick
+  /regex\s+pattern/,         // → RegexSet
+  { pattern: "fuzzy", maxDistance: 2 }, // → FuzzySearch
+])
+
+ts.findIter("search this text")
+// [{ pattern: 0, start: 7, end: 20, text: "..." }]
+
+ts.isMatch("quick check")  // boolean
+ts.replaceAll("text", "[REDACTED]")
+```
+
+## Pattern Classification
+
+Patterns are automatically classified:
+- String without metacharacters → Aho-Corasick
+- String with metacharacters or RegExp → RegexSet
+- Object with maxDistance → FuzzySearch
+- Large alternations (50+ branches) → isolated DFA
