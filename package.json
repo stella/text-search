@@ -35,9 +35,9 @@
     "format": "oxfmt ."
   },
   "dependencies": {
-    "@stll/aho-corasick": "file:../aho-corasick",
-    "@stll/fuzzy-search": "file:/Users/sok0/coding_projects/fuzzy-search",
-    "@stll/regex-set": "file:../regex-set"
+    "@stll/aho-corasick": "^0.2.0",
+    "@stll/fuzzy-search": "^0.1.0",
+    "@stll/regex-set": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
