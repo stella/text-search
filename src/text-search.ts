@@ -107,17 +107,23 @@ export class TextSearch {
 
     // Build fuzzy engine
     if (fuzzy.length > 0) {
+      const fuzzyOpts: Parameters<
+        typeof buildFuzzyEngine
+      >[1] = {
+        unicodeBoundaries:
+          rsOptions.unicodeBoundaries,
+        wholeWords: rsOptions.wholeWords,
+      };
+      if (options?.fuzzyMetric !== undefined)
+        fuzzyOpts.metric = options.fuzzyMetric;
+      if (options?.normalizeDiacritics !== undefined)
+        fuzzyOpts.normalizeDiacritics =
+          options.normalizeDiacritics;
+      if (options?.caseInsensitive !== undefined)
+        fuzzyOpts.caseInsensitive =
+          options.caseInsensitive;
       this.engines.push(
-        buildFuzzyEngine(fuzzy, {
-          unicodeBoundaries:
-            rsOptions.unicodeBoundaries,
-          wholeWords: rsOptions.wholeWords,
-          metric: options?.fuzzyMetric,
-          normalizeDiacritics:
-            options?.normalizeDiacritics,
-          caseInsensitive:
-            options?.caseInsensitive,
-        }),
+        buildFuzzyEngine(fuzzy, fuzzyOpts),
       );
     }
 
@@ -440,23 +446,32 @@ function buildFuzzyEngine(
   const nameMap: (string | undefined)[] = [];
 
   for (const cp of patterns) {
-    fsPatterns.push({
+    const entry: (typeof fsPatterns)[number] = {
       pattern: cp.pattern as string,
-      distance: cp.fuzzyDistance,
-      name: cp.name,
-    });
+    };
+    if (cp.fuzzyDistance !== undefined)
+      entry.distance = cp.fuzzyDistance;
+    if (cp.name !== undefined) entry.name = cp.name;
+    fsPatterns.push(entry);
     indexMap.push(cp.originalIndex);
     nameMap.push(cp.name);
   }
 
-  const fs = new FuzzySearch(fsPatterns, {
+  const fsOptions: ConstructorParameters<
+    typeof FuzzySearch
+  >[1] = {
     unicodeBoundaries: options.unicodeBoundaries,
     wholeWords: options.wholeWords,
-    metric: options.metric,
-    normalizeDiacritics:
-      options.normalizeDiacritics,
-    caseInsensitive: options.caseInsensitive,
-  });
+  };
+  if (options.metric !== undefined)
+    fsOptions.metric = options.metric;
+  if (options.normalizeDiacritics !== undefined)
+    fsOptions.normalizeDiacritics =
+      options.normalizeDiacritics;
+  if (options.caseInsensitive !== undefined)
+    fsOptions.caseInsensitive =
+      options.caseInsensitive;
+  const fs = new FuzzySearch(fsPatterns, fsOptions);
 
   return { type: "fuzzy", fs, indexMap, nameMap };
 }

@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
     "text-search",
@@ -20,16 +20,23 @@
     "url": "https://github.com/stella/text-search"
   },
   "type": "module",
-  "main": "src/index.ts",
-  "module": "src/index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "tsup",
+    "prepublishOnly": "bun run build",
     "test": "bun test",
     "lint": "oxlint .",
     "format": "oxfmt ."
@@ -43,7 +50,9 @@
     "@types/node": "^22.0.0",
     "bun-types": "^1.3.10",
     "oxfmt": "^0.40.0",
-    "oxlint": "^1.55.0"
+    "oxlint": "^1.55.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">= 18"

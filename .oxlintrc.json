@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    "no-console": "off",
+    "no-shadow": "error",
+    "require-await": "error",
+    "no-useless-catch": "error",
+    "no-non-null-assertion": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-dynamic-delete": "error",
+    "typescript/consistent-type-definitions": [
+      "error",
+      "type"
+    ],
+    "unicorn/no-useless-undefined": "error",
+    "unicorn/prefer-array-find": "error",
+    "import/no-cycle": "error",
+    "no-plusplus": "off",
+    "no-inline-comments": "off",
+    "func-style": "off",
+    "max-statements": "off",
+    "prefer-destructuring": "off",
+    "no-negated-condition": "off",
+    "sort-keys": "off",
+    "complexity": "off",
+    "typescript/no-inferrable-types": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/prefer-ternary": "off",
+    "unicorn/no-array-reduce": "off",
+    "unicorn/no-nested-ternary": "off"
+  },
+  "ignorePatterns": ["node_modules/", "dist/"],
+  "overrides": [
+    {
+      "files": [
+        "**/*.{test,spec}.{ts,tsx,js,jsx}",
+        "__test__/**"
+      ],
+      "rules": {
+        "no-console": "off",
+        "require-await": "off",
+        "no-non-null-assertion": "off"
+      }
+    }
+  ]
+}

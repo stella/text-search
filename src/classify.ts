@@ -167,14 +167,15 @@ export function classifyPatterns(
 
     // Fuzzy pattern: has `distance` field
     if ("distance" in entry) {
-      return {
+      const result: ClassifiedPattern = {
         originalIndex: i,
         pattern: entry.pattern,
-        name: entry.name,
         alternationCount: 0,
         isLiteral: false,
         fuzzyDistance: entry.distance,
       };
+      if (entry.name !== undefined) result.name = entry.name;
+      return result;
     }
 
     // Explicit literal: skip metachar detection
@@ -182,30 +183,33 @@ export function classifyPatterns(
       const hasPerPatternOpts =
         "caseInsensitive" in entry ||
         "wholeWords" in entry;
-      return {
+      const result: ClassifiedPattern = {
         originalIndex: i,
         pattern: entry.pattern,
-        name: entry.name,
         alternationCount: 0,
         isLiteral: true,
-        acOptions: hasPerPatternOpts
-          ? {
-              caseInsensitive:
-                entry.caseInsensitive,
-              wholeWords: entry.wholeWords,
-            }
-          : undefined,
       };
+      if (entry.name !== undefined) result.name = entry.name;
+      if (hasPerPatternOpts) {
+        const opts: NonNullable<
+          ClassifiedPattern["acOptions"]
+        > = {};
+        if (entry.caseInsensitive !== undefined)
+          opts.caseInsensitive = entry.caseInsensitive;
+        if (entry.wholeWords !== undefined)
+          opts.wholeWords = entry.wholeWords;
+        result.acOptions = opts;
+      }
+      return result;
     }
 
     const pat = entry.pattern;
     const source =
       pat instanceof RegExp ? pat.source : pat;
 
-    return {
+    const result: ClassifiedPattern = {
       originalIndex: i,
       pattern: pat,
-      name: entry.name,
       alternationCount: allLiteral
         ? 0
         : countAlternations(source),
@@ -213,5 +217,7 @@ export function classifyPatterns(
         typeof pat === "string" &&
         (allLiteral || isLiteralPattern(pat)),
     };
+    if (entry.name !== undefined) result.name = entry.name;
+    return result;
   });
 }
