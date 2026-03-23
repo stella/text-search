@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
     "text-search",
@@ -26,7 +26,7 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "dist"
+    "src"
   ],
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node",
