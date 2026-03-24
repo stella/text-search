@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
     "text-search",
