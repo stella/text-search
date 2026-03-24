@@ -26,19 +26,13 @@ describe("TextSearch", () => {
     ]);
     const matches = ts.findIter("abc 123");
     expect(matches.length).toBe(2);
-    const named = matches.find(
-      (m) => m.name === "number",
-    );
+    const named = matches.find((m) => m.name === "number");
     expect(named).toBeDefined();
     expect(named!.text).toBe("123");
   });
 
   test("whichMatch", () => {
-    const ts = new TextSearch([
-      "foo",
-      "bar",
-      "baz",
-    ]);
+    const ts = new TextSearch(["foo", "bar", "baz"]);
     const which = ts.whichMatch("foo and baz");
     expect(which).toContain(0);
     expect(which).toContain(2);
@@ -46,24 +40,14 @@ describe("TextSearch", () => {
   });
 
   test("replaceAll", () => {
-    const ts = new TextSearch([
-      "\\d{2}\\.\\d{2}\\.\\d{4}",
-      "\\+?\\d{9,12}",
-    ]);
-    const result = ts.replaceAll(
-      "Born 15.03.1990, phone +420123456789",
-      ["[DATE]", "[PHONE]"],
-    );
-    expect(result).toBe(
-      "Born [DATE], phone [PHONE]",
-    );
+    const ts = new TextSearch(["\\d{2}\\.\\d{2}\\.\\d{4}", "\\+?\\d{9,12}"]);
+    const result = ts.replaceAll("Born 15.03.1990, phone +420123456789", ["[DATE]", "[PHONE]"]);
+    expect(result).toBe("Born [DATE], phone [PHONE]");
   });
 
   test("replaceAll wrong count throws", () => {
     const ts = new TextSearch(["a", "b"]);
-    expect(() =>
-      ts.replaceAll("ab", ["x"]),
-    ).toThrow();
+    expect(() => ts.replaceAll("ab", ["x"])).toThrow();
   });
 });
 
@@ -72,37 +56,25 @@ describe("TextSearch", () => {
 describe("auto-optimization", () => {
   test("large alternation is isolated", () => {
     // 80-branch alternation + simple pattern
-    const titles = Array.from(
-      { length: 80 },
-      (_, i) => `title${i}`,
-    ).join("|");
+    const titles = Array.from({ length: 80 }, (_, i) => `title${i}`).join("|");
     const bigPattern = `(?:${titles})\\s+\\w+`;
     const smallPattern = "\\d+";
 
     // Should not throw or be slow
-    const ts = new TextSearch(
-      [bigPattern, smallPattern],
-      { maxAlternations: 50 },
-    );
+    const ts = new TextSearch([bigPattern, smallPattern], { maxAlternations: 50 });
 
     expect(ts.isMatch("title42 test")).toBe(true);
     expect(ts.isMatch("123")).toBe(true);
   });
 
   test("small alternation stays shared", () => {
-    const ts = new TextSearch(
-      ["a|b|c", "d|e|f"],
-      { maxAlternations: 50 },
-    );
+    const ts = new TextSearch(["a|b|c", "d|e|f"], { maxAlternations: 50 });
     const matches = ts.findIter("a d");
     expect(matches).toHaveLength(2);
   });
 
   test("pattern indices preserved after split", () => {
-    const titles = Array.from(
-      { length: 80 },
-      (_, i) => `t${i}`,
-    ).join("|");
+    const titles = Array.from({ length: 80 }, (_, i) => `t${i}`).join("|");
 
     const ts = new TextSearch(
       [
@@ -114,9 +86,7 @@ describe("auto-optimization", () => {
     );
 
     const matches = ts.findIter("first t42 third");
-    const patterns = matches.map(
-      (m) => m.pattern,
-    );
+    const patterns = matches.map((m) => m.pattern);
 
     // Original indices should be 0, 1, 2
     expect(patterns).toContain(0);
@@ -147,9 +117,7 @@ describe("options", () => {
       wholeWords: true,
     });
     expect(ts.findIter("testing")).toHaveLength(0);
-    expect(ts.findIter("a test b")).toHaveLength(
-      1,
-    );
+    expect(ts.findIter("a test b")).toHaveLength(1);
   });
 });
 
@@ -157,55 +125,34 @@ describe("options", () => {
 
 describe("fuzzy matching", () => {
   test("fuzzy pattern matches with edit distance", () => {
-    const ts = new TextSearch([
-      { pattern: "Smith", distance: 1 },
-      "exact",
-    ]);
-    const matches = ts.findIter(
-      "Smi1h and exact here",
-    );
+    const ts = new TextSearch([{ pattern: "Smith", distance: 1 }, "exact"]);
+    const matches = ts.findIter("Smi1h and exact here");
     const texts = matches.map((m) => m.text);
     expect(texts).toContain("Smi1h");
     expect(texts).toContain("exact");
 
     // distance is preserved on fuzzy matches
-    const fuzzyMatch = matches.find(
-      (m) => m.text === "Smi1h",
-    );
+    const fuzzyMatch = matches.find((m) => m.text === "Smi1h");
     expect(fuzzyMatch!.distance).toBe(1);
 
     // exact matches have no distance
-    const exactMatch = matches.find(
-      (m) => m.text === "exact",
-    );
+    const exactMatch = matches.find((m) => m.text === "exact");
     expect(exactMatch!.distance).toBeUndefined();
   });
 
   test("fuzzy pattern indices preserved", () => {
-    const ts = new TextSearch([
-      "literal",
-      { pattern: "Novak", distance: 1 },
-      "\\d+",
-    ]);
-    const matches = ts.findIter(
-      "literal Nowak 42",
-    );
-    const byPattern = new Map(
-      matches.map((m) => [m.pattern, m.text]),
-    );
+    const ts = new TextSearch(["literal", { pattern: "Novak", distance: 1 }, "\\d+"]);
+    const matches = ts.findIter("literal Nowak 42");
+    const byPattern = new Map(matches.map((m) => [m.pattern, m.text]));
     expect(byPattern.get(0)).toBe("literal");
     expect(byPattern.get(1)).toBe("Nowak");
     expect(byPattern.get(2)).toBe("42");
   });
 
   test("fuzzy with auto distance", () => {
-    const ts = new TextSearch([
-      { pattern: "Gaislerova", distance: "auto" },
-    ]);
+    const ts = new TextSearch([{ pattern: "Gaislerova", distance: "auto" }]);
     // auto: 10 chars → distance 2
-    expect(
-      ts.isMatch("Gais1erova"),
-    ).toBe(true);
+    expect(ts.isMatch("Gais1erova")).toBe(true);
   });
 
   test("fuzzy named patterns", () => {
@@ -223,14 +170,8 @@ describe("fuzzy matching", () => {
   });
 
   test("replaceAll with mixed fuzzy + exact", () => {
-    const ts = new TextSearch([
-      { pattern: "Smith", distance: 1 },
-      "exact",
-    ]);
-    const result = ts.replaceAll(
-      "Smi1h and exact",
-      ["[NAME]", "[WORD]"],
-    );
+    const ts = new TextSearch([{ pattern: "Smith", distance: 1 }, "exact"]);
+    const result = ts.replaceAll("Smi1h and exact", ["[NAME]", "[WORD]"]);
     expect(result).toBe("[NAME] and [WORD]");
   });
 });

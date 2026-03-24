@@ -5,11 +5,7 @@ import { RegexSet } from "@stll/regex-set";
 import type { ClassifiedPattern } from "./classify";
 import { classifyPatterns } from "./classify";
 import { mergeAndSelect } from "./merge";
-import type {
-  Match,
-  PatternEntry,
-  TextSearchOptions,
-} from "./types";
+import type { Match, PatternEntry, TextSearchOptions } from "./types";
 
 /**
  * An engine instance with pattern index mapping.
@@ -62,18 +58,11 @@ export class TextSearch {
    */
   private zeroOverhead: boolean = false;
 
-  constructor(
-    patterns: PatternEntry[],
-    options?: TextSearchOptions,
-  ) {
+  constructor(patterns: PatternEntry[], options?: TextSearchOptions) {
     this.patternCount = patterns.length;
-    this.overlapAll =
-      options?.overlapStrategy === "all";
+    this.overlapAll = options?.overlapStrategy === "all";
     const maxAlt = options?.maxAlternations ?? 50;
-    const classified = classifyPatterns(
-      patterns,
-      options?.allLiteral ?? false,
-    );
+    const classified = classifyPatterns(patterns, options?.allLiteral ?? false);
 
     // Four buckets:
     // 1. Fuzzy patterns → FuzzySearch (Levenshtein)
@@ -98,33 +87,23 @@ export class TextSearch {
     }
 
     const rsOptions = {
-      unicodeBoundaries:
-        options?.unicodeBoundaries ?? true,
+      unicodeBoundaries: options?.unicodeBoundaries ?? true,
       wholeWords: options?.wholeWords ?? false,
-      caseInsensitive:
-        options?.caseInsensitive ?? false,
+      caseInsensitive: options?.caseInsensitive ?? false,
     };
 
     // Build fuzzy engine
     if (fuzzy.length > 0) {
-      const fuzzyOpts: Parameters<
-        typeof buildFuzzyEngine
-      >[1] = {
-        unicodeBoundaries:
-          rsOptions.unicodeBoundaries,
+      const fuzzyOpts: Parameters<typeof buildFuzzyEngine>[1] = {
+        unicodeBoundaries: rsOptions.unicodeBoundaries,
         wholeWords: rsOptions.wholeWords,
       };
-      if (options?.fuzzyMetric !== undefined)
-        fuzzyOpts.metric = options.fuzzyMetric;
+      if (options?.fuzzyMetric !== undefined) fuzzyOpts.metric = options.fuzzyMetric;
       if (options?.normalizeDiacritics !== undefined)
-        fuzzyOpts.normalizeDiacritics =
-          options.normalizeDiacritics;
+        fuzzyOpts.normalizeDiacritics = options.normalizeDiacritics;
       if (options?.caseInsensitive !== undefined)
-        fuzzyOpts.caseInsensitive =
-          options.caseInsensitive;
-      this.engines.push(
-        buildFuzzyEngine(fuzzy, fuzzyOpts),
-      );
+        fuzzyOpts.caseInsensitive = options.caseInsensitive;
+      this.engines.push(buildFuzzyEngine(fuzzy, fuzzyOpts));
     }
 
     // Build AC engine(s) for pure literals.
@@ -132,17 +111,10 @@ export class TextSearch {
     // with different caseInsensitive/wholeWords
     // settings get separate AC instances.
     if (literals.length > 0) {
-      const groups = new Map<
-        string,
-        ClassifiedPattern[]
-      >();
+      const groups = new Map<string, ClassifiedPattern[]>();
       for (const cp of literals) {
-        const ci =
-          cp.acOptions?.caseInsensitive ??
-          rsOptions.caseInsensitive;
-        const ww =
-          cp.acOptions?.wholeWords ??
-          rsOptions.wholeWords;
+        const ci = cp.acOptions?.caseInsensitive ?? rsOptions.caseInsensitive;
+        const ww = cp.acOptions?.wholeWords ?? rsOptions.wholeWords;
         const key = `${ci ? 1 : 0}:${ww ? 1 : 0}`;
         const group = groups.get(key);
         if (group) {
@@ -168,10 +140,7 @@ export class TextSearch {
     // probe string. If combined is slower than
     // individual, fall back to isolation.
     if (shared.length > 1) {
-      const combined = buildRegexEngine(
-        shared,
-        rsOptions,
-      );
+      const combined = buildRegexEngine(shared, rsOptions);
       // Probe: 1KB of mixed content
       const probe = (
         "Hello World 123 test@example.com " +
@@ -186,10 +155,7 @@ export class TextSearch {
       let individualMs = 0;
       const individualEngines: RegexSlot[] = [];
       for (const cp of shared) {
-        const eng = buildRegexEngine(
-          [cp],
-          rsOptions,
-        );
+        const eng = buildRegexEngine([cp], rsOptions);
         const t1 = performance.now();
         eng.rs.findIter(probe);
         individualMs += performance.now() - t1;
@@ -205,15 +171,11 @@ export class TextSearch {
         this.engines.push(combined);
       }
     } else if (shared.length === 1) {
-      this.engines.push(
-        buildRegexEngine(shared, rsOptions),
-      );
+      this.engines.push(buildRegexEngine(shared, rsOptions));
     }
 
     for (const cp of isolated) {
-      this.engines.push(
-        buildRegexEngine([cp], rsOptions),
-      );
+      this.engines.push(buildRegexEngine([cp], rsOptions));
     }
 
     // Zero-overhead fast path: when all patterns
@@ -223,9 +185,7 @@ export class TextSearch {
     // output without any JS-side remapping.
     if (this.engines.length === 1) {
       const engine = this.engines[0]!;
-      const hasNames = engine.nameMap.some(
-        (n) => n !== undefined,
-      );
+      const hasNames = engine.nameMap.some((n) => n !== undefined);
       if (!hasNames) {
         this.zeroOverhead = true;
       }
@@ -261,27 +221,18 @@ export class TextSearch {
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
     if (this.zeroOverhead) {
-      return engineFindIter(
-        this.engines[0]!,
-        haystack,
-      );
+      return engineFindIter(this.engines[0]!, haystack);
     }
 
     // Single engine but needs name remapping
     if (this.engines.length === 1) {
-      return remapMatches(
-        engineFindIter(this.engines[0]!, haystack),
-        this.engines[0]!,
-      );
+      return remapMatches(engineFindIter(this.engines[0]!, haystack), this.engines[0]!);
     }
 
     // Multi-engine: collect from all, remap in-place
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engineFindIter(
-        engine,
-        haystack,
-      );
+      const matches = engineFindIter(engine, haystack);
       // In-place remapping avoids .map() allocation
       for (const m of remapMatches(matches, engine)) {
         all.push(m);
@@ -289,9 +240,7 @@ export class TextSearch {
     }
 
     if (this.overlapAll) {
-      return all.sort(
-        (a, b) => a.start - b.start,
-      );
+      return all.sort((a, b) => a.start - b.start);
     }
 
     return mergeAndSelect(all);
@@ -303,10 +252,7 @@ export class TextSearch {
 
     for (const engine of this.engines) {
       // AC doesn't have whichMatch — use findIter
-      const matches = engineFindIter(
-        engine,
-        haystack,
-      );
+      const matches = engineFindIter(engine, haystack);
       for (const m of matches) {
         seen.add(engine.indexMap[m.pattern]!);
       }
@@ -319,14 +265,10 @@ export class TextSearch {
    * Replace all non-overlapping matches.
    * replacements[i] replaces pattern i.
    */
-  replaceAll(
-    haystack: string,
-    replacements: string[],
-  ): string {
+  replaceAll(haystack: string, replacements: string[]): string {
     if (replacements.length !== this.patternCount) {
       throw new Error(
-        `Expected ${this.patternCount} ` +
-          `replacements, got ${replacements.length}`,
+        `Expected ${this.patternCount} ` + `replacements, got ${replacements.length}`,
       );
     }
 
@@ -334,10 +276,7 @@ export class TextSearch {
     // replacement, even if overlapStrategy is "all".
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engineFindIter(
-        engine,
-        haystack,
-      );
+      const matches = engineFindIter(engine, haystack);
       for (const m of remapMatches(matches, engine)) {
         all.push(m);
       }
@@ -369,10 +308,14 @@ function buildRegexEngine(
     caseInsensitive: boolean;
   },
 ): RegexSlot {
-  const rsPatterns: (string | RegExp | {
-    pattern: string | RegExp;
-    name?: string;
-  })[] = [];
+  const rsPatterns: (
+    | string
+    | RegExp
+    | {
+        pattern: string | RegExp;
+        name?: string;
+      }
+  )[] = [];
   const indexMap: number[] = [];
   const nameMap: (string | undefined)[] = [];
 
@@ -449,28 +392,21 @@ function buildFuzzyEngine(
     const entry: (typeof fsPatterns)[number] = {
       pattern: cp.pattern as string,
     };
-    if (cp.fuzzyDistance !== undefined)
-      entry.distance = cp.fuzzyDistance;
+    if (cp.fuzzyDistance !== undefined) entry.distance = cp.fuzzyDistance;
     if (cp.name !== undefined) entry.name = cp.name;
     fsPatterns.push(entry);
     indexMap.push(cp.originalIndex);
     nameMap.push(cp.name);
   }
 
-  const fsOptions: ConstructorParameters<
-    typeof FuzzySearch
-  >[1] = {
+  const fsOptions: ConstructorParameters<typeof FuzzySearch>[1] = {
     unicodeBoundaries: options.unicodeBoundaries,
     wholeWords: options.wholeWords,
   };
-  if (options.metric !== undefined)
-    fsOptions.metric = options.metric;
+  if (options.metric !== undefined) fsOptions.metric = options.metric;
   if (options.normalizeDiacritics !== undefined)
-    fsOptions.normalizeDiacritics =
-      options.normalizeDiacritics;
-  if (options.caseInsensitive !== undefined)
-    fsOptions.caseInsensitive =
-      options.caseInsensitive;
+    fsOptions.normalizeDiacritics = options.normalizeDiacritics;
+  if (options.caseInsensitive !== undefined) fsOptions.caseInsensitive = options.caseInsensitive;
   const fs = new FuzzySearch(fsPatterns, fsOptions);
 
   return { type: "fuzzy", fs, indexMap, nameMap };
@@ -479,10 +415,7 @@ function buildFuzzyEngine(
 /**
  * Dispatch isMatch to the correct engine.
  */
-function engineIsMatch(
-  engine: EngineSlot,
-  haystack: string,
-): boolean {
+function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
   switch (engine.type) {
     case "ac":
       return engine.ac.isMatch(haystack);
@@ -496,10 +429,7 @@ function engineIsMatch(
 /**
  * Dispatch findIter to the correct engine.
  */
-function engineFindIter(
-  engine: EngineSlot,
-  haystack: string,
-): Match[] {
+function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
   switch (engine.type) {
     case "ac":
       return engine.ac.findIter(haystack);
@@ -514,13 +444,9 @@ function engineFindIter(
  * Remap engine-local match indices to original
  * input indices and add names.
  */
-function remapMatches(
-  matches: Match[],
-  engine: EngineSlot,
-): Match[] {
+function remapMatches(matches: Match[], engine: EngineSlot): Match[] {
   return matches.map((m) => {
-    const originalIdx =
-      engine.indexMap[m.pattern]!;
+    const originalIdx = engine.indexMap[m.pattern]!;
     const name = engine.nameMap[m.pattern];
     const result: Match = {
       pattern: originalIdx,
