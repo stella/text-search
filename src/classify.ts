@@ -43,9 +43,7 @@ export type ClassifiedPattern = {
  * metacharacters). Pure literals are routed to
  * Aho-Corasick instead of the regex DFA.
  */
-export function isLiteralPattern(
-  pattern: string,
-): boolean {
+export function isLiteralPattern(pattern: string): boolean {
   // All standard regex metacharacters cause a
   // pattern to be classified as regex (→ RegexSet).
   // To force literal AC routing for patterns with
@@ -86,9 +84,7 @@ export function isLiteralPattern(
  * "(a|b)|c" → 2 (max of top=2, depth1=2)
  * "(?:Ing\\.|Mgr\\.|Dr\\.)" → 3 (depth 1)
  */
-export function countAlternations(
-  pattern: string,
-): number {
+export function countAlternations(pattern: string): number {
   let depth = 0;
   let inClass = false;
   let i = 0;
@@ -137,20 +133,14 @@ export function countAlternations(
 /**
  * Classify and normalize pattern entries.
  */
-export function classifyPatterns(
-  entries: PatternEntry[],
-  allLiteral = false,
-): ClassifiedPattern[] {
+export function classifyPatterns(entries: PatternEntry[], allLiteral = false): ClassifiedPattern[] {
   return entries.map((entry, i) => {
     if (typeof entry === "string") {
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: allLiteral
-          ? 0
-          : countAlternations(entry),
-        isLiteral: allLiteral ||
-          isLiteralPattern(entry),
+        alternationCount: allLiteral ? 0 : countAlternations(entry),
+        isLiteral: allLiteral || isLiteralPattern(entry),
       };
     }
 
@@ -158,9 +148,7 @@ export function classifyPatterns(
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: countAlternations(
-          entry.source,
-        ),
+        alternationCount: countAlternations(entry.source),
         isLiteral: false, // RegExp is never literal
       };
     }
@@ -180,9 +168,7 @@ export function classifyPatterns(
 
     // Explicit literal: skip metachar detection
     if ("literal" in entry && entry.literal) {
-      const hasPerPatternOpts =
-        "caseInsensitive" in entry ||
-        "wholeWords" in entry;
+      const hasPerPatternOpts = "caseInsensitive" in entry || "wholeWords" in entry;
       const result: ClassifiedPattern = {
         originalIndex: i,
         pattern: entry.pattern,
@@ -191,31 +177,22 @@ export function classifyPatterns(
       };
       if (entry.name !== undefined) result.name = entry.name;
       if (hasPerPatternOpts) {
-        const opts: NonNullable<
-          ClassifiedPattern["acOptions"]
-        > = {};
-        if (entry.caseInsensitive !== undefined)
-          opts.caseInsensitive = entry.caseInsensitive;
-        if (entry.wholeWords !== undefined)
-          opts.wholeWords = entry.wholeWords;
+        const opts: NonNullable<ClassifiedPattern["acOptions"]> = {};
+        if (entry.caseInsensitive !== undefined) opts.caseInsensitive = entry.caseInsensitive;
+        if (entry.wholeWords !== undefined) opts.wholeWords = entry.wholeWords;
         result.acOptions = opts;
       }
       return result;
     }
 
     const pat = entry.pattern;
-    const source =
-      pat instanceof RegExp ? pat.source : pat;
+    const source = pat instanceof RegExp ? pat.source : pat;
 
     const result: ClassifiedPattern = {
       originalIndex: i,
       pattern: pat,
-      alternationCount: allLiteral
-        ? 0
-        : countAlternations(source),
-      isLiteral:
-        typeof pat === "string" &&
-        (allLiteral || isLiteralPattern(pat)),
+      alternationCount: allLiteral ? 0 : countAlternations(source),
+      isLiteral: typeof pat === "string" && (allLiteral || isLiteralPattern(pat)),
     };
     if (entry.name !== undefined) result.name = entry.name;
     return result;

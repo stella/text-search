@@ -66,12 +66,12 @@ ts.findIter("Ing. Jan Novak, born 15.03.1990");
 Patterns are classified and routed to the optimal
 engine at construction time:
 
-| Engine | Condition | Performance |
-| --- | --- | --- |
-| Aho-Corasick | Pure literal strings | SIMD-accelerated |
-| RegexSet (shared) | Normal regex patterns | Single-pass DFA |
+| Engine              | Condition                | Performance            |
+| ------------------- | ------------------------ | ---------------------- |
+| Aho-Corasick        | Pure literal strings     | SIMD-accelerated       |
+| RegexSet (shared)   | Normal regex patterns    | Single-pass DFA        |
 | RegexSet (isolated) | >50 alternation branches | Prevents DFA explosion |
-| FuzzySearch | `distance` field present | Levenshtein/Damerau |
+| FuzzySearch         | `distance` field present | Levenshtein/Damerau    |
 
 Large alternation patterns (e.g., 80+ title
 prefixes) are automatically isolated into their
@@ -101,7 +101,7 @@ new TextSearch(patterns, {
   maxAlternations: 50,
 
   // Fuzzy matching options
-  fuzzyMetric: "levenshtein",    // or "damerau-levenshtein"
+  fuzzyMetric: "levenshtein", // or "damerau-levenshtein"
   normalizeDiacritics: false,
   caseInsensitive: false,
 });
@@ -109,13 +109,13 @@ new TextSearch(patterns, {
 
 ## API
 
-| Method | Returns | Description |
-| --- | --- | --- |
-| `findIter(text)` | `Match[]` | All non-overlapping matches |
-| `isMatch(text)` | `boolean` | Any pattern matches? |
-| `whichMatch(text)` | `number[]` | Which pattern indices matched |
-| `replaceAll(text, replacements)` | `string` | Replace matches |
-| `length` | `number` | Number of patterns |
+| Method                           | Returns    | Description                   |
+| -------------------------------- | ---------- | ----------------------------- |
+| `findIter(text)`                 | `Match[]`  | All non-overlapping matches   |
+| `isMatch(text)`                  | `boolean`  | Any pattern matches?          |
+| `whichMatch(text)`               | `number[]` | Which pattern indices matched |
+| `replaceAll(text, replacements)` | `string`   | Replace matches               |
+| `length`                         | `number`   | Number of patterns            |
 
 ## Pattern entry types
 
@@ -138,11 +138,11 @@ new TextSearch(patterns, {
 
 ```typescript
 type Match = {
-  pattern: number;  // original pattern index
-  start: number;    // UTF-16 offset
-  end: number;      // exclusive
-  text: string;     // matched substring
-  name?: string;    // pattern name (if provided)
+  pattern: number; // original pattern index
+  start: number; // UTF-16 offset
+  end: number; // exclusive
+  text: string; // matched substring
+  name?: string; // pattern name (if provided)
 };
 ```
 
@@ -171,6 +171,7 @@ bun run build
 ```
 
 ## Built on
+
 - [@stll/regex-set](https://github.com/stella/regex-set) —
   NAPI-RS bindings to Rust regex-automata
 - [@stll/aho-corasick](https://github.com/stella/aho-corasick) —

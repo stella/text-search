@@ -6,9 +6,7 @@ import type { Match } from "./types";
  * first at ties). Same algorithm as regex-set's
  * internal select_non_overlapping.
  */
-export function mergeAndSelect(
-  matches: Match[],
-): Match[] {
+export function mergeAndSelect(matches: Match[]): Match[] {
   if (matches.length <= 1) return matches;
 
   // Sort: start ascending, longest first at ties

@@ -3,12 +3,12 @@
   "version": "0.3.1",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
-    "text-search",
-    "multi-pattern",
     "aho-corasick",
-    "regex",
     "fuzzy",
-    "orchestrator"
+    "multi-pattern",
+    "orchestrator",
+    "regex",
+    "text-search"
   ],
   "homepage": "https://github.com/stella/text-search#readme",
   "bugs": {
@@ -19,6 +19,10 @@
     "type": "git",
     "url": "https://github.com/stella/text-search"
   },
+  "files": [
+    "src",
+    "dist"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -30,10 +34,6 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "src",
-    "dist"
-  ],
   "scripts": {
     "build": "tsdown",
     "prepublishOnly": "bun run build",

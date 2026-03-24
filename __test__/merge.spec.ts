@@ -3,11 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { mergeAndSelect } from "../src/merge";
 import type { Match } from "../src/types";
 
-const m = (
-  pattern: number,
-  start: number,
-  end: number,
-): Match => ({
+const m = (pattern: number, start: number, end: number): Match => ({
   pattern,
   start,
   end,
@@ -21,9 +17,7 @@ describe("mergeAndSelect", () => {
 
   test("single match", () => {
     const matches = [m(0, 0, 3)];
-    expect(mergeAndSelect(matches)).toEqual([
-      m(0, 0, 3),
-    ]);
+    expect(mergeAndSelect(matches)).toEqual([m(0, 0, 3)]);
   });
 
   test("non-overlapping preserved", () => {
