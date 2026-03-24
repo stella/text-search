@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
     "text-search",
@@ -42,9 +42,9 @@
     "format": "oxfmt ."
   },
   "dependencies": {
-    "@stll/aho-corasick": "^0.2.0",
-    "@stll/fuzzy-search": "^0.1.0",
-    "@stll/regex-set": "^0.4.0"
+    "@stll/aho-corasick": "^0.3.0",
+    "@stll/fuzzy-search": "^0.2.0",
+    "@stll/regex-set": "^0.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
