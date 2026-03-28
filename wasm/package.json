@@ -1,0 +1,43 @@
+{
+  "name": "@stll/text-search-wasm",
+  "version": "0.1.0",
+  "description": "Multi-engine text search for browsers via WebAssembly. Same API as @stll/text-search.",
+  "keywords": [
+    "aho-corasick",
+    "fuzzy",
+    "multi-pattern",
+    "orchestrator",
+    "regex",
+    "text-search",
+    "wasm"
+  ],
+  "homepage": "https://github.com/stella/text-search#readme",
+  "bugs": {
+    "url": "https://github.com/stella/text-search/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stella/text-search"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "module": "dist/wasm.mjs",
+  "types": "dist/wasm.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/wasm.d.mts",
+      "import": "./dist/wasm.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "dependencies": {
+    "@stll/aho-corasick-wasm": "^0.1.4",
+    "@stll/fuzzy-search-wasm": "^0.1.1",
+    "@stll/regex-set-wasm": "^0.1.1"
+  }
+}

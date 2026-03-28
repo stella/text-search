@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
   "keywords": [
     "aho-corasick",
@@ -24,15 +24,18 @@
     "dist"
   ],
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "restricted"
   },
   "scripts": {
     "build": "tsdown",
@@ -42,22 +45,19 @@
     "format": "oxfmt ."
   },
   "dependencies": {
-    "@stll/aho-corasick": "^0.0.1",
-    "@stll/fuzzy-search": "^0.0.1",
-    "@stll/regex-set": "^0.0.1"
+    "@stll/aho-corasick": "^0.1.4",
+    "@stll/fuzzy-search": "^0.1.1",
+    "@stll/regex-set": "^0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "bun-types": "^1.3.10",
-    "oxfmt": "^0.40.0",
-    "oxlint": "^1.55.0",
-    "tsdown": "^0.12.4",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "tsdown": "^0.21.6",
     "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">= 18"
-  },
-  "publishConfig": {
-    "access": "restricted"
   }
 }

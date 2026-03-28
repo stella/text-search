@@ -1,32 +1,35 @@
-import { AhoCorasick } from "@stll/aho-corasick";
-import { FuzzySearch } from "@stll/fuzzy-search";
-import { RegexSet } from "@stll/regex-set";
-
 import type { ClassifiedPattern } from "./classify";
 import { classifyPatterns } from "./classify";
+import { getEngines } from "./engines";
 import { mergeAndSelect } from "./merge";
 import type { Match, PatternEntry, TextSearchOptions } from "./types";
+
+/** Common engine interface for dispatch. */
+type Engine = {
+  isMatch: (haystack: string) => boolean;
+  findIter: (haystack: string) => Match[];
+};
 
 /**
  * An engine instance with pattern index mapping.
  */
 type RegexSlot = {
   type: "regex";
-  rs: RegexSet;
+  rs: Engine;
   indexMap: number[];
   nameMap: (string | undefined)[];
 };
 
 type AcSlot = {
   type: "ac";
-  ac: AhoCorasick;
+  ac: Engine;
   indexMap: number[];
   nameMap: (string | undefined)[];
 };
 
 type FuzzySlot = {
   type: "fuzzy";
-  fs: FuzzySearch;
+  fs: Engine;
   indexMap: number[];
   nameMap: (string | undefined)[];
 };
@@ -184,7 +187,10 @@ export class TextSearch {
     // attaching. findIter can return raw engine
     // output without any JS-side remapping.
     if (this.engines.length === 1) {
-      const engine = this.engines[0]!;
+      const engine = this.engines[0];
+      if (engine === undefined) {
+        throw new Error("Expected single engine after length check");
+      }
       const hasNames = engine.nameMap.some((n) => n !== undefined);
       if (!hasNames) {
         this.zeroOverhead = true;
@@ -221,12 +227,20 @@ export class TextSearch {
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
     if (this.zeroOverhead) {
-      return engineFindIter(this.engines[0]!, haystack);
+      const engine = this.engines[0];
+      if (engine === undefined) {
+        throw new Error("Zero-overhead path requires a single engine");
+      }
+      return engineFindIter(engine, haystack);
     }
 
     // Single engine but needs name remapping
     if (this.engines.length === 1) {
-      return remapMatches(engineFindIter(this.engines[0]!, haystack), this.engines[0]!);
+      const engine = this.engines[0];
+      if (engine === undefined) {
+        throw new Error("Expected single engine after length check");
+      }
+      return remapMatches(engineFindIter(engine, haystack), engine);
     }
 
     // Multi-engine: collect from all, remap in-place
@@ -254,7 +268,11 @@ export class TextSearch {
       // AC doesn't have whichMatch — use findIter
       const matches = engineFindIter(engine, haystack);
       for (const m of matches) {
-        seen.add(engine.indexMap[m.pattern]!);
+        const idx = engine.indexMap[m.pattern];
+        if (idx === undefined) {
+          throw new Error(`Missing indexMap entry for pattern ${m.pattern}`);
+        }
+        seen.add(idx);
       }
     }
 
@@ -288,7 +306,11 @@ export class TextSearch {
 
     for (const m of matches) {
       result += haystack.slice(last, m.start);
-      result += replacements[m.pattern]!;
+      const replacement = replacements[m.pattern];
+      if (replacement === undefined) {
+        throw new Error(`Missing replacement for pattern ${m.pattern}`);
+      }
+      result += replacement;
       last = m.end;
     }
 
@@ -332,6 +354,7 @@ function buildRegexEngine(
     nameMap.push(cp.name);
   }
 
+  const { RegexSet } = getEngines();
   const rs = new RegexSet(rsPatterns, options);
 
   return { type: "regex", rs, indexMap, nameMap };
@@ -358,6 +381,7 @@ function buildAcEngine(
     nameMap.push(cp.name);
   }
 
+  const { AhoCorasick } = getEngines();
   const ac = new AhoCorasick(literals, {
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
@@ -399,7 +423,7 @@ function buildFuzzyEngine(
     nameMap.push(cp.name);
   }
 
-  const fsOptions: ConstructorParameters<typeof FuzzySearch>[1] = {
+  const fsOptions: Record<string, unknown> = {
     unicodeBoundaries: options.unicodeBoundaries,
     wholeWords: options.wholeWords,
   };
@@ -407,6 +431,7 @@ function buildFuzzyEngine(
   if (options.normalizeDiacritics !== undefined)
     fsOptions.normalizeDiacritics = options.normalizeDiacritics;
   if (options.caseInsensitive !== undefined) fsOptions.caseInsensitive = options.caseInsensitive;
+  const { FuzzySearch } = getEngines();
   const fs = new FuzzySearch(fsPatterns, fsOptions);
 
   return { type: "fuzzy", fs, indexMap, nameMap };
@@ -446,7 +471,10 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
  */
 function remapMatches(matches: Match[], engine: EngineSlot): Match[] {
   return matches.map((m) => {
-    const originalIdx = engine.indexMap[m.pattern]!;
+    const originalIdx = engine.indexMap[m.pattern];
+    if (originalIdx === undefined) {
+      throw new Error(`Missing indexMap entry for pattern ${m.pattern}`);
+    }
     const name = engine.nameMap[m.pattern];
     const result: Match = {
       pattern: originalIdx,

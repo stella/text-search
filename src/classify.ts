@@ -50,7 +50,7 @@ export function isLiteralPattern(pattern: string): boolean {
   // dots/parens (e.g., "s.r.o.", "č.p."), use the
   // explicit { literal: true } PatternEntry flag.
   for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i]!;
+    const ch = pattern.charAt(i);
     if (
       ch === "\\" ||
       ch === "." ||

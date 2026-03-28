@@ -1,1 +1,2081 @@
-{"bomFormat":"CycloneDX","specVersion":"1.6","serialNumber":"urn:uuid:95511d25-635b-477c-b12f-7aa90f47b132","version":1,"metadata":{"timestamp":"2026-03-24T19:13:21Z","tools":{"components":[{"group":"@cyclonedx","name":"cdxgen","version":"12.1.2","purl":"pkg:npm/%40cyclonedx/cdxgen@12.1.2","type":"application","bom-ref":"pkg:npm/@cyclonedx/cdxgen@12.1.2","publisher":"OWASP Foundation","authors":[{"name":"OWASP Foundation"}]}]},"authors":[{"name":"OWASP Foundation"}],"lifecycles":[{"phase":"build"}],"component":{"name":"text-search","group":"@stll","version":"0.3.1","description":"Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.","purl":"pkg:npm/%40stll/text-search@0.3.1","bom-ref":"pkg:npm/@stll/text-search@0.3.1","type":"application","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"externalReferences":[{"type":"vcs","url":"https://github.com/stella/text-search#readme"},{"type":"vcs","url":"https://github.com/stella/text-search"}]},"properties":[{"name":"cdx:bom:componentTypes","value":"github\\nnpm"},{"name":"cdx:bom:componentNamespaces","value":"@babel\\n@jridgewell\\n@oxc-project\\n@oxfmt\\n@oxlint\\n@quansync\\n@rolldown\\n@stll\\n@types\\nactions\\noven-sh"},{"name":"cdx:bom:componentSrcFiles","value":".github/workflows/ci.yml\\n.github/workflows/sbom.yml\\nnode_modules/@babel/generator/package.json\\nnode_modules/@babel/helper-string-parser/package.json\\nnode_modules/@babel/helper-validator-identifier/package.json\\nnode_modules/@babel/parser/package.json\\nnode_modules/@babel/types/package.json\\nnode_modules/@jridgewell/gen-mapping/package.json\\nnode_modules/@jridgewell/resolve-uri/package.json\\nnode_modules/@jridgewell/sourcemap-codec/package.json\\nnode_modules/@jridgewell/trace-mapping/package.json\\nnode_modules/@oxc-project/types/package.json\\nnode_modules/@oxfmt/binding-linux-x64-gnu/package.json\\nnode_modules/@oxfmt/binding-linux-x64-musl/package.json\\nnode_modules/@oxlint/binding-linux-x64-gnu/package.json\\nnode_modules/@oxlint/binding-linux-x64-musl/package.json\\nnode_modules/@quansync/fs/package.json\\nnode_modules/@rolldown/binding-linux-x64-gnu/package.json\\nnode_modules/@rolldown/binding-linux-x64-musl/package.json\\nnode_modules/@rolldown/pluginutils/package.json\\nnode_modules/@stll/aho-corasick/package.json\\nnode_modules/@stll/fuzzy-search/package.json\\nnode_modules/@stll/regex-set/package.json\\nnode_modules/@types/node/package.json\\nnode_modules/ansis/package.json\\nnode_modules/ast-kit/package.json\\nnode_modules/birpc/package.json\\nnode_modules/bun-types/package.json\\nnode_modules/cac/package.json\\nnode_modules/chokidar/package.json\\nnode_modules/debug/package.json\\nnode_modules/defu/package.json\\nnode_modules/diff/package.json\\nnode_modules/dts-resolver/package.json\\nnode_modules/empathic/package.json\\nnode_modules/fdir/package.json\\nnode_modules/get-tsconfig/package.json\\nnode_modules/hookable/package.json\\nnode_modules/jiti/package.json\\nnode_modules/jsesc/package.json\\nnode_modules/ms/package.json\\nnode_modules/oxfmt/package.json\\nnode_modules/oxlint/package.json\\nnode_modules/pathe/package.json\\nnode_modules/picomatch/package.json\\nnode_modules/quansync/package.json\\nnode_modules/readdirp/package.json\\nnode_modules/resolve-pkg-maps/package.json\\nnode_modules/rolldown-plugin-dts/package.json\\nnode_modules/rolldown/package.json\\nnode_modules/semver/package.json\\nnode_modules/tinyexec/package.json\\nnode_modules/tinyglobby/package.json\\nnode_modules/tinypool/package.json\\nnode_modules/tsdown/package.json\\nnode_modules/typescript/package.json\\nnode_modules/unconfig-core/package.json\\nnode_modules/unconfig/package.json\\nnode_modules/undici-types/package.json"}]},"components":[{"group":"","name":"undici-types","version":"6.21.0","description":"A stand-alone types package for Undici","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/undici-types@6.21.0","externalReferences":[{"type":"website","url":"https://undici.nodejs.org"},{"type":"vcs","url":"git+https://github.com/nodejs/undici.git"}],"type":"library","bom-ref":"pkg:npm/undici-types@6.21.0","properties":[{"name":"SrcFile","value":"node_modules/undici-types/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/undici-types/package.json"}],"concludedValue":"node_modules/undici-types/package.json"}]}},{"authors":[{"name":"Anthony Fu <anthonyfu117@hotmail.com>"}],"group":"","name":"unconfig-core","version":"7.5.0","description":"A universal solution for loading configurations.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/unconfig-core@7.5.0","externalReferences":[{"type":"vcs","url":"https://github.com/antfu-collective/unconfig#readme"},{"type":"vcs","url":"git+https://github.com/antfu-collective/unconfig.git"}],"type":"library","bom-ref":"pkg:npm/unconfig-core@7.5.0","properties":[{"name":"SrcFile","value":"node_modules/unconfig-core/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/unconfig-core/package.json"}],"concludedValue":"node_modules/unconfig-core/package.json"}]}},{"authors":[{"name":"Anthony Fu <anthonyfu117@hotmail.com>"}],"group":"","name":"unconfig","version":"7.5.0","description":"A universal solution for loading configurations.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/unconfig@7.5.0","externalReferences":[{"type":"vcs","url":"https://github.com/antfu-collective/unconfig#readme"},{"type":"vcs","url":"git+https://github.com/antfu-collective/unconfig.git"}],"type":"library","bom-ref":"pkg:npm/unconfig@7.5.0","properties":[{"name":"SrcFile","value":"node_modules/unconfig/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/unconfig/package.json"}],"concludedValue":"node_modules/unconfig/package.json"}]}},{"authors":[{"name":"Microsoft Corp."}],"group":"","name":"typescript","version":"5.9.3","description":"TypeScript is a language for application scale JavaScript development","scope":"optional","licenses":[{"license":{"id":"Apache-2.0","url":"https://opensource.org/licenses/Apache-2.0"}}],"purl":"pkg:npm/typescript@5.9.3","externalReferences":[{"type":"website","url":"https://www.typescriptlang.org/"},{"type":"vcs","url":"https://github.com/microsoft/TypeScript.git"}],"type":"library","bom-ref":"pkg:npm/typescript@5.9.3","properties":[{"name":"SrcFile","value":"node_modules/typescript/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/typescript/package.json"}],"concludedValue":"node_modules/typescript/package.json"}]}},{"authors":[{"name":"三咲智子 Kevin Deng <sxzz@sxzz.moe>"}],"group":"","name":"tsdown","version":"0.12.9","description":"The Elegant Bundler for Libraries","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/tsdown@0.12.9","externalReferences":[{"type":"vcs","url":"https://github.com/rolldown/tsdown#readme"},{"type":"vcs","url":"git+https://github.com/rolldown/tsdown.git"}],"type":"library","bom-ref":"pkg:npm/tsdown@0.12.9","properties":[{"name":"SrcFile","value":"node_modules/tsdown/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/tsdown/package.json"}],"concludedValue":"node_modules/tsdown/package.json"}]}},{"group":"","name":"tinypool","version":"2.1.0","description":"A minimal and tiny Node.js Worker Thread Pool implementation, a fork of piscina, but with fewer features","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/tinypool@2.1.0","externalReferences":[{"type":"vcs","url":"https://github.com/tinylibs/tinypool#readme"},{"type":"vcs","url":"https://github.com/tinylibs/tinypool.git"}],"type":"library","bom-ref":"pkg:npm/tinypool@2.1.0","properties":[{"name":"SrcFile","value":"node_modules/tinypool/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/tinypool/package.json"}],"concludedValue":"node_modules/tinypool/package.json"}]},"tags":["pool"]},{"authors":[{"name":"Superchupu"}],"group":"","name":"tinyglobby","version":"0.2.15","description":"A fast and minimal alternative to globby and fast-glob","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/tinyglobby@0.2.15","externalReferences":[{"type":"website","url":"https://superchupu.dev/tinyglobby"},{"type":"vcs","url":"git+https://github.com/SuperchupuDev/tinyglobby.git"}],"type":"library","bom-ref":"pkg:npm/tinyglobby@0.2.15","properties":[{"name":"SrcFile","value":"node_modules/tinyglobby/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/tinyglobby/package.json"}],"concludedValue":"node_modules/tinyglobby/package.json"}]}},{"authors":[{"name":"James Garbutt (https://github.com/43081j)"}],"group":"","name":"tinyexec","version":"1.0.4","description":"A minimal library for executing processes in Node","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/tinyexec@1.0.4","externalReferences":[{"type":"vcs","url":"https://github.com/tinylibs/tinyexec#readme"},{"type":"vcs","url":"git+https://github.com/tinylibs/tinyexec.git"}],"type":"library","bom-ref":"pkg:npm/tinyexec@1.0.4","properties":[{"name":"SrcFile","value":"node_modules/tinyexec/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/tinyexec/package.json"}],"concludedValue":"node_modules/tinyexec/package.json"}]}},{"authors":[{"name":"GitHub Inc."}],"group":"","name":"semver","version":"7.7.4","description":"The semantic version parser used by npm.","scope":"optional","licenses":[{"license":{"id":"ISC","url":"https://opensource.org/licenses/ISC"}}],"purl":"pkg:npm/semver@7.7.4","externalReferences":[{"type":"vcs","url":"git+https://github.com/npm/node-semver.git"}],"type":"library","bom-ref":"pkg:npm/semver@7.7.4","properties":[{"name":"SrcFile","value":"node_modules/semver/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/semver/package.json"}],"concludedValue":"node_modules/semver/package.json"}]}},{"authors":[{"name":"三咲智子 Kevin Deng <sxzz@sxzz.moe>"}],"group":"","name":"rolldown-plugin-dts","version":"0.13.14","description":"A Rolldown plugin to bundle dts files","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/rolldown-plugin-dts@0.13.14","externalReferences":[{"type":"vcs","url":"https://github.com/sxzz/rolldown-plugin-dts#readme"},{"type":"vcs","url":"git+https://github.com/sxzz/rolldown-plugin-dts.git"}],"type":"library","bom-ref":"pkg:npm/rolldown-plugin-dts@0.13.14","properties":[{"name":"SrcFile","value":"node_modules/rolldown-plugin-dts/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/rolldown-plugin-dts/package.json"}],"concludedValue":"node_modules/rolldown-plugin-dts/package.json"}]},"tags":["bundle"]},{"group":"","name":"rolldown","version":"1.0.0-rc.11","description":"Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/rolldown@1.0.0-rc.11","externalReferences":[{"type":"website","url":"https://rolldown.rs/"},{"type":"vcs","url":"git+https://github.com/rolldown/rolldown.git"}],"type":"library","bom-ref":"pkg:npm/rolldown@1.0.0-rc.11","properties":[{"name":"SrcFile","value":"node_modules/rolldown/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/rolldown/package.json"}],"concludedValue":"node_modules/rolldown/package.json"}]},"tags":["api"]},{"authors":[{"name":"Hiroki Osame <hiroki.osame@gmail.com>"}],"group":"","name":"resolve-pkg-maps","version":"1.0.0","description":"Resolve package.json exports & imports maps","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/resolve-pkg-maps@1.0.0","type":"library","bom-ref":"pkg:npm/resolve-pkg-maps@1.0.0","properties":[{"name":"SrcFile","value":"node_modules/resolve-pkg-maps/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/resolve-pkg-maps/package.json"}],"concludedValue":"node_modules/resolve-pkg-maps/package.json"}]}},{"authors":[{"name":"Thorsten Lorenz <thlorenz@gmx.de> (thlorenz.com)"}],"group":"","name":"readdirp","version":"4.1.2","description":"Recursive version of fs.readdir with small RAM & CPU footprint.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/readdirp@4.1.2","externalReferences":[{"type":"vcs","url":"https://github.com/paulmillr/readdirp"},{"type":"vcs","url":"git://github.com/paulmillr/readdirp.git"}],"type":"library","bom-ref":"pkg:npm/readdirp@4.1.2","properties":[{"name":"SrcFile","value":"node_modules/readdirp/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/readdirp/package.json"}],"concludedValue":"node_modules/readdirp/package.json"}]}},{"authors":[{"name":"Anthony Fu <anthonyfu117@hotmail.com>"}],"group":"","name":"quansync","version":"1.0.0","description":"Create sync/async APIs with usable logic","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/quansync@1.0.0","externalReferences":[{"type":"vcs","url":"https://github.com/quansync-dev/quansync#readme"},{"type":"vcs","url":"git+https://github.com/quansync-dev/quansync.git"}],"type":"library","bom-ref":"pkg:npm/quansync@1.0.0","properties":[{"name":"SrcFile","value":"node_modules/quansync/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/quansync/package.json"}],"concludedValue":"node_modules/quansync/package.json"}]}},{"authors":[{"name":"Jon Schlinkert (https://github.com/jonschlinkert)"}],"group":"","name":"picomatch","version":"4.0.3","description":"Blazing fast and accurate glob matcher written in JavaScript, with no dependencies and full support for standard and extended Bash glob features, including braces, extglobs, POSIX brackets, and regular expressions.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/picomatch@4.0.3","externalReferences":[{"type":"vcs","url":"https://github.com/micromatch/picomatch"}],"type":"library","bom-ref":"pkg:npm/picomatch@4.0.3","properties":[{"name":"SrcFile","value":"node_modules/picomatch/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/picomatch/package.json"}],"concludedValue":"node_modules/picomatch/package.json"}]}},{"group":"","name":"pathe","version":"2.0.3","description":"Universal filesystem path utils","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/pathe@2.0.3","type":"library","bom-ref":"pkg:npm/pathe@2.0.3","properties":[{"name":"SrcFile","value":"node_modules/pathe/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/pathe/package.json"}],"concludedValue":"node_modules/pathe/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"","name":"oxlint","version":"1.56.0","description":"Linter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/oxlint@1.56.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/linter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/oxlint@1.56.0","properties":[{"name":"SrcFile","value":"node_modules/oxlint/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/oxlint/package.json"}],"concludedValue":"node_modules/oxlint/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"","name":"oxfmt","version":"0.40.0","description":"Formatter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/oxfmt@0.40.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/formatter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/oxfmt@0.40.0","properties":[{"name":"SrcFile","value":"node_modules/oxfmt/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/oxfmt/package.json"}],"concludedValue":"node_modules/oxfmt/package.json"}]}},{"group":"","name":"ms","version":"2.1.3","description":"Tiny millisecond conversion utility","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/ms@2.1.3","type":"library","bom-ref":"pkg:npm/ms@2.1.3","properties":[{"name":"SrcFile","value":"node_modules/ms/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/ms/package.json"}],"concludedValue":"node_modules/ms/package.json"}]}},{"authors":[{"name":"Mathias Bynens (https://mathiasbynens.be/)"}],"group":"","name":"jsesc","version":"3.1.0","description":"Given some data, jsesc returns the shortest possible stringified & ASCII-safe representation of that data.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/jsesc@3.1.0","externalReferences":[{"type":"website","url":"https://mths.be/jsesc"},{"type":"vcs","url":"https://github.com/mathiasbynens/jsesc.git"}],"type":"library","bom-ref":"pkg:npm/jsesc@3.1.0","properties":[{"name":"SrcFile","value":"node_modules/jsesc/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/jsesc/package.json"}],"concludedValue":"node_modules/jsesc/package.json"}]}},{"group":"","name":"jiti","version":"2.6.1","description":"Runtime typescript and ESM support for Node.js","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/jiti@2.6.1","type":"library","bom-ref":"pkg:npm/jiti@2.6.1","properties":[{"name":"SrcFile","value":"node_modules/jiti/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/jiti/package.json"}],"concludedValue":"node_modules/jiti/package.json"}]}},{"group":"","name":"hookable","version":"5.5.3","description":"Awaitable hook system","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/hookable@5.5.3","type":"library","bom-ref":"pkg:npm/hookable@5.5.3","properties":[{"name":"SrcFile","value":"node_modules/hookable/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/hookable/package.json"}],"concludedValue":"node_modules/hookable/package.json"}]}},{"authors":[{"name":"Hiroki Osame <hiroki.osame@gmail.com>"}],"group":"","name":"get-tsconfig","version":"4.13.7","description":"Find and parse the tsconfig.json file from a directory path","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/get-tsconfig@4.13.7","type":"library","bom-ref":"pkg:npm/get-tsconfig@4.13.7","properties":[{"name":"SrcFile","value":"node_modules/get-tsconfig/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/get-tsconfig/package.json"}],"concludedValue":"node_modules/get-tsconfig/package.json"}]},"tags":["parse"]},{"authors":[{"name":"thecodrr <thecodrr@protonmail.com>"}],"group":"","name":"fdir","version":"6.5.0","description":"The fastest directory crawler & globbing alternative to glob, fast-glob, & tiny-glob. Crawls 1m files in < 1s","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/fdir@6.5.0","externalReferences":[{"type":"vcs","url":"https://github.com/thecodrr/fdir#readme"},{"type":"vcs","url":"git+https://github.com/thecodrr/fdir.git"}],"type":"library","bom-ref":"pkg:npm/fdir@6.5.0","properties":[{"name":"SrcFile","value":"node_modules/fdir/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/fdir/package.json"}],"concludedValue":"node_modules/fdir/package.json"}]}},{"authors":[{"name":"Luke Edwards <luke.edwards05@gmail.com> (https://lukeed.com)"}],"group":"","name":"empathic","version":"2.0.0","description":"A set of small and fast Node.js utilities to understand your pathing needs.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/empathic@2.0.0","type":"library","bom-ref":"pkg:npm/empathic@2.0.0","properties":[{"name":"SrcFile","value":"node_modules/empathic/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/empathic/package.json"}],"concludedValue":"node_modules/empathic/package.json"}]}},{"authors":[{"name":"Kevin Deng <sxzz@sxzz.moe>"}],"group":"","name":"dts-resolver","version":"2.1.3","description":"Resolves TypeScript declaration files for dependencies.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/dts-resolver@2.1.3","externalReferences":[{"type":"vcs","url":"https://github.com/sxzz/dts-resolver#readme"},{"type":"vcs","url":"git+https://github.com/sxzz/dts-resolver.git"}],"type":"library","bom-ref":"pkg:npm/dts-resolver@2.1.3","properties":[{"name":"SrcFile","value":"node_modules/dts-resolver/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/dts-resolver/package.json"}],"concludedValue":"node_modules/dts-resolver/package.json"}]}},{"group":"","name":"diff","version":"8.0.4","description":"A JavaScript text diff implementation.","scope":"optional","licenses":[{"license":{"id":"BSD-3-Clause","url":"https://opensource.org/licenses/BSD-3-Clause"}}],"purl":"pkg:npm/diff@8.0.4","externalReferences":[{"type":"vcs","url":"https://github.com/kpdecker/jsdiff.git"}],"type":"library","bom-ref":"pkg:npm/diff@8.0.4","properties":[{"name":"SrcFile","value":"node_modules/diff/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/diff/package.json"}],"concludedValue":"node_modules/diff/package.json"}]}},{"group":"","name":"defu","version":"6.1.4","description":"Recursively assign default properties. Lightweight and Fast!","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/defu@6.1.4","type":"library","bom-ref":"pkg:npm/defu@6.1.4","properties":[{"name":"SrcFile","value":"node_modules/defu/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/defu/package.json"}],"concludedValue":"node_modules/defu/package.json"}]}},{"authors":[{"name":"Josh Junon (https://github.com/qix-)"}],"group":"","name":"debug","version":"4.4.3","description":"Lightweight debugging utility for Node.js and the browser","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/debug@4.4.3","externalReferences":[{"type":"vcs","url":"git://github.com/debug-js/debug.git"}],"type":"library","bom-ref":"pkg:npm/debug@4.4.3","properties":[{"name":"SrcFile","value":"node_modules/debug/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/debug/package.json"}],"concludedValue":"node_modules/debug/package.json"}]}},{"authors":[{"name":"Paul Miller (https://paulmillr.com)"}],"group":"","name":"chokidar","version":"4.0.3","description":"Minimal and efficient cross-platform file watching library","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/chokidar@4.0.3","externalReferences":[{"type":"vcs","url":"https://github.com/paulmillr/chokidar"},{"type":"vcs","url":"git+https://github.com/paulmillr/chokidar.git"}],"type":"library","bom-ref":"pkg:npm/chokidar@4.0.3","properties":[{"name":"SrcFile","value":"node_modules/chokidar/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/chokidar/package.json"}],"concludedValue":"node_modules/chokidar/package.json"}]}},{"authors":[{"name":"egoist <0x142857@gmail.com>"}],"group":"","name":"cac","version":"6.7.14","description":"Simple yet powerful framework for building command-line apps.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/cac@6.7.14","type":"framework","bom-ref":"pkg:npm/cac@6.7.14","properties":[{"name":"SrcFile","value":"node_modules/cac/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/cac/package.json"}],"concludedValue":"node_modules/cac/package.json"}]},"tags":["framework"]},{"group":"","name":"bun-types","version":"1.3.11","description":"Type definitions and documentation for Bun, an incredibly fast JavaScript runtime","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/bun-types@1.3.11","externalReferences":[{"type":"website","url":"https://bun.com"},{"type":"vcs","url":"https://github.com/oven-sh/bun"}],"type":"library","bom-ref":"pkg:npm/bun-types@1.3.11","properties":[{"name":"SrcFile","value":"node_modules/bun-types/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/bun-types/package.json"}],"concludedValue":"node_modules/bun-types/package.json"}]}},{"authors":[{"name":"Anthony Fu <anthonyfu117@hotmail.com>"}],"group":"","name":"birpc","version":"2.9.0","description":"Message based Two-way remote procedure call","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/birpc@2.9.0","externalReferences":[{"type":"vcs","url":"https://github.com/antfu-collective/birpc#readme"},{"type":"vcs","url":"git+https://github.com/antfu-collective/birpc.git"}],"type":"library","bom-ref":"pkg:npm/birpc@2.9.0","properties":[{"name":"SrcFile","value":"node_modules/birpc/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/birpc/package.json"}],"concludedValue":"node_modules/birpc/package.json"}]}},{"authors":[{"name":"Kevin Deng <sxzz@sxzz.moe>"}],"group":"","name":"ast-kit","version":"2.2.0","description":"A toolkit for easy Babel AST generation and manipulation.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/ast-kit@2.2.0","externalReferences":[{"type":"vcs","url":"https://github.com/sxzz/ast-kit#readme"},{"type":"vcs","url":"git+https://github.com/sxzz/ast-kit.git"}],"type":"library","bom-ref":"pkg:npm/ast-kit@2.2.0","properties":[{"name":"SrcFile","value":"node_modules/ast-kit/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/ast-kit/package.json"}],"concludedValue":"node_modules/ast-kit/package.json"}]}},{"authors":[{"name":"webdiscus"}],"group":"","name":"ansis","version":"4.2.0","description":"ANSI color lib","scope":"optional","licenses":[{"license":{"id":"ISC","url":"https://opensource.org/licenses/ISC"}}],"purl":"pkg:npm/ansis@4.2.0","type":"library","bom-ref":"pkg:npm/ansis@4.2.0","properties":[{"name":"SrcFile","value":"node_modules/ansis/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/ansis/package.json"}],"concludedValue":"node_modules/ansis/package.json"}]}},{"group":"@types","name":"node","version":"22.19.15","description":"TypeScript definitions for node","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40types/node@22.19.15","externalReferences":[{"type":"vcs","url":"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"},{"type":"vcs","url":"https://github.com/DefinitelyTyped/DefinitelyTyped.git"}],"type":"library","bom-ref":"pkg:npm/@types/node@22.19.15","properties":[{"name":"SrcFile","value":"node_modules/@types/node/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@types/node/package.json"}],"concludedValue":"node_modules/@types/node/package.json"}]}},{"group":"@stll","name":"regex-set","version":"0.5.1","description":"Multi-pattern regex for Node.js/Bun. 2-9x faster than JS RegExp, backtracking-immune, Unicode word boundaries. Rust DFA engine via NAPI-RS.","scope":"required","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40stll/regex-set@0.5.1","externalReferences":[{"type":"vcs","url":"https://github.com/stella/regex-set#readme"},{"type":"vcs","url":"https://github.com/stella/regex-set"}],"type":"library","bom-ref":"pkg:npm/@stll/regex-set@0.5.1","properties":[{"name":"SrcFile","value":"node_modules/@stll/regex-set/package.json"},{"name":"ImportedModules","value":"@stll/regex-set,RegexSet,@stll/regex-set/RegexSet"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@stll/regex-set/package.json"}],"concludedValue":"node_modules/@stll/regex-set/package.json"}],"occurrences":[{"location":"src/text-search.ts#3"}]}},{"group":"@stll","name":"fuzzy-search","version":"0.2.1","description":"NAPI-RS bindings for fuzzy string matching via Myers' bit-parallel algorithm for Node.js/Bun","scope":"required","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40stll/fuzzy-search@0.2.1","externalReferences":[{"type":"vcs","url":"https://github.com/stella/fuzzy-search#readme"},{"type":"vcs","url":"https://github.com/stella/fuzzy-search"}],"type":"library","bom-ref":"pkg:npm/@stll/fuzzy-search@0.2.1","properties":[{"name":"SrcFile","value":"node_modules/@stll/fuzzy-search/package.json"},{"name":"ImportedModules","value":"@stll/fuzzy-search,FuzzySearch,@stll/fuzzy-search/FuzzySearch"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@stll/fuzzy-search/package.json"}],"concludedValue":"node_modules/@stll/fuzzy-search/package.json"}],"occurrences":[{"location":"src/text-search.ts#2"}]}},{"group":"@stll","name":"aho-corasick","version":"0.3.0","description":"NAPI-RS bindings to the Rust aho-corasick crate for Node.js/Bun","scope":"required","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40stll/aho-corasick@0.3.0","externalReferences":[{"type":"vcs","url":"https://github.com/stella/aho-corasick#readme"},{"type":"vcs","url":"https://github.com/stella/aho-corasick"}],"type":"library","bom-ref":"pkg:npm/@stll/aho-corasick@0.3.0","properties":[{"name":"SrcFile","value":"node_modules/@stll/aho-corasick/package.json"},{"name":"ImportedModules","value":"@stll/aho-corasick,AhoCorasick,@stll/aho-corasick/AhoCorasick"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@stll/aho-corasick/package.json"}],"concludedValue":"node_modules/@stll/aho-corasick/package.json"}],"occurrences":[{"location":"src/text-search.ts#1"}]}},{"group":"@rolldown","name":"pluginutils","version":"1.0.0-rc.11","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40rolldown/pluginutils@1.0.0-rc.11","externalReferences":[{"type":"website","url":"https://rolldown.rs/"},{"type":"vcs","url":"git+https://github.com/rolldown/rolldown.git"}],"type":"library","bom-ref":"pkg:npm/@rolldown/pluginutils@1.0.0-rc.11","properties":[{"name":"SrcFile","value":"node_modules/@rolldown/pluginutils/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@rolldown/pluginutils/package.json"}],"concludedValue":"node_modules/@rolldown/pluginutils/package.json"}]}},{"group":"@rolldown","name":"binding-linux-x64-musl","version":"1.0.0-rc.11","description":"Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40rolldown/binding-linux-x64-musl@1.0.0-rc.11","externalReferences":[{"type":"website","url":"https://rolldown.rs/"},{"type":"vcs","url":"git+https://github.com/rolldown/rolldown.git"}],"type":"library","bom-ref":"pkg:npm/@rolldown/binding-linux-x64-musl@1.0.0-rc.11","properties":[{"name":"SrcFile","value":"node_modules/@rolldown/binding-linux-x64-musl/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@rolldown/binding-linux-x64-musl/package.json"}],"concludedValue":"node_modules/@rolldown/binding-linux-x64-musl/package.json"}]},"tags":["api"]},{"group":"@rolldown","name":"binding-linux-x64-gnu","version":"1.0.0-rc.11","description":"Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40rolldown/binding-linux-x64-gnu@1.0.0-rc.11","externalReferences":[{"type":"website","url":"https://rolldown.rs/"},{"type":"vcs","url":"git+https://github.com/rolldown/rolldown.git"}],"type":"library","bom-ref":"pkg:npm/@rolldown/binding-linux-x64-gnu@1.0.0-rc.11","properties":[{"name":"SrcFile","value":"node_modules/@rolldown/binding-linux-x64-gnu/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@rolldown/binding-linux-x64-gnu/package.json"}],"concludedValue":"node_modules/@rolldown/binding-linux-x64-gnu/package.json"}]},"tags":["api"]},{"authors":[{"name":"Kevin Deng <sxzz@sxzz.moe>"}],"group":"@quansync","name":"fs","version":"1.0.0","description":"Filesystem utilities for Quansync","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40quansync/fs@1.0.0","externalReferences":[{"type":"vcs","url":"https://github.com/quansync-dev/fs#readme"},{"type":"vcs","url":"git+https://github.com/quansync-dev/fs.git"}],"type":"library","bom-ref":"pkg:npm/@quansync/fs@1.0.0","properties":[{"name":"SrcFile","value":"node_modules/@quansync/fs/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@quansync/fs/package.json"}],"concludedValue":"node_modules/@quansync/fs/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"@oxlint","name":"binding-linux-x64-musl","version":"1.56.0","description":"Linter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40oxlint/binding-linux-x64-musl@1.56.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/linter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/@oxlint/binding-linux-x64-musl@1.56.0","properties":[{"name":"SrcFile","value":"node_modules/@oxlint/binding-linux-x64-musl/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@oxlint/binding-linux-x64-musl/package.json"}],"concludedValue":"node_modules/@oxlint/binding-linux-x64-musl/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"@oxlint","name":"binding-linux-x64-gnu","version":"1.56.0","description":"Linter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40oxlint/binding-linux-x64-gnu@1.56.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/linter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/@oxlint/binding-linux-x64-gnu@1.56.0","properties":[{"name":"SrcFile","value":"node_modules/@oxlint/binding-linux-x64-gnu/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@oxlint/binding-linux-x64-gnu/package.json"}],"concludedValue":"node_modules/@oxlint/binding-linux-x64-gnu/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"@oxfmt","name":"binding-linux-x64-musl","version":"0.40.0","description":"Formatter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40oxfmt/binding-linux-x64-musl@0.40.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/formatter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/@oxfmt/binding-linux-x64-musl@0.40.0","properties":[{"name":"SrcFile","value":"node_modules/@oxfmt/binding-linux-x64-musl/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@oxfmt/binding-linux-x64-musl/package.json"}],"concludedValue":"node_modules/@oxfmt/binding-linux-x64-musl/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"@oxfmt","name":"binding-linux-x64-gnu","version":"0.40.0","description":"Formatter for the JavaScript Oxidation Compiler","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40oxfmt/binding-linux-x64-gnu@0.40.0","externalReferences":[{"type":"website","url":"https://oxc.rs/docs/guide/usage/formatter"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc"}],"type":"library","bom-ref":"pkg:npm/@oxfmt/binding-linux-x64-gnu@0.40.0","properties":[{"name":"SrcFile","value":"node_modules/@oxfmt/binding-linux-x64-gnu/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@oxfmt/binding-linux-x64-gnu/package.json"}],"concludedValue":"node_modules/@oxfmt/binding-linux-x64-gnu/package.json"}]}},{"authors":[{"name":"Boshen and oxc contributors"}],"group":"@oxc-project","name":"types","version":"0.122.0","description":"Types for Oxc AST nodes","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40oxc-project/types@0.122.0","externalReferences":[{"type":"website","url":"https://oxc.rs"},{"type":"vcs","url":"git+https://github.com/oxc-project/oxc.git"}],"type":"library","bom-ref":"pkg:npm/@oxc-project/types@0.122.0","properties":[{"name":"SrcFile","value":"node_modules/@oxc-project/types/package.json"},{"name":"ExportedModules","value":"types,Match,types/Match,PatternEntry,types/PatternEntry,TextSearchOptions,types/TextSearchOptions"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@oxc-project/types/package.json"}],"concludedValue":"node_modules/@oxc-project/types/package.json"}]}},{"authors":[{"name":"Justin Ridgewell <justin@ridgewell.name>"}],"group":"@jridgewell","name":"trace-mapping","version":"0.3.31","description":"Trace the original position through a source map","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40jridgewell/trace-mapping@0.3.31","externalReferences":[{"type":"vcs","url":"https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping"},{"type":"vcs","url":"git+https://github.com/jridgewell/sourcemaps.git"}],"type":"library","bom-ref":"pkg:npm/@jridgewell/trace-mapping@0.3.31","properties":[{"name":"SrcFile","value":"node_modules/@jridgewell/trace-mapping/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@jridgewell/trace-mapping/package.json"}],"concludedValue":"node_modules/@jridgewell/trace-mapping/package.json"}]}},{"authors":[{"name":"Justin Ridgewell <justin@ridgewell.name>"}],"group":"@jridgewell","name":"sourcemap-codec","version":"1.5.5","description":"Encode/decode sourcemap mappings","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40jridgewell/sourcemap-codec@1.5.5","externalReferences":[{"type":"vcs","url":"https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec"},{"type":"vcs","url":"git+https://github.com/jridgewell/sourcemaps.git"}],"type":"library","bom-ref":"pkg:npm/@jridgewell/sourcemap-codec@1.5.5","properties":[{"name":"SrcFile","value":"node_modules/@jridgewell/sourcemap-codec/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@jridgewell/sourcemap-codec/package.json"}],"concludedValue":"node_modules/@jridgewell/sourcemap-codec/package.json"}]}},{"authors":[{"name":"Justin Ridgewell <justin@ridgewell.name>"}],"group":"@jridgewell","name":"resolve-uri","version":"3.1.2","description":"Resolve a URI relative to an optional base URI","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40jridgewell/resolve-uri@3.1.2","type":"library","bom-ref":"pkg:npm/@jridgewell/resolve-uri@3.1.2","properties":[{"name":"SrcFile","value":"node_modules/@jridgewell/resolve-uri/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@jridgewell/resolve-uri/package.json"}],"concludedValue":"node_modules/@jridgewell/resolve-uri/package.json"}]}},{"authors":[{"name":"Justin Ridgewell <justin@ridgewell.name>"}],"group":"@jridgewell","name":"gen-mapping","version":"0.3.13","description":"Generate source maps","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40jridgewell/gen-mapping@0.3.13","externalReferences":[{"type":"vcs","url":"https://github.com/jridgewell/sourcemaps/tree/main/packages/gen-mapping"},{"type":"vcs","url":"git+https://github.com/jridgewell/sourcemaps.git"}],"type":"library","bom-ref":"pkg:npm/@jridgewell/gen-mapping@0.3.13","properties":[{"name":"SrcFile","value":"node_modules/@jridgewell/gen-mapping/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@jridgewell/gen-mapping/package.json"}],"concludedValue":"node_modules/@jridgewell/gen-mapping/package.json"}]}},{"authors":[{"name":"The Babel Team (https://babel.dev/team)"}],"group":"@babel","name":"types","version":"7.29.0","description":"Babel Types is a Lodash-esque utility library for AST nodes","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40babel/types@7.29.0","externalReferences":[{"type":"website","url":"https://babel.dev/docs/en/next/babel-types"},{"type":"vcs","url":"https://github.com/babel/babel.git"}],"type":"library","bom-ref":"pkg:npm/@babel/types@7.29.0","properties":[{"name":"SrcFile","value":"node_modules/@babel/types/package.json"},{"name":"ExportedModules","value":"types,Match,types/Match,PatternEntry,types/PatternEntry,TextSearchOptions,types/TextSearchOptions"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@babel/types/package.json"}],"concludedValue":"node_modules/@babel/types/package.json"}]}},{"authors":[{"name":"The Babel Team (https://babel.dev/team)"}],"group":"@babel","name":"parser","version":"7.29.2","description":"A JavaScript parser","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40babel/parser@7.29.2","externalReferences":[{"type":"website","url":"https://babel.dev/docs/en/next/babel-parser"},{"type":"vcs","url":"https://github.com/babel/babel.git"}],"type":"library","bom-ref":"pkg:npm/@babel/parser@7.29.2","properties":[{"name":"SrcFile","value":"node_modules/@babel/parser/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@babel/parser/package.json"}],"concludedValue":"node_modules/@babel/parser/package.json"}]},"tags":["parse"]},{"authors":[{"name":"The Babel Team (https://babel.dev/team)"}],"group":"@babel","name":"helper-validator-identifier","version":"7.28.5","description":"Validate identifier/keywords name","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40babel/helper-validator-identifier@7.28.5","externalReferences":[{"type":"vcs","url":"https://github.com/babel/babel.git"}],"type":"library","bom-ref":"pkg:npm/@babel/helper-validator-identifier@7.28.5","properties":[{"name":"SrcFile","value":"node_modules/@babel/helper-validator-identifier/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@babel/helper-validator-identifier/package.json"}],"concludedValue":"node_modules/@babel/helper-validator-identifier/package.json"}]}},{"authors":[{"name":"The Babel Team (https://babel.dev/team)"}],"group":"@babel","name":"helper-string-parser","version":"7.27.1","description":"A utility package to parse strings","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40babel/helper-string-parser@7.27.1","externalReferences":[{"type":"website","url":"https://babel.dev/docs/en/next/babel-helper-string-parser"},{"type":"vcs","url":"https://github.com/babel/babel.git"}],"type":"library","bom-ref":"pkg:npm/@babel/helper-string-parser@7.27.1","properties":[{"name":"SrcFile","value":"node_modules/@babel/helper-string-parser/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@babel/helper-string-parser/package.json"}],"concludedValue":"node_modules/@babel/helper-string-parser/package.json"}]},"tags":["parse"]},{"authors":[{"name":"The Babel Team (https://babel.dev/team)"}],"group":"@babel","name":"generator","version":"7.29.1","description":"Turns an AST into code.","scope":"optional","licenses":[{"license":{"id":"MIT","url":"https://opensource.org/licenses/MIT"}}],"purl":"pkg:npm/%40babel/generator@7.29.1","externalReferences":[{"type":"website","url":"https://babel.dev/docs/en/next/babel-generator"},{"type":"vcs","url":"https://github.com/babel/babel.git"}],"type":"library","bom-ref":"pkg:npm/@babel/generator@7.29.1","properties":[{"name":"SrcFile","value":"node_modules/@babel/generator/package.json"}],"evidence":{"identity":[{"field":"purl","confidence":0.7,"methods":[{"technique":"manifest-analysis","confidence":0.7,"value":"node_modules/@babel/generator/package.json"}],"concludedValue":"node_modules/@babel/generator/package.json"}]}},{"group":"actions","name":"checkout","version":"v6","purl":"pkg:github/actions/checkout@v6","type":"application","bom-ref":"pkg:github/actions/checkout@v6","properties":[{"name":"SrcFile","value":".github/workflows/sbom.yml"},{"name":"cdx:actions:isOfficial","value":"true"},{"name":"SrcFile","value":".github/workflows/ci.yml"}],"evidence":{"identity":[{"field":"purl","confidence":0.6,"methods":[{"technique":"source-code-analysis","confidence":0.6,"value":".github/workflows/ci.yml"}],"concludedValue":".github/workflows/ci.yml"}]}},{"group":"oven-sh","name":"setup-bun","version":"v2","purl":"pkg:github/oven-sh/setup-bun@v2","type":"application","bom-ref":"pkg:github/oven-sh/setup-bun@v2","properties":[{"name":"SrcFile","value":".github/workflows/sbom.yml"},{"name":"SrcFile","value":".github/workflows/ci.yml"}],"evidence":{"identity":[{"field":"purl","confidence":0.6,"methods":[{"technique":"source-code-analysis","confidence":0.6,"value":".github/workflows/ci.yml"}],"concludedValue":".github/workflows/ci.yml"}]}},{"group":"actions","name":"upload-artifact","version":"v7","purl":"pkg:github/actions/upload-artifact@v7","type":"application","bom-ref":"pkg:github/actions/upload-artifact@v7","properties":[{"name":"SrcFile","value":".github/workflows/sbom.yml"},{"name":"cdx:actions:isOfficial","value":"true"}],"evidence":{"identity":[{"field":"purl","confidence":0.6,"methods":[{"technique":"source-code-analysis","confidence":0.6,"value":".github/workflows/sbom.yml"}],"concludedValue":".github/workflows/sbom.yml"}]}},{"group":"actions","name":"setup-node","version":"v6","purl":"pkg:github/actions/setup-node@v6","type":"application","bom-ref":"pkg:github/actions/setup-node@v6","properties":[{"name":"SrcFile","value":".github/workflows/ci.yml"},{"name":"cdx:actions:isOfficial","value":"true"}],"evidence":{"identity":[{"field":"purl","confidence":0.6,"methods":[{"technique":"source-code-analysis","confidence":0.6,"value":".github/workflows/ci.yml"}],"concludedValue":".github/workflows/ci.yml"}]}}],"services":[],"dependencies":[{"ref":"pkg:npm/@stll/text-search@0.3.1","dependsOn":[]}],"annotations":[{"bom-ref":"metadata-annotations","subjects":["pkg:npm/@stll/text-search@0.3.1"],"annotator":{"component":{"group":"@cyclonedx","name":"cdxgen","version":"12.1.2","purl":"pkg:npm/%40cyclonedx/cdxgen@12.1.2","type":"application","bom-ref":"pkg:npm/@cyclonedx/cdxgen@12.1.2","publisher":"OWASP Foundation","authors":[{"name":"OWASP Foundation"}]}},"timestamp":"2026-03-24T19:13:21Z","text":"This Software Bill-of-Materials (SBOM) document was created on Tuesday, March 24, 2026 with cdxgen. The data was captured during the build lifecycle phase. The document describes an application named 'text-search' with version '0.3.1'. There are 61 components. 2 package type(s) and 11 purl namespaces are described in the document under components."}]}
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:95511d25-635b-477c-b12f-7aa90f47b132",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-03-24T19:13:21Z",
+    "tools": {
+      "components": [
+        {
+          "group": "@cyclonedx",
+          "name": "cdxgen",
+          "version": "12.1.2",
+          "purl": "pkg:npm/%40cyclonedx/cdxgen@12.1.2",
+          "type": "application",
+          "bom-ref": "pkg:npm/@cyclonedx/cdxgen@12.1.2",
+          "publisher": "OWASP Foundation",
+          "authors": [{ "name": "OWASP Foundation" }]
+        }
+      ]
+    },
+    "authors": [{ "name": "OWASP Foundation" }],
+    "lifecycles": [{ "phase": "build" }],
+    "component": {
+      "name": "text-search",
+      "group": "@stll",
+      "version": "0.3.1",
+      "description": "Multi-engine text search orchestrator. Routes patterns to optimal engines: Aho-Corasick, RegexSet, or FuzzySearch.",
+      "purl": "pkg:npm/%40stll/text-search@0.3.1",
+      "bom-ref": "pkg:npm/@stll/text-search@0.3.1",
+      "type": "application",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/stella/text-search#readme" },
+        { "type": "vcs", "url": "https://github.com/stella/text-search" }
+      ]
+    },
+    "properties": [
+      { "name": "cdx:bom:componentTypes", "value": "github\\nnpm" },
+      {
+        "name": "cdx:bom:componentNamespaces",
+        "value": "@babel\\n@jridgewell\\n@oxc-project\\n@oxfmt\\n@oxlint\\n@quansync\\n@rolldown\\n@stll\\n@types\\nactions\\noven-sh"
+      },
+      {
+        "name": "cdx:bom:componentSrcFiles",
+        "value": ".github/workflows/ci.yml\\n.github/workflows/sbom.yml\\nnode_modules/@babel/generator/package.json\\nnode_modules/@babel/helper-string-parser/package.json\\nnode_modules/@babel/helper-validator-identifier/package.json\\nnode_modules/@babel/parser/package.json\\nnode_modules/@babel/types/package.json\\nnode_modules/@jridgewell/gen-mapping/package.json\\nnode_modules/@jridgewell/resolve-uri/package.json\\nnode_modules/@jridgewell/sourcemap-codec/package.json\\nnode_modules/@jridgewell/trace-mapping/package.json\\nnode_modules/@oxc-project/types/package.json\\nnode_modules/@oxfmt/binding-linux-x64-gnu/package.json\\nnode_modules/@oxfmt/binding-linux-x64-musl/package.json\\nnode_modules/@oxlint/binding-linux-x64-gnu/package.json\\nnode_modules/@oxlint/binding-linux-x64-musl/package.json\\nnode_modules/@quansync/fs/package.json\\nnode_modules/@rolldown/binding-linux-x64-gnu/package.json\\nnode_modules/@rolldown/binding-linux-x64-musl/package.json\\nnode_modules/@rolldown/pluginutils/package.json\\nnode_modules/@stll/aho-corasick/package.json\\nnode_modules/@stll/fuzzy-search/package.json\\nnode_modules/@stll/regex-set/package.json\\nnode_modules/@types/node/package.json\\nnode_modules/ansis/package.json\\nnode_modules/ast-kit/package.json\\nnode_modules/birpc/package.json\\nnode_modules/bun-types/package.json\\nnode_modules/cac/package.json\\nnode_modules/chokidar/package.json\\nnode_modules/debug/package.json\\nnode_modules/defu/package.json\\nnode_modules/diff/package.json\\nnode_modules/dts-resolver/package.json\\nnode_modules/empathic/package.json\\nnode_modules/fdir/package.json\\nnode_modules/get-tsconfig/package.json\\nnode_modules/hookable/package.json\\nnode_modules/jiti/package.json\\nnode_modules/jsesc/package.json\\nnode_modules/ms/package.json\\nnode_modules/oxfmt/package.json\\nnode_modules/oxlint/package.json\\nnode_modules/pathe/package.json\\nnode_modules/picomatch/package.json\\nnode_modules/quansync/package.json\\nnode_modules/readdirp/package.json\\nnode_modules/resolve-pkg-maps/package.json\\nnode_modules/rolldown-plugin-dts/package.json\\nnode_modules/rolldown/package.json\\nnode_modules/semver/package.json\\nnode_modules/tinyexec/package.json\\nnode_modules/tinyglobby/package.json\\nnode_modules/tinypool/package.json\\nnode_modules/tsdown/package.json\\nnode_modules/typescript/package.json\\nnode_modules/unconfig-core/package.json\\nnode_modules/unconfig/package.json\\nnode_modules/undici-types/package.json"
+      }
+    ]
+  },
+  "components": [
+    {
+      "group": "",
+      "name": "undici-types",
+      "version": "6.21.0",
+      "description": "A stand-alone types package for Undici",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/undici-types@6.21.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://undici.nodejs.org" },
+        { "type": "vcs", "url": "git+https://github.com/nodejs/undici.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/undici-types@6.21.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/undici-types/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/undici-types/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/undici-types/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Anthony Fu <anthonyfu117@hotmail.com>" }],
+      "group": "",
+      "name": "unconfig-core",
+      "version": "7.5.0",
+      "description": "A universal solution for loading configurations.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/unconfig-core@7.5.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/antfu-collective/unconfig#readme" },
+        { "type": "vcs", "url": "git+https://github.com/antfu-collective/unconfig.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/unconfig-core@7.5.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/unconfig-core/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/unconfig-core/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/unconfig-core/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Anthony Fu <anthonyfu117@hotmail.com>" }],
+      "group": "",
+      "name": "unconfig",
+      "version": "7.5.0",
+      "description": "A universal solution for loading configurations.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/unconfig@7.5.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/antfu-collective/unconfig#readme" },
+        { "type": "vcs", "url": "git+https://github.com/antfu-collective/unconfig.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/unconfig@7.5.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/unconfig/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/unconfig/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/unconfig/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Microsoft Corp." }],
+      "group": "",
+      "name": "typescript",
+      "version": "5.9.3",
+      "description": "TypeScript is a language for application scale JavaScript development",
+      "scope": "optional",
+      "licenses": [
+        { "license": { "id": "Apache-2.0", "url": "https://opensource.org/licenses/Apache-2.0" } }
+      ],
+      "purl": "pkg:npm/typescript@5.9.3",
+      "externalReferences": [
+        { "type": "website", "url": "https://www.typescriptlang.org/" },
+        { "type": "vcs", "url": "https://github.com/microsoft/TypeScript.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/typescript@5.9.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/typescript/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/typescript/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/typescript/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "三咲智子 Kevin Deng <sxzz@sxzz.moe>" }],
+      "group": "",
+      "name": "tsdown",
+      "version": "0.12.9",
+      "description": "The Elegant Bundler for Libraries",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/tsdown@0.12.9",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/rolldown/tsdown#readme" },
+        { "type": "vcs", "url": "git+https://github.com/rolldown/tsdown.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/tsdown@0.12.9",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/tsdown/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/tsdown/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/tsdown/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "tinypool",
+      "version": "2.1.0",
+      "description": "A minimal and tiny Node.js Worker Thread Pool implementation, a fork of piscina, but with fewer features",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/tinypool@2.1.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/tinylibs/tinypool#readme" },
+        { "type": "vcs", "url": "https://github.com/tinylibs/tinypool.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/tinypool@2.1.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/tinypool/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/tinypool/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/tinypool/package.json"
+          }
+        ]
+      },
+      "tags": ["pool"]
+    },
+    {
+      "authors": [{ "name": "Superchupu" }],
+      "group": "",
+      "name": "tinyglobby",
+      "version": "0.2.15",
+      "description": "A fast and minimal alternative to globby and fast-glob",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/tinyglobby@0.2.15",
+      "externalReferences": [
+        { "type": "website", "url": "https://superchupu.dev/tinyglobby" },
+        { "type": "vcs", "url": "git+https://github.com/SuperchupuDev/tinyglobby.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/tinyglobby@0.2.15",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/tinyglobby/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/tinyglobby/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/tinyglobby/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "James Garbutt (https://github.com/43081j)" }],
+      "group": "",
+      "name": "tinyexec",
+      "version": "1.0.4",
+      "description": "A minimal library for executing processes in Node",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/tinyexec@1.0.4",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/tinylibs/tinyexec#readme" },
+        { "type": "vcs", "url": "git+https://github.com/tinylibs/tinyexec.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/tinyexec@1.0.4",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/tinyexec/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/tinyexec/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/tinyexec/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "GitHub Inc." }],
+      "group": "",
+      "name": "semver",
+      "version": "7.7.4",
+      "description": "The semantic version parser used by npm.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "ISC", "url": "https://opensource.org/licenses/ISC" } }],
+      "purl": "pkg:npm/semver@7.7.4",
+      "externalReferences": [
+        { "type": "vcs", "url": "git+https://github.com/npm/node-semver.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/semver@7.7.4",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/semver/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/semver/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/semver/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "三咲智子 Kevin Deng <sxzz@sxzz.moe>" }],
+      "group": "",
+      "name": "rolldown-plugin-dts",
+      "version": "0.13.14",
+      "description": "A Rolldown plugin to bundle dts files",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/rolldown-plugin-dts@0.13.14",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/sxzz/rolldown-plugin-dts#readme" },
+        { "type": "vcs", "url": "git+https://github.com/sxzz/rolldown-plugin-dts.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/rolldown-plugin-dts@0.13.14",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/rolldown-plugin-dts/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/rolldown-plugin-dts/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/rolldown-plugin-dts/package.json"
+          }
+        ]
+      },
+      "tags": ["bundle"]
+    },
+    {
+      "group": "",
+      "name": "rolldown",
+      "version": "1.0.0-rc.11",
+      "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/rolldown@1.0.0-rc.11",
+      "externalReferences": [
+        { "type": "website", "url": "https://rolldown.rs/" },
+        { "type": "vcs", "url": "git+https://github.com/rolldown/rolldown.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/rolldown@1.0.0-rc.11",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/rolldown/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/rolldown/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/rolldown/package.json"
+          }
+        ]
+      },
+      "tags": ["api"]
+    },
+    {
+      "authors": [{ "name": "Hiroki Osame <hiroki.osame@gmail.com>" }],
+      "group": "",
+      "name": "resolve-pkg-maps",
+      "version": "1.0.0",
+      "description": "Resolve package.json exports & imports maps",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/resolve-pkg-maps@1.0.0",
+      "type": "library",
+      "bom-ref": "pkg:npm/resolve-pkg-maps@1.0.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/resolve-pkg-maps/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/resolve-pkg-maps/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/resolve-pkg-maps/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Thorsten Lorenz <thlorenz@gmx.de> (thlorenz.com)" }],
+      "group": "",
+      "name": "readdirp",
+      "version": "4.1.2",
+      "description": "Recursive version of fs.readdir with small RAM & CPU footprint.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/readdirp@4.1.2",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/paulmillr/readdirp" },
+        { "type": "vcs", "url": "git://github.com/paulmillr/readdirp.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/readdirp@4.1.2",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/readdirp/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/readdirp/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/readdirp/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Anthony Fu <anthonyfu117@hotmail.com>" }],
+      "group": "",
+      "name": "quansync",
+      "version": "1.0.0",
+      "description": "Create sync/async APIs with usable logic",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/quansync@1.0.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/quansync-dev/quansync#readme" },
+        { "type": "vcs", "url": "git+https://github.com/quansync-dev/quansync.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/quansync@1.0.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/quansync/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/quansync/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/quansync/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Jon Schlinkert (https://github.com/jonschlinkert)" }],
+      "group": "",
+      "name": "picomatch",
+      "version": "4.0.3",
+      "description": "Blazing fast and accurate glob matcher written in JavaScript, with no dependencies and full support for standard and extended Bash glob features, including braces, extglobs, POSIX brackets, and regular expressions.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/picomatch@4.0.3",
+      "externalReferences": [{ "type": "vcs", "url": "https://github.com/micromatch/picomatch" }],
+      "type": "library",
+      "bom-ref": "pkg:npm/picomatch@4.0.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/picomatch/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/picomatch/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/picomatch/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "pathe",
+      "version": "2.0.3",
+      "description": "Universal filesystem path utils",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/pathe@2.0.3",
+      "type": "library",
+      "bom-ref": "pkg:npm/pathe@2.0.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/pathe/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/pathe/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/pathe/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "",
+      "name": "oxlint",
+      "version": "1.56.0",
+      "description": "Linter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/oxlint@1.56.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/linter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/oxlint@1.56.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/oxlint/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/oxlint/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/oxlint/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "",
+      "name": "oxfmt",
+      "version": "0.40.0",
+      "description": "Formatter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/oxfmt@0.40.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/formatter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/oxfmt@0.40.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/oxfmt/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/oxfmt/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/oxfmt/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "ms",
+      "version": "2.1.3",
+      "description": "Tiny millisecond conversion utility",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/ms@2.1.3",
+      "type": "library",
+      "bom-ref": "pkg:npm/ms@2.1.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/ms/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/ms/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/ms/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Mathias Bynens (https://mathiasbynens.be/)" }],
+      "group": "",
+      "name": "jsesc",
+      "version": "3.1.0",
+      "description": "Given some data, jsesc returns the shortest possible stringified & ASCII-safe representation of that data.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/jsesc@3.1.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://mths.be/jsesc" },
+        { "type": "vcs", "url": "https://github.com/mathiasbynens/jsesc.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/jsesc@3.1.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/jsesc/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/jsesc/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/jsesc/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "jiti",
+      "version": "2.6.1",
+      "description": "Runtime typescript and ESM support for Node.js",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/jiti@2.6.1",
+      "type": "library",
+      "bom-ref": "pkg:npm/jiti@2.6.1",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/jiti/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/jiti/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/jiti/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "hookable",
+      "version": "5.5.3",
+      "description": "Awaitable hook system",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/hookable@5.5.3",
+      "type": "library",
+      "bom-ref": "pkg:npm/hookable@5.5.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/hookable/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/hookable/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/hookable/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Hiroki Osame <hiroki.osame@gmail.com>" }],
+      "group": "",
+      "name": "get-tsconfig",
+      "version": "4.13.7",
+      "description": "Find and parse the tsconfig.json file from a directory path",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/get-tsconfig@4.13.7",
+      "type": "library",
+      "bom-ref": "pkg:npm/get-tsconfig@4.13.7",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/get-tsconfig/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/get-tsconfig/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/get-tsconfig/package.json"
+          }
+        ]
+      },
+      "tags": ["parse"]
+    },
+    {
+      "authors": [{ "name": "thecodrr <thecodrr@protonmail.com>" }],
+      "group": "",
+      "name": "fdir",
+      "version": "6.5.0",
+      "description": "The fastest directory crawler & globbing alternative to glob, fast-glob, & tiny-glob. Crawls 1m files in < 1s",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/fdir@6.5.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/thecodrr/fdir#readme" },
+        { "type": "vcs", "url": "git+https://github.com/thecodrr/fdir.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/fdir@6.5.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/fdir/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/fdir/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/fdir/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Luke Edwards <luke.edwards05@gmail.com> (https://lukeed.com)" }],
+      "group": "",
+      "name": "empathic",
+      "version": "2.0.0",
+      "description": "A set of small and fast Node.js utilities to understand your pathing needs.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/empathic@2.0.0",
+      "type": "library",
+      "bom-ref": "pkg:npm/empathic@2.0.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/empathic/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/empathic/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/empathic/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Kevin Deng <sxzz@sxzz.moe>" }],
+      "group": "",
+      "name": "dts-resolver",
+      "version": "2.1.3",
+      "description": "Resolves TypeScript declaration files for dependencies.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/dts-resolver@2.1.3",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/sxzz/dts-resolver#readme" },
+        { "type": "vcs", "url": "git+https://github.com/sxzz/dts-resolver.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/dts-resolver@2.1.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/dts-resolver/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/dts-resolver/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/dts-resolver/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "diff",
+      "version": "8.0.4",
+      "description": "A JavaScript text diff implementation.",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": { "id": "BSD-3-Clause", "url": "https://opensource.org/licenses/BSD-3-Clause" }
+        }
+      ],
+      "purl": "pkg:npm/diff@8.0.4",
+      "externalReferences": [{ "type": "vcs", "url": "https://github.com/kpdecker/jsdiff.git" }],
+      "type": "library",
+      "bom-ref": "pkg:npm/diff@8.0.4",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/diff/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/diff/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/diff/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "",
+      "name": "defu",
+      "version": "6.1.4",
+      "description": "Recursively assign default properties. Lightweight and Fast!",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/defu@6.1.4",
+      "type": "library",
+      "bom-ref": "pkg:npm/defu@6.1.4",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/defu/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/defu/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/defu/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Josh Junon (https://github.com/qix-)" }],
+      "group": "",
+      "name": "debug",
+      "version": "4.4.3",
+      "description": "Lightweight debugging utility for Node.js and the browser",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/debug@4.4.3",
+      "externalReferences": [{ "type": "vcs", "url": "git://github.com/debug-js/debug.git" }],
+      "type": "library",
+      "bom-ref": "pkg:npm/debug@4.4.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/debug/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/debug/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/debug/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Paul Miller (https://paulmillr.com)" }],
+      "group": "",
+      "name": "chokidar",
+      "version": "4.0.3",
+      "description": "Minimal and efficient cross-platform file watching library",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/chokidar@4.0.3",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/paulmillr/chokidar" },
+        { "type": "vcs", "url": "git+https://github.com/paulmillr/chokidar.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/chokidar@4.0.3",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/chokidar/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/chokidar/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/chokidar/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "egoist <0x142857@gmail.com>" }],
+      "group": "",
+      "name": "cac",
+      "version": "6.7.14",
+      "description": "Simple yet powerful framework for building command-line apps.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/cac@6.7.14",
+      "type": "framework",
+      "bom-ref": "pkg:npm/cac@6.7.14",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/cac/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/cac/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/cac/package.json"
+          }
+        ]
+      },
+      "tags": ["framework"]
+    },
+    {
+      "group": "",
+      "name": "bun-types",
+      "version": "1.3.11",
+      "description": "Type definitions and documentation for Bun, an incredibly fast JavaScript runtime",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/bun-types@1.3.11",
+      "externalReferences": [
+        { "type": "website", "url": "https://bun.com" },
+        { "type": "vcs", "url": "https://github.com/oven-sh/bun" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/bun-types@1.3.11",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/bun-types/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/bun-types/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/bun-types/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Anthony Fu <anthonyfu117@hotmail.com>" }],
+      "group": "",
+      "name": "birpc",
+      "version": "2.9.0",
+      "description": "Message based Two-way remote procedure call",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/birpc@2.9.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/antfu-collective/birpc#readme" },
+        { "type": "vcs", "url": "git+https://github.com/antfu-collective/birpc.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/birpc@2.9.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/birpc/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/birpc/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/birpc/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Kevin Deng <sxzz@sxzz.moe>" }],
+      "group": "",
+      "name": "ast-kit",
+      "version": "2.2.0",
+      "description": "A toolkit for easy Babel AST generation and manipulation.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/ast-kit@2.2.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/sxzz/ast-kit#readme" },
+        { "type": "vcs", "url": "git+https://github.com/sxzz/ast-kit.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/ast-kit@2.2.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/ast-kit/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/ast-kit/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/ast-kit/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "webdiscus" }],
+      "group": "",
+      "name": "ansis",
+      "version": "4.2.0",
+      "description": "ANSI color lib",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "ISC", "url": "https://opensource.org/licenses/ISC" } }],
+      "purl": "pkg:npm/ansis@4.2.0",
+      "type": "library",
+      "bom-ref": "pkg:npm/ansis@4.2.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/ansis/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/ansis/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/ansis/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "@types",
+      "name": "node",
+      "version": "22.19.15",
+      "description": "TypeScript definitions for node",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40types/node@22.19.15",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"
+        },
+        { "type": "vcs", "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@types/node@22.19.15",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/@types/node/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@types/node/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@types/node/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "@stll",
+      "name": "regex-set",
+      "version": "0.5.1",
+      "description": "Multi-pattern regex for Node.js/Bun. 2-9x faster than JS RegExp, backtracking-immune, Unicode word boundaries. Rust DFA engine via NAPI-RS.",
+      "scope": "required",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40stll/regex-set@0.5.1",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/stella/regex-set#readme" },
+        { "type": "vcs", "url": "https://github.com/stella/regex-set" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@stll/regex-set@0.5.1",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@stll/regex-set/package.json" },
+        { "name": "ImportedModules", "value": "@stll/regex-set,RegexSet,@stll/regex-set/RegexSet" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@stll/regex-set/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@stll/regex-set/package.json"
+          }
+        ],
+        "occurrences": [{ "location": "src/text-search.ts#3" }]
+      }
+    },
+    {
+      "group": "@stll",
+      "name": "fuzzy-search",
+      "version": "0.2.1",
+      "description": "NAPI-RS bindings for fuzzy string matching via Myers' bit-parallel algorithm for Node.js/Bun",
+      "scope": "required",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40stll/fuzzy-search@0.2.1",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/stella/fuzzy-search#readme" },
+        { "type": "vcs", "url": "https://github.com/stella/fuzzy-search" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@stll/fuzzy-search@0.2.1",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@stll/fuzzy-search/package.json" },
+        {
+          "name": "ImportedModules",
+          "value": "@stll/fuzzy-search,FuzzySearch,@stll/fuzzy-search/FuzzySearch"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@stll/fuzzy-search/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@stll/fuzzy-search/package.json"
+          }
+        ],
+        "occurrences": [{ "location": "src/text-search.ts#2" }]
+      }
+    },
+    {
+      "group": "@stll",
+      "name": "aho-corasick",
+      "version": "0.3.0",
+      "description": "NAPI-RS bindings to the Rust aho-corasick crate for Node.js/Bun",
+      "scope": "required",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40stll/aho-corasick@0.3.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/stella/aho-corasick#readme" },
+        { "type": "vcs", "url": "https://github.com/stella/aho-corasick" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@stll/aho-corasick@0.3.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@stll/aho-corasick/package.json" },
+        {
+          "name": "ImportedModules",
+          "value": "@stll/aho-corasick,AhoCorasick,@stll/aho-corasick/AhoCorasick"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@stll/aho-corasick/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@stll/aho-corasick/package.json"
+          }
+        ],
+        "occurrences": [{ "location": "src/text-search.ts#1" }]
+      }
+    },
+    {
+      "group": "@rolldown",
+      "name": "pluginutils",
+      "version": "1.0.0-rc.11",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40rolldown/pluginutils@1.0.0-rc.11",
+      "externalReferences": [
+        { "type": "website", "url": "https://rolldown.rs/" },
+        { "type": "vcs", "url": "git+https://github.com/rolldown/rolldown.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@rolldown/pluginutils@1.0.0-rc.11",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@rolldown/pluginutils/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@rolldown/pluginutils/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@rolldown/pluginutils/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "@rolldown",
+      "name": "binding-linux-x64-musl",
+      "version": "1.0.0-rc.11",
+      "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40rolldown/binding-linux-x64-musl@1.0.0-rc.11",
+      "externalReferences": [
+        { "type": "website", "url": "https://rolldown.rs/" },
+        { "type": "vcs", "url": "git+https://github.com/rolldown/rolldown.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@rolldown/binding-linux-x64-musl@1.0.0-rc.11",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@rolldown/binding-linux-x64-musl/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@rolldown/binding-linux-x64-musl/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@rolldown/binding-linux-x64-musl/package.json"
+          }
+        ]
+      },
+      "tags": ["api"]
+    },
+    {
+      "group": "@rolldown",
+      "name": "binding-linux-x64-gnu",
+      "version": "1.0.0-rc.11",
+      "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40rolldown/binding-linux-x64-gnu@1.0.0-rc.11",
+      "externalReferences": [
+        { "type": "website", "url": "https://rolldown.rs/" },
+        { "type": "vcs", "url": "git+https://github.com/rolldown/rolldown.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@rolldown/binding-linux-x64-gnu@1.0.0-rc.11",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@rolldown/binding-linux-x64-gnu/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@rolldown/binding-linux-x64-gnu/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@rolldown/binding-linux-x64-gnu/package.json"
+          }
+        ]
+      },
+      "tags": ["api"]
+    },
+    {
+      "authors": [{ "name": "Kevin Deng <sxzz@sxzz.moe>" }],
+      "group": "@quansync",
+      "name": "fs",
+      "version": "1.0.0",
+      "description": "Filesystem utilities for Quansync",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40quansync/fs@1.0.0",
+      "externalReferences": [
+        { "type": "vcs", "url": "https://github.com/quansync-dev/fs#readme" },
+        { "type": "vcs", "url": "git+https://github.com/quansync-dev/fs.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@quansync/fs@1.0.0",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/@quansync/fs/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@quansync/fs/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@quansync/fs/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "@oxlint",
+      "name": "binding-linux-x64-musl",
+      "version": "1.56.0",
+      "description": "Linter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40oxlint/binding-linux-x64-musl@1.56.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/linter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@oxlint/binding-linux-x64-musl@1.56.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@oxlint/binding-linux-x64-musl/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@oxlint/binding-linux-x64-musl/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@oxlint/binding-linux-x64-musl/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "@oxlint",
+      "name": "binding-linux-x64-gnu",
+      "version": "1.56.0",
+      "description": "Linter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40oxlint/binding-linux-x64-gnu@1.56.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/linter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@oxlint/binding-linux-x64-gnu@1.56.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@oxlint/binding-linux-x64-gnu/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@oxlint/binding-linux-x64-gnu/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@oxlint/binding-linux-x64-gnu/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "@oxfmt",
+      "name": "binding-linux-x64-musl",
+      "version": "0.40.0",
+      "description": "Formatter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40oxfmt/binding-linux-x64-musl@0.40.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/formatter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@oxfmt/binding-linux-x64-musl@0.40.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@oxfmt/binding-linux-x64-musl/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@oxfmt/binding-linux-x64-musl/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@oxfmt/binding-linux-x64-musl/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "@oxfmt",
+      "name": "binding-linux-x64-gnu",
+      "version": "0.40.0",
+      "description": "Formatter for the JavaScript Oxidation Compiler",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40oxfmt/binding-linux-x64-gnu@0.40.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs/docs/guide/usage/formatter" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@oxfmt/binding-linux-x64-gnu@0.40.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@oxfmt/binding-linux-x64-gnu/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@oxfmt/binding-linux-x64-gnu/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@oxfmt/binding-linux-x64-gnu/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Boshen and oxc contributors" }],
+      "group": "@oxc-project",
+      "name": "types",
+      "version": "0.122.0",
+      "description": "Types for Oxc AST nodes",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40oxc-project/types@0.122.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://oxc.rs" },
+        { "type": "vcs", "url": "git+https://github.com/oxc-project/oxc.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@oxc-project/types@0.122.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@oxc-project/types/package.json" },
+        {
+          "name": "ExportedModules",
+          "value": "types,Match,types/Match,PatternEntry,types/PatternEntry,TextSearchOptions,types/TextSearchOptions"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@oxc-project/types/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@oxc-project/types/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Justin Ridgewell <justin@ridgewell.name>" }],
+      "group": "@jridgewell",
+      "name": "trace-mapping",
+      "version": "0.3.31",
+      "description": "Trace the original position through a source map",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping"
+        },
+        { "type": "vcs", "url": "git+https://github.com/jridgewell/sourcemaps.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@jridgewell/trace-mapping@0.3.31",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@jridgewell/trace-mapping/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@jridgewell/trace-mapping/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@jridgewell/trace-mapping/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Justin Ridgewell <justin@ridgewell.name>" }],
+      "group": "@jridgewell",
+      "name": "sourcemap-codec",
+      "version": "1.5.5",
+      "description": "Encode/decode sourcemap mappings",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec"
+        },
+        { "type": "vcs", "url": "git+https://github.com/jridgewell/sourcemaps.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@jridgewell/sourcemap-codec@1.5.5",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@jridgewell/sourcemap-codec/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@jridgewell/sourcemap-codec/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@jridgewell/sourcemap-codec/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Justin Ridgewell <justin@ridgewell.name>" }],
+      "group": "@jridgewell",
+      "name": "resolve-uri",
+      "version": "3.1.2",
+      "description": "Resolve a URI relative to an optional base URI",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "type": "library",
+      "bom-ref": "pkg:npm/@jridgewell/resolve-uri@3.1.2",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@jridgewell/resolve-uri/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@jridgewell/resolve-uri/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@jridgewell/resolve-uri/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "Justin Ridgewell <justin@ridgewell.name>" }],
+      "group": "@jridgewell",
+      "name": "gen-mapping",
+      "version": "0.3.13",
+      "description": "Generate source maps",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/gen-mapping"
+        },
+        { "type": "vcs", "url": "git+https://github.com/jridgewell/sourcemaps.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@jridgewell/gen-mapping@0.3.13",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@jridgewell/gen-mapping/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@jridgewell/gen-mapping/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@jridgewell/gen-mapping/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "The Babel Team (https://babel.dev/team)" }],
+      "group": "@babel",
+      "name": "types",
+      "version": "7.29.0",
+      "description": "Babel Types is a Lodash-esque utility library for AST nodes",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40babel/types@7.29.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://babel.dev/docs/en/next/babel-types" },
+        { "type": "vcs", "url": "https://github.com/babel/babel.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@babel/types@7.29.0",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@babel/types/package.json" },
+        {
+          "name": "ExportedModules",
+          "value": "types,Match,types/Match,PatternEntry,types/PatternEntry,TextSearchOptions,types/TextSearchOptions"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@babel/types/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@babel/types/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "The Babel Team (https://babel.dev/team)" }],
+      "group": "@babel",
+      "name": "parser",
+      "version": "7.29.2",
+      "description": "A JavaScript parser",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40babel/parser@7.29.2",
+      "externalReferences": [
+        { "type": "website", "url": "https://babel.dev/docs/en/next/babel-parser" },
+        { "type": "vcs", "url": "https://github.com/babel/babel.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@babel/parser@7.29.2",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/@babel/parser/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@babel/parser/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@babel/parser/package.json"
+          }
+        ]
+      },
+      "tags": ["parse"]
+    },
+    {
+      "authors": [{ "name": "The Babel Team (https://babel.dev/team)" }],
+      "group": "@babel",
+      "name": "helper-validator-identifier",
+      "version": "7.28.5",
+      "description": "Validate identifier/keywords name",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40babel/helper-validator-identifier@7.28.5",
+      "externalReferences": [{ "type": "vcs", "url": "https://github.com/babel/babel.git" }],
+      "type": "library",
+      "bom-ref": "pkg:npm/@babel/helper-validator-identifier@7.28.5",
+      "properties": [
+        {
+          "name": "SrcFile",
+          "value": "node_modules/@babel/helper-validator-identifier/package.json"
+        }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@babel/helper-validator-identifier/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@babel/helper-validator-identifier/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "authors": [{ "name": "The Babel Team (https://babel.dev/team)" }],
+      "group": "@babel",
+      "name": "helper-string-parser",
+      "version": "7.27.1",
+      "description": "A utility package to parse strings",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40babel/helper-string-parser@7.27.1",
+      "externalReferences": [
+        { "type": "website", "url": "https://babel.dev/docs/en/next/babel-helper-string-parser" },
+        { "type": "vcs", "url": "https://github.com/babel/babel.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@babel/helper-string-parser@7.27.1",
+      "properties": [
+        { "name": "SrcFile", "value": "node_modules/@babel/helper-string-parser/package.json" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@babel/helper-string-parser/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@babel/helper-string-parser/package.json"
+          }
+        ]
+      },
+      "tags": ["parse"]
+    },
+    {
+      "authors": [{ "name": "The Babel Team (https://babel.dev/team)" }],
+      "group": "@babel",
+      "name": "generator",
+      "version": "7.29.1",
+      "description": "Turns an AST into code.",
+      "scope": "optional",
+      "licenses": [{ "license": { "id": "MIT", "url": "https://opensource.org/licenses/MIT" } }],
+      "purl": "pkg:npm/%40babel/generator@7.29.1",
+      "externalReferences": [
+        { "type": "website", "url": "https://babel.dev/docs/en/next/babel-generator" },
+        { "type": "vcs", "url": "https://github.com/babel/babel.git" }
+      ],
+      "type": "library",
+      "bom-ref": "pkg:npm/@babel/generator@7.29.1",
+      "properties": [{ "name": "SrcFile", "value": "node_modules/@babel/generator/package.json" }],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.7,
+            "methods": [
+              {
+                "technique": "manifest-analysis",
+                "confidence": 0.7,
+                "value": "node_modules/@babel/generator/package.json"
+              }
+            ],
+            "concludedValue": "node_modules/@babel/generator/package.json"
+          }
+        ]
+      }
+    },
+    {
+      "group": "actions",
+      "name": "checkout",
+      "version": "v6",
+      "purl": "pkg:github/actions/checkout@v6",
+      "type": "application",
+      "bom-ref": "pkg:github/actions/checkout@v6",
+      "properties": [
+        { "name": "SrcFile", "value": ".github/workflows/sbom.yml" },
+        { "name": "cdx:actions:isOfficial", "value": "true" },
+        { "name": "SrcFile", "value": ".github/workflows/ci.yml" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.6,
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.6,
+                "value": ".github/workflows/ci.yml"
+              }
+            ],
+            "concludedValue": ".github/workflows/ci.yml"
+          }
+        ]
+      }
+    },
+    {
+      "group": "oven-sh",
+      "name": "setup-bun",
+      "version": "v2",
+      "purl": "pkg:github/oven-sh/setup-bun@v2",
+      "type": "application",
+      "bom-ref": "pkg:github/oven-sh/setup-bun@v2",
+      "properties": [
+        { "name": "SrcFile", "value": ".github/workflows/sbom.yml" },
+        { "name": "SrcFile", "value": ".github/workflows/ci.yml" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.6,
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.6,
+                "value": ".github/workflows/ci.yml"
+              }
+            ],
+            "concludedValue": ".github/workflows/ci.yml"
+          }
+        ]
+      }
+    },
+    {
+      "group": "actions",
+      "name": "upload-artifact",
+      "version": "v7",
+      "purl": "pkg:github/actions/upload-artifact@v7",
+      "type": "application",
+      "bom-ref": "pkg:github/actions/upload-artifact@v7",
+      "properties": [
+        { "name": "SrcFile", "value": ".github/workflows/sbom.yml" },
+        { "name": "cdx:actions:isOfficial", "value": "true" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.6,
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.6,
+                "value": ".github/workflows/sbom.yml"
+              }
+            ],
+            "concludedValue": ".github/workflows/sbom.yml"
+          }
+        ]
+      }
+    },
+    {
+      "group": "actions",
+      "name": "setup-node",
+      "version": "v6",
+      "purl": "pkg:github/actions/setup-node@v6",
+      "type": "application",
+      "bom-ref": "pkg:github/actions/setup-node@v6",
+      "properties": [
+        { "name": "SrcFile", "value": ".github/workflows/ci.yml" },
+        { "name": "cdx:actions:isOfficial", "value": "true" }
+      ],
+      "evidence": {
+        "identity": [
+          {
+            "field": "purl",
+            "confidence": 0.6,
+            "methods": [
+              {
+                "technique": "source-code-analysis",
+                "confidence": 0.6,
+                "value": ".github/workflows/ci.yml"
+              }
+            ],
+            "concludedValue": ".github/workflows/ci.yml"
+          }
+        ]
+      }
+    }
+  ],
+  "services": [],
+  "dependencies": [{ "ref": "pkg:npm/@stll/text-search@0.3.1", "dependsOn": [] }],
+  "annotations": [
+    {
+      "bom-ref": "metadata-annotations",
+      "subjects": ["pkg:npm/@stll/text-search@0.3.1"],
+      "annotator": {
+        "component": {
+          "group": "@cyclonedx",
+          "name": "cdxgen",
+          "version": "12.1.2",
+          "purl": "pkg:npm/%40cyclonedx/cdxgen@12.1.2",
+          "type": "application",
+          "bom-ref": "pkg:npm/@cyclonedx/cdxgen@12.1.2",
+          "publisher": "OWASP Foundation",
+          "authors": [{ "name": "OWASP Foundation" }]
+        }
+      },
+      "timestamp": "2026-03-24T19:13:21Z",
+      "text": "This Software Bill-of-Materials (SBOM) document was created on Tuesday, March 24, 2026 with cdxgen. The data was captured during the build lifecycle phase. The document describes an application named 'text-search' with version '0.3.1'. There are 61 components. 2 package type(s) and 11 purl namespaces are described in the document under components."
+    }
+  ]
+}
