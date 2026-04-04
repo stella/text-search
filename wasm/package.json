@@ -30,6 +30,10 @@
     ".": {
       "types": "./dist/wasm.d.mts",
       "import": "./dist/wasm.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs"
     }
   },
   "publishConfig": {
@@ -39,5 +43,13 @@
     "@stll/aho-corasick-wasm": "^0.1.4",
     "@stll/fuzzy-search-wasm": "^0.1.1",
     "@stll/regex-set-wasm": "^0.1.1"
+  },
+  "peerDependencies": {
+    "vite": ">=5 <10"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   }
 }

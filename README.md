@@ -29,6 +29,24 @@ Requires `@stll/regex-set`, `@stll/aho-corasick`,
 and `@stll/fuzzy-search` as peer dependencies
 (installed automatically).
 
+### Using with Vite (browser target)
+
+`@stll/text-search-wasm` pulls in three transitive
+WebAssembly packages. Vite's dep pre-bundler
+rewrites `import.meta.url`, which breaks the
+relative `.wasm` paths those loaders emit. Import
+the bundled plugin so all four packages are
+excluded from pre-bundling:
+
+```ts
+// vite.config.ts
+import stllWasm from "@stll/text-search-wasm/vite";
+
+export default {
+  plugins: [stllWasm()],
+};
+```
+
 ## Usage
 
 ```typescript
