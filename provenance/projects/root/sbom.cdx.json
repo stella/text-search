@@ -1,0 +1,138 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "authors": [
+        {
+          "name": "Evan You"
+        }
+      ],
+      "bom-ref": "pkg:npm/vite@8.0.8",
+      "description": "Native-ESM powered web dev build tool",
+      "evidence": {
+        "identity": [
+          {
+            "concludedValue": "node_modules/vite/package.json",
+            "confidence": 0.7,
+            "field": "purl",
+            "methods": [
+              {
+                "confidence": 0.7,
+                "technique": "manifest-analysis",
+                "value": "node_modules/vite/package.json"
+              }
+            ]
+          }
+        ],
+        "occurrences": [
+          {
+            "location": "src/vite.ts#1"
+          }
+        ]
+      },
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://vite.dev"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vitejs/vite.git"
+        }
+      ],
+      "group": "",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+          }
+        }
+      ],
+      "name": "vite",
+      "properties": [
+        {
+          "name": "SrcFile",
+          "value": "node_modules/vite/package.json"
+        },
+        {
+          "name": "ImportedModules",
+          "value": "vite,Plugin,vite/Plugin,UserConfig,vite/UserConfig"
+        }
+      ],
+      "purl": "pkg:npm/vite@8.0.8",
+      "scope": "required",
+      "tags": [
+        "web"
+      ],
+      "type": "library",
+      "version": "8.0.8"
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "incomplete",
+      "bom-ref": "pkg:npm/@stll/text-search@0.1.2"
+    }
+  ],
+  "dependencies": [],
+  "metadata": {
+    "authors": [
+      {
+        "name": "OWASP Foundation"
+      }
+    ],
+    "component": {
+      "bom-ref": "pkg:npm/@stll/text-search@0.1.2",
+      "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/stella/text-search#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/stella/text-search"
+        }
+      ],
+      "group": "@stll",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+          }
+        }
+      ],
+      "name": "text-search",
+      "purl": "pkg:npm/%40stll/text-search@0.1.2",
+      "type": "application",
+      "version": "0.1.2"
+    },
+    "lifecycles": [
+      {
+        "phase": "pre-build"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "authors": [
+            {
+              "name": "OWASP Foundation"
+            }
+          ],
+          "bom-ref": "pkg:npm/@cyclonedx/cdxgen@12.1.5",
+          "group": "@cyclonedx",
+          "name": "cdxgen",
+          "publisher": "OWASP Foundation",
+          "purl": "pkg:npm/%40cyclonedx/cdxgen@12.1.5",
+          "type": "application",
+          "version": "12.1.5"
+        }
+      ]
+    }
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

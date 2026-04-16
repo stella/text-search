@@ -1,7 +1,7 @@
 {
   "name": "@stll/text-search-wasm",
-  "version": "0.1.0",
-  "description": "Multi-engine text search for browsers via WebAssembly. Same API as @stll/text-search.",
+  "version": "0.1.2",
+  "description": "Browser/WebAssembly build of @stll/text-search with the same API and Vite integration helpers.",
   "keywords": [
     "aho-corasick",
     "fuzzy",
@@ -30,14 +30,26 @@
     ".": {
       "types": "./dist/wasm.d.mts",
       "import": "./dist/wasm.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs"
     }
   },
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "dependencies": {
-    "@stll/aho-corasick-wasm": "^0.1.4",
-    "@stll/fuzzy-search-wasm": "^0.1.1",
-    "@stll/regex-set-wasm": "^0.1.1"
+    "@stll/aho-corasick-wasm": "^0.1.5",
+    "@stll/fuzzy-search-wasm": "^0.1.2",
+    "@stll/regex-set-wasm": "^0.1.2"
+  },
+  "peerDependencies": {
+    "vite": ">=5 <10"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   }
 }

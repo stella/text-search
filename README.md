@@ -4,12 +4,11 @@
 
 # @stll/text-search
 
-Multi-engine text search orchestrator for
-Node.js and Bun. Routes patterns to the optimal
-engine automatically: Aho-Corasick for literals,
-RegexSet for regex, FuzzySearch for approximate
-matching, with auto-optimization for large
-alternations.
+Multi-engine text search orchestrator for Node.js
+and Bun. It classifies each pattern once, routes
+literals to Aho-Corasick, regex to RegexSet, fuzzy
+entries to FuzzySearch, and merges the results into
+one stable match stream.
 
 Part of the
 [@stll text search ecosystem](https://github.com/stella):
@@ -19,146 +18,125 @@ Part of the
 
 ## Install
 
+Node.js / Bun:
+
 ```bash
 npm install @stll/text-search
 # or
 bun add @stll/text-search
 ```
 
-Requires `@stll/regex-set`, `@stll/aho-corasick`,
-and `@stll/fuzzy-search` as peer dependencies
-(installed automatically).
+`@stll/text-search` ships the engine packages as
+regular dependencies. You do not install them
+separately unless you want to use the lower-level
+engine APIs directly.
+
+Browser / WebAssembly:
+
+```bash
+npm install @stll/text-search-wasm
+# or
+bun add @stll/text-search-wasm
+```
+
+## Vite
+
+`@stll/text-search-wasm` depends on the browser
+variants of the Stella engines. Import the bundled
+Vite plugin so those WASM loaders stay out of
+pre-bundling and keep their relative asset paths.
+
+```ts
+import stllTextSearchWasm from "@stll/text-search-wasm/vite";
+
+export default {
+  plugins: [stllTextSearchWasm()],
+};
+```
 
 ## Usage
 
-```typescript
+```ts
 import { TextSearch } from "@stll/text-search";
 
-const ts = new TextSearch([
-  // Regex patterns → RegexSet (DFA)
-  /\b\d{2}\.\d{2}\.\d{4}\b/,
-  /\b[\w.+-]+@[\w-]+\.[\w]+\b/,
-
-  // Pure literals → Aho-Corasick (SIMD)
+const search = new TextSearch([
   "Confidential",
   "Attorney-Client Privilege",
-
-  // Fuzzy patterns → FuzzySearch (Levenshtein)
+  /\b\d{2}\.\d{2}\.\d{4}\b/,
+  /\b[\w.+-]+@[\w-]+\.[\w]+\b/,
   { pattern: "Novák", distance: 1, name: "person" },
-
-  // Large alternation → auto-isolated RegexSet
-  `(?:${titles.join("|")})\\s+[A-Z][a-z]+`,
-
-  // Named patterns
-  { pattern: /\+?\d{9,12}/, name: "phone" },
+  { pattern: "s.r.o.", literal: true, name: "company-type" },
 ]);
 
-ts.findIter("Ing. Jan Novak, born 15.03.1990");
-// [
-//   { pattern: 5, text: "Ing. Jan Novak", ... },
-//   { pattern: 4, text: "Novak", distance: 1, ... },
-//   { pattern: 0, text: "15.03.1990", ... },
-// ]
+const matches = search.findIter(
+  "Ing. Jan Novak, s.r.o., born 15.03.1990.",
+);
 ```
 
-## Engine routing
+## Routing model
 
-Patterns are classified and routed to the optimal
-engine at construction time:
+Patterns are classified once at construction time.
 
-| Engine              | Condition                | Performance            |
-| ------------------- | ------------------------ | ---------------------- |
-| Aho-Corasick        | Pure literal strings     | SIMD-accelerated       |
-| RegexSet (shared)   | Normal regex patterns    | Single-pass DFA        |
-| RegexSet (isolated) | >50 alternation branches | Prevents DFA explosion |
-| FuzzySearch         | `distance` field present | Levenshtein/Damerau    |
+| Engine | Used for |
+| --- | --- |
+| Aho-Corasick | Pure literals and explicit `literal: true` entries |
+| RegexSet | Standard regex patterns |
+| FuzzySearch | Entries with a `distance` field |
 
-Large alternation patterns (e.g., 80+ title
-prefixes) are automatically isolated into their
-own RegexSet instance, preventing DFA state
-explosion when combined with other patterns.
-
-```typescript
-// Without text-search: 73ms (DFA state explosion)
-new RegexSet([hugePattern, simplePattern]);
-
-// With text-search: 0.4ms (auto-split)
-new TextSearch([hugePattern, simplePattern]);
-```
+Large alternation-heavy regexes are isolated into
+their own RegexSet instance so they do not poison
+the shared DFA for simpler patterns.
 
 ## Options
 
-```typescript
+```ts
 new TextSearch(patterns, {
-  // Unicode word boundaries (default: true)
   unicodeBoundaries: true,
-
-  // Only match whole words (default: false)
   wholeWords: false,
-
-  // Max alternation branches before auto-split
-  // (default: 50)
   maxAlternations: 50,
-
-  // Fuzzy matching options
-  fuzzyMetric: "levenshtein", // or "damerau-levenshtein"
+  fuzzyMetric: "levenshtein",
   normalizeDiacritics: false,
   caseInsensitive: false,
+  overlapStrategy: "longest",
+  allLiteral: false,
 });
 ```
 
 ## API
 
-| Method                           | Returns    | Description                   |
-| -------------------------------- | ---------- | ----------------------------- |
-| `findIter(text)`                 | `Match[]`  | All non-overlapping matches   |
-| `isMatch(text)`                  | `boolean`  | Any pattern matches?          |
-| `whichMatch(text)`               | `number[]` | Which pattern indices matched |
-| `replaceAll(text, replacements)` | `string`   | Replace matches               |
-| `length`                         | `number`   | Number of patterns            |
+| Method | Returns | Description |
+| --- | --- | --- |
+| `findIter(text)` | `Match[]` | Find matches in input text |
+| `isMatch(text)` | `boolean` | Fast yes/no check |
+| `whichMatch(text)` | `number[]` | Pattern indices that matched |
+| `replaceAll(text, replacements)` | `string` | Replace matched ranges |
+| `length` | `number` | Number of configured patterns |
 
 ## Pattern entry types
 
-```typescript
-// Simple string (literal → AC, regex → RegexSet)
-"foo"
-
-// RegExp object → RegexSet
-/\btest\b/i
-
-// Named pattern
+```ts
+"literal"
+/\bregex\b/i
 { pattern: "\\d+", name: "number" }
-
-// Fuzzy pattern → FuzzySearch
-{ pattern: "Novák", distance: 1 }
-{ pattern: "Smith", distance: "auto", name: "person" }
+{ pattern: "Novák", distance: 1, name: "person" }
+{ pattern: "s.r.o.", literal: true, wholeWords: true }
 ```
 
-## Match type
+## Match shape
 
-```typescript
+```ts
 type Match = {
-  pattern: number; // original pattern index
-  start: number; // UTF-16 offset
-  end: number; // exclusive
-  text: string; // matched substring
-  name?: string; // pattern name (if provided)
+  pattern: number;
+  start: number;
+  end: number;
+  text: string;
+  name?: string;
+  distance?: number;
 };
 ```
 
-Same `Match` shape as `@stll/regex-set`,
-`@stll/aho-corasick`, and `@stll/fuzzy-search`.
-
-## How it works
-
-1. **Classify**: detect literals, count alternation
-   branches, identify fuzzy patterns
-2. **Route**: literals → AC, fuzzy → FuzzySearch,
-   large alternations → isolated RegexSet,
-   normal regex → shared RegexSet
-3. **Search**: each engine scans the text
-4. **Merge**: combine results, sort by position,
-   select non-overlapping (longest match at ties)
+The `Match` shape is aligned with the other Stella
+text-search packages.
 
 ## Development
 
@@ -172,12 +150,9 @@ bun run build
 
 ## Built on
 
-- [@stll/regex-set](https://github.com/stella/regex-set) —
-  NAPI-RS bindings to Rust regex-automata
-- [@stll/aho-corasick](https://github.com/stella/aho-corasick) —
-  NAPI-RS bindings to Rust aho-corasick
-- [@stll/fuzzy-search](https://github.com/stella/fuzzy-search) —
-  NAPI-RS Levenshtein/Damerau-Levenshtein matcher
+- [@stll/aho-corasick](https://github.com/stella/aho-corasick)
+- [@stll/regex-set](https://github.com/stella/regex-set)
+- [@stll/fuzzy-search](https://github.com/stella/fuzzy-search)
 
 ## License
 

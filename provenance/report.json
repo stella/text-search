@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "output_dir": "provenance",
+  "projects": [
+    {
+      "id": "root",
+      "path": ".",
+      "ecosystems": [
+        "javascript"
+      ],
+      "sbom": "projects/root/sbom.cdx.json",
+      "notice": "projects/root/THIRD-PARTY-NOTICES.txt",
+      "dependencies_with_licenses": 1
+    },
+    {
+      "id": "wasm",
+      "path": "wasm",
+      "ecosystems": [
+        "javascript"
+      ],
+      "sbom": "projects/wasm/sbom.cdx.json",
+      "notice": "projects/wasm/THIRD-PARTY-NOTICES.txt",
+      "dependencies_with_licenses": 0
+    }
+  ],
+  "containers": []
+}

@@ -1,0 +1,117 @@
+name: Provenance Sync
+
+on:
+  pull_request:
+    types:
+      [
+        opened,
+        synchronize,
+        reopened,
+        ready_for_review,
+      ]
+    paths:
+      - "bun.lock"
+      - "**/package.json"
+      - "src/**"
+      - "scripts/**"
+      - "wasm/**"
+      - ".provenance.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: provenance-sync-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Install cdxgen
+        run: npm install --global @cyclonedx/cdxgen@12.1.5
+
+      - name: Install provenance
+        env:
+          PROVENANCE_VERSION: v0.1.3
+        run: |
+          set -euo pipefail
+
+          asset_name="provenance-${PROVENANCE_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          checksums_name="provenance-${PROVENANCE_VERSION}-checksums.txt"
+          base_url="https://github.com/stella/provenance/releases/download/${PROVENANCE_VERSION}"
+          asset_path="${RUNNER_TEMP}/${asset_name}"
+          checksums_path="${RUNNER_TEMP}/${checksums_name}"
+          install_root="${RUNNER_TEMP}/provenance-install"
+          install_bin="${RUNNER_TEMP}/provenance-bin"
+
+          curl --fail --silent --show-error --location \
+            --output "$asset_path" \
+            "${base_url}/${asset_name}"
+          curl --fail --silent --show-error --location \
+            --output "$checksums_path" \
+            "${base_url}/${checksums_name}"
+
+          expected_checksum="$(
+            awk -v asset="$asset_name" '$2 == asset { print $1 }' "$checksums_path"
+          )"
+          if [ -z "$expected_checksum" ]; then
+            echo "::error::Checksum for ${asset_name} not found in ${checksums_name}"
+            exit 1
+          fi
+
+          actual_checksum="$(sha256sum "$asset_path" | awk '{ print $1 }')"
+          if [ "$actual_checksum" != "$expected_checksum" ]; then
+            echo "::error::Checksum mismatch for ${asset_name}"
+            exit 1
+          fi
+
+          rm -rf "$install_root" "$install_bin"
+          mkdir -p "$install_root" "$install_bin"
+          tar -xzf "$asset_path" -C "$install_root"
+
+          cp "$(find "$install_root" -type f -name provenance | head -n 1)" \
+            "$install_bin/provenance"
+          chmod +x "$install_bin/provenance"
+          echo "$install_bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate provenance artifacts
+        run: |
+          export PROVENANCE_CDXGEN="$(command -v cdxgen)"
+          provenance generate --root .
+
+      - name: Commit refreshed artifacts
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- provenance/; then
+            echo "No provenance changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add provenance/
+          git commit -m "chore: refresh provenance artifacts [skip ci]"
+          git push origin "HEAD:${HEAD_REF}"
