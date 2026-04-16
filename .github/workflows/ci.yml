@@ -38,6 +38,7 @@ jobs:
               - '__test__/**'
               - 'src/**'
               - 'scripts/**'
+              - 'bunfig.toml'
               - 'package.json'
               - 'bun.lock'
               - 'tsconfig.json'
@@ -45,6 +46,7 @@ jobs:
               - 'wasm/**'
             provenance:
               - '.github/workflows/**'
+              - 'bunfig.toml'
               - 'bun.lock'
               - '**/package.json'
               - 'src/**'
