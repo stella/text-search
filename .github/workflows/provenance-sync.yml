@@ -96,7 +96,8 @@ jobs:
 
       - name: Generate provenance artifacts
         run: |
-          export PROVENANCE_CDXGEN="$(command -v cdxgen)"
+          provenance_cdxgen="$(command -v cdxgen)"
+          export PROVENANCE_CDXGEN="$provenance_cdxgen"
           provenance generate --root .
 
       - name: Commit refreshed artifacts

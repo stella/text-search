@@ -49,6 +49,7 @@ jobs:
           node scripts/version-sync.mjs check --tag "${RELEASE_TAG}"
 
       - run: bun install --frozen-lockfile
+      - run: npm install --include=optional
       - run: bun run lint
       - run: bun test
       - run: bun run build:js
@@ -117,6 +118,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          mapfile -t provenance_files < <(find provenance -type f | sort)
 
           prerelease_flag=()
           if [[ "$RELEASE_TAG" == *-* ]]; then
@@ -130,7 +132,7 @@ jobs:
               release-artifacts/SHA256SUMS \
               release-artifacts/sbom.attest.cdx.json \
               provenance/report.json \
-              $(find provenance -type f | sort) \
+              "${provenance_files[@]}" \
               --clobber
           else
             gh release create "$RELEASE_TAG" \
@@ -139,7 +141,7 @@ jobs:
               release-artifacts/SHA256SUMS \
               release-artifacts/sbom.attest.cdx.json \
               provenance/report.json \
-              $(find provenance -type f | sort) \
+              "${provenance_files[@]}" \
               "${prerelease_flag[@]}" \
               --title "$RELEASE_TAG"
           fi
