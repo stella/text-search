@@ -40,9 +40,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@stll/aho-corasick-wasm": "^0.1.5",
-    "@stll/fuzzy-search-wasm": "^0.1.2",
-    "@stll/regex-set-wasm": "^0.1.2"
+    "@stll/aho-corasick-wasm": "^1.0.0-rc.1",
+    "@stll/fuzzy-search-wasm": "^1.0.0-rc.1",
+    "@stll/regex-set-wasm": "^1.0.0-rc.3"
   },
   "peerDependencies": {
     "vite": ">=5 <10"

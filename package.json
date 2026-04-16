@@ -49,9 +49,9 @@
     "version:sync": "node scripts/version-sync.mjs sync"
   },
   "dependencies": {
-    "@stll/aho-corasick": "^0.1.5",
-    "@stll/fuzzy-search": "^0.1.2",
-    "@stll/regex-set": "^0.1.2"
+    "@stll/aho-corasick": "^1.0.0-rc.1",
+    "@stll/fuzzy-search": "^1.0.0-rc.1",
+    "@stll/regex-set": "^1.0.0-rc.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
