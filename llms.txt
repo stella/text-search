@@ -1,0 +1,35 @@
+# @stll/text-search
+
+Multi-engine text search orchestrator for Node.js,
+Bun, and the Stella browser/WASM stack.
+
+## Routing
+
+- literals -> Aho-Corasick
+- regex -> RegexSet
+- fuzzy patterns -> FuzzySearch
+- large alternations -> isolated RegexSet instance
+
+## API
+
+```ts
+import { TextSearch } from "@stll/text-search";
+
+const search = new TextSearch([
+  "literal",
+  /\bregex\b/,
+  { pattern: "Novák", distance: 1, name: "person" },
+]);
+
+search.findIter("literal Novak")
+search.isMatch("literal Novak")
+search.whichMatch("literal Novak")
+search.replaceAll("literal Novak", ["x", "y"])
+```
+
+## Browser package
+
+Use `@stll/text-search-wasm` in browser builds.
+The `./vite` export excludes the Stella WASM
+packages from Vite dep pre-bundling so loader
+relative paths remain valid.
