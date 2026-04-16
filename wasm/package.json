@@ -29,7 +29,8 @@
   "exports": {
     ".": {
       "types": "./dist/wasm.d.mts",
-      "import": "./dist/wasm.mjs"
+      "import": "./dist/wasm.mjs",
+      "default": "./dist/wasm.mjs"
     },
     "./vite": {
       "types": "./dist/vite.d.mts",

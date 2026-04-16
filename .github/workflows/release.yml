@@ -131,7 +131,6 @@ jobs:
               "${{ steps.pack.outputs.wasm_tarball }}" \
               release-artifacts/SHA256SUMS \
               release-artifacts/sbom.attest.cdx.json \
-              provenance/report.json \
               "${provenance_files[@]}" \
               --clobber
           else
@@ -140,7 +139,6 @@ jobs:
               "${{ steps.pack.outputs.wasm_tarball }}" \
               release-artifacts/SHA256SUMS \
               release-artifacts/sbom.attest.cdx.json \
-              provenance/report.json \
               "${provenance_files[@]}" \
               "${prerelease_flag[@]}" \
               --title "$RELEASE_TAG"
