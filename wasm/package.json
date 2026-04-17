@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search-wasm",
-  "version": "0.1.2",
+  "version": "1.0.0-rc.1",
   "description": "Browser/WebAssembly build of @stll/text-search with the same API and Vite integration helpers.",
   "keywords": [
     "aho-corasick",
