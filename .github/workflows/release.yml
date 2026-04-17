@@ -114,13 +114,40 @@ jobs:
       - name: Generate attestation SBOM
         run: cdxgen -o release-artifacts/sbom.attest.cdx.json
 
+      - name: Stage provenance release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp provenance/report.json release-artifacts/provenance-report.json
+          cp provenance/THIRD-PARTY-NOTICES.repo.txt \
+            release-artifacts/provenance-THIRD-PARTY-NOTICES.repo.txt
+          cp provenance/projects/root/sbom.cdx.json \
+            release-artifacts/provenance-root-sbom.cdx.json
+          cp provenance/projects/root/THIRD-PARTY-NOTICES.txt \
+            release-artifacts/provenance-root-THIRD-PARTY-NOTICES.txt
+          cp provenance/projects/wasm/sbom.cdx.json \
+            release-artifacts/provenance-wasm-sbom.cdx.json
+          cp provenance/projects/wasm/THIRD-PARTY-NOTICES.txt \
+            release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
+
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          mapfile -t provenance_files < <(find provenance -type f | sort)
+          assets=(
+            "${{ steps.pack.outputs.root_tarball }}"
+            "${{ steps.pack.outputs.wasm_tarball }}"
+            release-artifacts/SHA256SUMS
+            release-artifacts/sbom.attest.cdx.json
+            release-artifacts/provenance-report.json
+            release-artifacts/provenance-THIRD-PARTY-NOTICES.repo.txt
+            release-artifacts/provenance-root-sbom.cdx.json
+            release-artifacts/provenance-root-THIRD-PARTY-NOTICES.txt
+            release-artifacts/provenance-wasm-sbom.cdx.json
+            release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
+          )
 
           prerelease_flag=()
           if [[ "$RELEASE_TAG" == *-* ]]; then
@@ -128,20 +155,9 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              "${{ steps.pack.outputs.root_tarball }}" \
-              "${{ steps.pack.outputs.wasm_tarball }}" \
-              release-artifacts/SHA256SUMS \
-              release-artifacts/sbom.attest.cdx.json \
-              "${provenance_files[@]}" \
-              --clobber
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
           else
-            gh release create "$RELEASE_TAG" \
-              "${{ steps.pack.outputs.root_tarball }}" \
-              "${{ steps.pack.outputs.wasm_tarball }}" \
-              release-artifacts/SHA256SUMS \
-              release-artifacts/sbom.attest.cdx.json \
-              "${provenance_files[@]}" \
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
               "${prerelease_flag[@]}" \
               --title "$RELEASE_TAG"
           fi
