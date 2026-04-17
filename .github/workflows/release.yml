@@ -155,9 +155,6 @@ jobs:
           version="${{ inputs.tag }}"
           version="${version#v}"
           dist_tag="latest"
-          if [[ "$version" == *-* ]]; then
-            dist_tag="next"
-          fi
 
           if [[ -n "${NPM_TOKEN:-}" ]]; then
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
