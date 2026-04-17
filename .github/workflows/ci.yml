@@ -1,0 +1,225 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types:
+      [
+        opened,
+        synchronize,
+        reopened,
+        ready_for_review,
+        labeled,
+      ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code-changed: ${{ steps.filter.outputs.code }}
+      provenance-changed: ${{ steps.filter.outputs.provenance }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - '.github/workflows/**'
+              - '__test__/**'
+              - 'src/**'
+              - 'scripts/**'
+              - 'bunfig.toml'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig.json'
+              - 'tsdown.config.ts'
+              - '.provenance.yml'
+              - 'provenance/**'
+              - 'wasm/**'
+            provenance:
+              - '.github/workflows/**'
+              - 'bunfig.toml'
+              - 'bun.lock'
+              - '**/package.json'
+              - 'src/**'
+              - 'scripts/**'
+              - 'wasm/**'
+              - '.provenance.yml'
+              - 'provenance/**'
+
+  trust-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      trusted: ${{ steps.check.outputs.trusted }}
+    steps:
+      - name: Check if PR is trusted
+        id: check
+        env:
+          HEAD_REPO: >-
+            ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD_REPO" == "$BASE_REPO" ]]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+          elif [[ '${{ contains(github.event.pull_request.labels.*.name, 'run-ci') }}' == 'true' ]]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork PR without 'run-ci' label — CI skipped."
+          fi
+
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+
+  version-sync:
+    name: Version sync
+    if: >-
+      always()
+      && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [trust-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+      - run: node scripts/version-sync.mjs check
+
+  lint:
+    name: Lint
+    if: >-
+      always()
+      && !cancelled()
+      && needs.check-changes.outputs.code-changed == 'true'
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check, workflow-lint, version-sync]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  test:
+    name: Test
+    if: >-
+      always()
+      && !cancelled()
+      && needs.check-changes.outputs.code-changed == 'true'
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check, version-sync]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: npm install --include=optional
+      - run: bun test
+
+  runtime-compat:
+    name: Runtime - ${{ matrix.runtime }} / ${{ matrix.os }}
+    if: >-
+      always()
+      && !cancelled()
+      && needs.check-changes.outputs.code-changed == 'true'
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check, version-sync]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: bun
+          - os: ubuntu-latest
+            runtime: node
+          - os: macos-15
+            runtime: bun
+          - os: macos-15
+            runtime: node
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: npm install --include=optional
+      - run: bun run build:js
+      - name: Bun runtime smoke
+        if: matrix.runtime == 'bun'
+        run: bun run test:runtime:bun
+      - name: Node runtime smoke
+        if: matrix.runtime == 'node'
+        run: bun run test:runtime:node
+
+  pack:
+    name: Pack
+    if: >-
+      always()
+      && !cancelled()
+      && needs.check-changes.outputs.code-changed == 'true'
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check, version-sync]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build:js
+      - run: npm pack --json --ignore-scripts --dry-run
+      - run: cd wasm && npm pack --json --ignore-scripts --dry-run
+
+  provenance:
+    name: Provenance
+    if: >-
+      always()
+      && !cancelled()
+      && needs.check-changes.outputs.provenance-changed == 'true'
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: bun install --frozen-lockfile
+      - uses: stella/.github/actions/provenance-check@3f01e79c9fb39929940e6736a7f12192a3be7321
+        with:
+          provenance-version: v0.1.3

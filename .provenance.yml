@@ -1,0 +1,18 @@
+version: 1
+output_dir: provenance
+notice:
+  internal_scopes:
+    - "@stll"
+sbom:
+  exclude_regexes:
+    - '(^|/)dist(?:/.*)?(?:#.*)?$'
+    - '(^|/)wasm/dist(?:/.*)?(?:#.*)?$'
+projects:
+  - id: root
+    path: .
+    ecosystems:
+      - javascript
+  - id: wasm
+    path: wasm
+    ecosystems:
+      - javascript

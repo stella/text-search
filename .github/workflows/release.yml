@@ -1,0 +1,218 @@
+name: Release
+
+env:
+  NODE_VERSION: "22"
+  NPM_VERSION: "11.11.1"
+  CDXGEN_VERSION: "12.1.5"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing git tag to release, e.g. v1.0.0
+        required: true
+        type: string
+      publish_to_npm:
+        description: Publish npm packages after creating the GitHub release
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release inputs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - name: Validate tag and package versions
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git rev-parse --verify "refs/tags/${RELEASE_TAG}" >/dev/null
+          node scripts/version-sync.mjs check --tag "${RELEASE_TAG}"
+
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+      - uses: stella/.github/actions/provenance-check@3f01e79c9fb39929940e6736a7f12192a3be7321
+        with:
+          provenance-version: v0.1.3
+
+      - run: rm -rf node_modules package-lock.json
+      - run: npm install --include=optional
+      - run: bun test
+      - run: bun run build:js
+      - run: bun run test:runtime:bun
+      - run: bun run test:runtime:node
+
+  publish:
+    name: Publish
+    needs: [verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm for trusted publishing
+        run: npm install --global "npm@${{ env.NPM_VERSION }}"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - run: bun install --frozen-lockfile
+
+      - name: Install cdxgen
+        run: npm install --global "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"
+
+      - name: Build release artifacts
+        run: bun run build:js
+
+      - name: Pack release tarballs
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-artifacts
+
+          root_json="$(npm pack --json --ignore-scripts --pack-destination release-artifacts)"
+          root_file="$(echo "$root_json" | jq -r '.[0].filename')"
+
+          wasm_json="$(cd wasm && npm pack --json --ignore-scripts --pack-destination ../release-artifacts)"
+          wasm_file="$(echo "$wasm_json" | jq -r '.[0].filename')"
+
+          sha256sum "release-artifacts/$root_file" "release-artifacts/$wasm_file" \
+            > release-artifacts/SHA256SUMS
+
+          echo "root_tarball=release-artifacts/$root_file" >> "$GITHUB_OUTPUT"
+          echo "wasm_tarball=release-artifacts/$wasm_file" >> "$GITHUB_OUTPUT"
+
+      - name: Generate attestation SBOM
+        run: cdxgen -o release-artifacts/sbom.attest.cdx.json
+
+      - name: Stage provenance release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp provenance/report.json release-artifacts/provenance-report.json
+          cp provenance/THIRD-PARTY-NOTICES.repo.txt \
+            release-artifacts/provenance-THIRD-PARTY-NOTICES.repo.txt
+          cp provenance/projects/root/sbom.cdx.json \
+            release-artifacts/provenance-root-sbom.cdx.json
+          cp provenance/projects/root/THIRD-PARTY-NOTICES.txt \
+            release-artifacts/provenance-root-THIRD-PARTY-NOTICES.txt
+          cp provenance/projects/wasm/sbom.cdx.json \
+            release-artifacts/provenance-wasm-sbom.cdx.json
+          cp provenance/projects/wasm/THIRD-PARTY-NOTICES.txt \
+            release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          assets=(
+            "${{ steps.pack.outputs.root_tarball }}"
+            "${{ steps.pack.outputs.wasm_tarball }}"
+            release-artifacts/SHA256SUMS
+            release-artifacts/sbom.attest.cdx.json
+            release-artifacts/provenance-report.json
+            release-artifacts/provenance-THIRD-PARTY-NOTICES.repo.txt
+            release-artifacts/provenance-root-sbom.cdx.json
+            release-artifacts/provenance-root-THIRD-PARTY-NOTICES.txt
+            release-artifacts/provenance-wasm-sbom.cdx.json
+            release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
+          )
+
+          prerelease_flag=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease_flag+=(--prerelease)
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              "${prerelease_flag[@]}" \
+              --title "$RELEASE_TAG"
+          fi
+
+      - name: Publish to npm
+        if: inputs.publish_to_npm
+        run: |
+          set -euo pipefail
+
+          publish_tarball() {
+            local tarball="$1"
+            local package_json
+            local package_name
+            local package_version
+            local attempt
+            local published=false
+
+            tarball="$(realpath "$tarball")"
+            package_json="$(tar -xOf "$tarball" package/package.json)"
+            package_name="$(jq -r '.name' <<<"$package_json")"
+            package_version="$(jq -r '.version' <<<"$package_json")"
+
+            if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+              echo "Skipping already-published ${package_name}@${package_version}"
+              published=true
+            fi
+
+            if [[ "$published" != "true" ]]; then
+              for attempt in 1 2 3 4 5; do
+                if npm publish "$tarball" --provenance --access public --tag "$NPM_DIST_TAG"; then
+                  published=true
+                  break
+                fi
+
+                if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+                  echo "Detected ${package_name}@${package_version} after publish attempt ${attempt}"
+                  published=true
+                  break
+                fi
+
+                if [[ "$attempt" -eq 5 ]]; then
+                  echo "Failed to publish ${package_name}@${package_version} after ${attempt} attempts" >&2
+                  return 1
+                fi
+
+                sleep $((attempt * 10))
+              done
+            fi
+
+            return 0
+          }
+
+          # Intentional for the initial public release line:
+          # prereleases should still be the default install.
+          NPM_DIST_TAG="latest"
+
+          publish_tarball "${{ steps.pack.outputs.root_tarball }}"
+          publish_tarball "${{ steps.pack.outputs.wasm_tarball }}"

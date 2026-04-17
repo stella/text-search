@@ -1,0 +1,69 @@
+{
+  "name": "@stll/text-search",
+  "version": "1.0.0-rc.1",
+  "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
+  "keywords": [
+    "aho-corasick",
+    "fuzzy",
+    "multi-pattern",
+    "orchestrator",
+    "regex",
+    "text-search"
+  ],
+  "homepage": "https://github.com/stella/text-search#readme",
+  "bugs": {
+    "url": "https://github.com/stella/text-search/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stella/text-search"
+  },
+  "packageManager": "bun@1.3.12",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "build:js": "tsdown",
+    "prepublishOnly": "bun run build",
+    "test": "bun test",
+    "test:runtime:bun": "bun scripts/runtime-smoke.mjs",
+    "test:runtime:node": "node scripts/runtime-smoke.mjs",
+    "lint": "oxlint .",
+    "format": "oxfmt .",
+    "version:check": "node scripts/version-sync.mjs check",
+    "version:sync": "node scripts/version-sync.mjs sync"
+  },
+  "dependencies": {
+    "@stll/aho-corasick": "^1.0.0-rc.1",
+    "@stll/fuzzy-search": "^1.0.0-rc.1",
+    "@stll/regex-set": "^1.0.0-rc.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "bun-types": "^1.3.10",
+    "oxfmt": "^0.44.0",
+    "oxlint": "^1.59.0",
+    "tsdown": "^0.21.6",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.8"
+  },
+  "engines": {
+    "node": ">= 18"
+  }
+}
