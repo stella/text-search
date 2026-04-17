@@ -113,82 +113,63 @@ jobs:
     if: >-
       always()
       && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, workflow-lint, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Skip when lint is not required
-        if: >-
-          needs.check-changes.outputs.code-changed != 'true'
-          || (github.event_name == 'pull_request'
-              && needs.trust-check.outputs.trusted != 'true')
+        if: needs.check-changes.outputs.code-changed != 'true'
         run: echo "No trusted code changes; lint skipped."
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run lint
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
 
   test:
     name: Test
     if: >-
       always()
       && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Skip when tests are not required
-        if: >-
-          needs.check-changes.outputs.code-changed != 'true'
-          || (github.event_name == 'pull_request'
-              && needs.trust-check.outputs.trusted != 'true')
+        if: needs.check-changes.outputs.code-changed != 'true'
         run: echo "No trusted code changes; tests skipped."
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: npm install --include=optional
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun test
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
 
   runtime-compat:
     name: Runtime - ${{ matrix.runtime }} / ${{ matrix.os }}
     if: >-
       always()
       && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
-    runs-on: ${{ matrix.os }}
+    runs-on: >-
+      ${{
+        needs.check-changes.outputs.code-changed == 'true'
+        && matrix.os
+        || 'ubuntu-latest'
+      }}
     permissions:
       contents: read
     strategy:
@@ -205,50 +186,28 @@ jobs:
             runtime: node
     steps:
       - name: Skip when runtime checks are not required
-        if: >-
-          needs.check-changes.outputs.code-changed != 'true'
-          || (github.event_name == 'pull_request'
-              && needs.trust-check.outputs.trusted != 'true')
+        if: needs.check-changes.outputs.code-changed != 'true'
         run: echo "No trusted code changes; runtime checks skipped."
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
         with:
           node-version: "22"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: npm install --include=optional
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - name: Bun runtime smoke
         if: >-
           needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
           && matrix.runtime == 'bun'
         run: bun run test:runtime:bun
       - name: Node runtime smoke
         if: >-
           needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
           && matrix.runtime == 'node'
         run: bun run test:runtime:node
 
@@ -257,53 +216,36 @@ jobs:
     if: >-
       always()
       && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Skip when packaging is not required
-        if: >-
-          needs.check-changes.outputs.code-changed != 'true'
-          || (github.event_name == 'pull_request'
-              && needs.trust-check.outputs.trusted != 'true')
+        if: needs.check-changes.outputs.code-changed != 'true'
         run: echo "No trusted code changes; pack skipped."
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: npm pack --json --ignore-scripts --dry-run
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: cd wasm && npm pack --json --ignore-scripts --dry-run
-        if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.code-changed == 'true'
 
   provenance:
     name: Provenance
     if: >-
       always()
       && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check]
     runs-on: ubuntu-latest
     permissions:
@@ -311,30 +253,15 @@ jobs:
       packages: read
     steps:
       - name: Skip when provenance is not required
-        if: >-
-          needs.check-changes.outputs.provenance-changed != 'true'
-          || (github.event_name == 'pull_request'
-              && needs.trust-check.outputs.trusted != 'true')
+        if: needs.check-changes.outputs.provenance-changed != 'true'
         run: echo "No trusted provenance changes; provenance check skipped."
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: >-
-          needs.check-changes.outputs.provenance-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.provenance-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: >-
-          needs.check-changes.outputs.provenance-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: >-
-          needs.check-changes.outputs.provenance-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.provenance-changed == 'true'
       - uses: stella/.github/actions/provenance-check@3f01e79c9fb39929940e6736a7f12192a3be7321
-        if: >-
-          needs.check-changes.outputs.provenance-changed == 'true'
-          && (github.event_name != 'pull_request'
-              || needs.trust-check.outputs.trusted == 'true')
+        if: needs.check-changes.outputs.provenance-changed == 'true'
         with:
           provenance-version: v0.1.3
