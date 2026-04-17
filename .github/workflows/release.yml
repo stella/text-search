@@ -49,8 +49,9 @@ jobs:
           node scripts/version-sync.mjs check --tag "${RELEASE_TAG}"
 
       - run: bun install --frozen-lockfile
-      - run: npm install --include=optional
       - run: bun run lint
+      - run: rm -rf node_modules package-lock.json
+      - run: npm install --include=optional
       - run: bun test
       - run: bun run build:js
       - run: bun run test:runtime:bun
