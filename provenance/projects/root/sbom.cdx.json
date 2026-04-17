@@ -54,6 +54,10 @@
         {
           "name": "SrcFile",
           "value": "node_modules/vite/package.json"
+        },
+        {
+          "name": "ImportedModules",
+          "value": "vite,Plugin,vite/Plugin,UserConfig,vite/UserConfig"
         }
       ],
       "purl": "pkg:npm/vite@8.0.8",
