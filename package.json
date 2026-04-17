@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "0.1.2",
+  "version": "1.0.0-rc.1",
   "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
   "keywords": [
     "aho-corasick",
@@ -19,6 +19,7 @@
     "type": "git",
     "url": "https://github.com/stella/text-search"
   },
+  "packageManager": "bun@1.3.12",
   "files": [
     "dist"
   ],
