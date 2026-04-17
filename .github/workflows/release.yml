@@ -164,27 +164,55 @@ jobs:
 
       - name: Publish to npm
         if: inputs.publish_to_npm
-        shell: bash
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
 
-          version="${{ inputs.tag }}"
-          version="${version#v}"
-          dist_tag="latest"
+          publish_tarball() {
+            local tarball="$1"
+            local package_json
+            local package_name
+            local package_version
+            local attempt
+            local published=false
 
-          if [[ -n "${NPM_TOKEN:-}" ]]; then
-            export NODE_AUTH_TOKEN="$NPM_TOKEN"
-          else
-            unset NODE_AUTH_TOKEN || true
-          fi
+            tarball="$(realpath "$tarball")"
+            package_json="$(tar -xOf "$tarball" package/package.json)"
+            package_name="$(jq -r '.name' <<<"$package_json")"
+            package_version="$(jq -r '.version' <<<"$package_json")"
 
-          npm publish "$(realpath "${{ steps.pack.outputs.root_tarball }}")" \
-            --access public \
-            --provenance \
-            --tag "$dist_tag"
-          npm publish "$(realpath "${{ steps.pack.outputs.wasm_tarball }}")" \
-            --access public \
-            --provenance \
-            --tag "$dist_tag"
+            if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+              echo "Skipping already-published ${package_name}@${package_version}"
+              published=true
+            fi
+
+            if [[ "$published" != "true" ]]; then
+              for attempt in 1 2 3 4 5; do
+                if npm publish "$tarball" --provenance --access public --tag "$NPM_DIST_TAG"; then
+                  published=true
+                  break
+                fi
+
+                if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+                  echo "Detected ${package_name}@${package_version} after publish attempt ${attempt}"
+                  published=true
+                  break
+                fi
+
+                if [[ "$attempt" -eq 5 ]]; then
+                  echo "Failed to publish ${package_name}@${package_version} after ${attempt} attempts" >&2
+                  return 1
+                fi
+
+                sleep $((attempt * 10))
+              done
+            fi
+
+            return 0
+          }
+
+          # Intentional for the initial public release line:
+          # prereleases should still be the default install.
+          NPM_DIST_TAG="latest"
+
+          publish_tarball "${{ steps.pack.outputs.root_tarball }}"
+          publish_tarball "${{ steps.pack.outputs.wasm_tarball }}"
