@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
   "keywords": [
     "aho-corasick",
@@ -50,9 +50,9 @@
     "version:sync": "node scripts/version-sync.mjs sync"
   },
   "dependencies": {
-    "@stll/aho-corasick": "^1.0.0-rc.1",
-    "@stll/fuzzy-search": "^1.0.0-rc.1",
-    "@stll/regex-set": "^1.0.0-rc.3"
+    "@stll/aho-corasick": "^1.0.0",
+    "@stll/fuzzy-search": "^1.0.0",
+    "@stll/regex-set": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
