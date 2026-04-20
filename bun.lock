@@ -7,7 +7,7 @@
       "dependencies": {
         "@stll/aho-corasick": "^1.0.0",
         "@stll/fuzzy-search": "^1.0.0",
-        "@stll/regex-set": "^1.0.0",
+        "@stll/regex-set": "^1.0.1",
       },
       "devDependencies": {
         "@types/node": "^25.5.2",
@@ -163,7 +163,7 @@
 
     "@stll/fuzzy-search": ["@stll/fuzzy-search@1.0.0", "", { "optionalDependencies": { "@stll/fuzzy-search-darwin-arm64": "1.0.0", "@stll/fuzzy-search-darwin-x64": "1.0.0", "@stll/fuzzy-search-linux-arm64-gnu": "1.0.0", "@stll/fuzzy-search-linux-x64-gnu": "1.0.0", "@stll/fuzzy-search-wasm32-wasi": "1.0.0" } }, "sha512-/0i7Nanq4pYh1YzIAn8i0W11NMKRaaxtzNFeQmYxZ03//rtWqcFvmqLvpOY1+oc+jaswFFbAS/xIu+iiurizmg=="],
 
-    "@stll/regex-set": ["@stll/regex-set@1.0.0", "", { "optionalDependencies": { "@stll/regex-set-darwin-arm64": "1.0.0", "@stll/regex-set-darwin-x64": "1.0.0", "@stll/regex-set-linux-arm64-gnu": "1.0.0", "@stll/regex-set-linux-x64-gnu": "1.0.0", "@stll/regex-set-wasm32-wasi": "1.0.0" } }, "sha512-PI7PAkIan1e3YXVrpw0Yej2FTrv1J7fDZ+YVxizNHKvDTb7BBsFfIWi1eTNV9LD4jzbQoV0oI1PCoY5NxqaKSg=="],
+    "@stll/regex-set": ["@stll/regex-set@1.0.1", "", { "optionalDependencies": { "@stll/regex-set-darwin-arm64": "1.0.1", "@stll/regex-set-darwin-x64": "1.0.1", "@stll/regex-set-linux-arm64-gnu": "1.0.1", "@stll/regex-set-linux-x64-gnu": "1.0.1", "@stll/regex-set-wasm32-wasi": "1.0.1" } }, "sha512-8G8aWK6ypZGe0P0O+WyUOPNV18dQ4QTz8oB6yDu3V/Qbm1uXtBHct2FrgSTD+BuNJqO37YnqLQk+pGw8DU4/Ng=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 
