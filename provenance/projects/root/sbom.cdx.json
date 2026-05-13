@@ -7,7 +7,7 @@
           "name": "Evan You"
         }
       ],
-      "bom-ref": "pkg:npm/vite@8.0.8",
+      "bom-ref": "pkg:npm/vite@8.0.11",
       "description": "Native-ESM powered web dev build tool",
       "evidence": {
         "identity": [
@@ -56,13 +56,13 @@
           "value": "node_modules/vite/package.json"
         }
       ],
-      "purl": "pkg:npm/vite@8.0.8",
+      "purl": "pkg:npm/vite@8.0.11",
       "scope": "required",
       "tags": [
         "web"
       ],
       "type": "library",
-      "version": "8.0.8"
+      "version": "8.0.11"
     }
   ],
   "compositions": [
