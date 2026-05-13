@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+      timezone: "Europe/Prague"
+    cooldown:
+      default-days: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - "📦 dependencies"
+    commit-message:
+      prefix: "chore"
+    reviewers:
+      - "jan-kubica"
+
+  - package-ecosystem: "bun"
+    directories:
+      - "/"
+      - "/wasm"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+      timezone: "Europe/Prague"
+    cooldown:
+      default-days: 5
+    open-pull-requests-limit: 10
+    groups:
+      napi:
+        patterns:
+          - "@napi-rs/*"
+          - "napi*"
+      emnapi:
+        patterns:
+          - "@emnapi/*"
+          - "emnapi"
+          - "@napi-rs/wasm-runtime"
+          - "@tybys/wasm-util"
+      oxc:
+        patterns:
+          - "oxlint"
+          - "oxfmt"
+      misc:
+        patterns:
+          - "*"
+    labels:
+      - "📦 dependencies"
+    commit-message:
+      prefix: "chore"
+    reviewers:
+      - "jan-kubica"
