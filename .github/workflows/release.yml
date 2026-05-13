@@ -162,57 +162,14 @@ jobs:
               --title "$RELEASE_TAG"
           fi
 
-      - name: Publish to npm
+      - name: Publish root to npm
         if: inputs.publish_to_npm
-        run: |
-          set -euo pipefail
+        uses: stella/.github/.github/actions/npm-publish-hardened@96b8912e0786548c4e62046ce3965769991dd0e0
+        with:
+          tarball: ${{ steps.pack.outputs.root_tarball }}
 
-          publish_tarball() {
-            local tarball="$1"
-            local package_json
-            local package_name
-            local package_version
-            local attempt
-            local published=false
-
-            tarball="$(realpath "$tarball")"
-            package_json="$(tar -xOf "$tarball" package/package.json)"
-            package_name="$(jq -r '.name' <<<"$package_json")"
-            package_version="$(jq -r '.version' <<<"$package_json")"
-
-            if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
-              echo "Skipping already-published ${package_name}@${package_version}"
-              published=true
-            fi
-
-            if [[ "$published" != "true" ]]; then
-              for attempt in 1 2 3 4 5; do
-                if npm publish "$tarball" --provenance --access public --tag "$NPM_DIST_TAG"; then
-                  published=true
-                  break
-                fi
-
-                if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
-                  echo "Detected ${package_name}@${package_version} after publish attempt ${attempt}"
-                  published=true
-                  break
-                fi
-
-                if [[ "$attempt" -eq 5 ]]; then
-                  echo "Failed to publish ${package_name}@${package_version} after ${attempt} attempts" >&2
-                  return 1
-                fi
-
-                sleep $((attempt * 10))
-              done
-            fi
-
-            return 0
-          }
-
-          # Intentional for the initial public release line:
-          # prereleases should still be the default install.
-          NPM_DIST_TAG="latest"
-
-          publish_tarball "${{ steps.pack.outputs.root_tarball }}"
-          publish_tarball "${{ steps.pack.outputs.wasm_tarball }}"
+      - name: Publish wasm to npm
+        if: inputs.publish_to_npm
+        uses: stella/.github/.github/actions/npm-publish-hardened@96b8912e0786548c4e62046ce3965769991dd0e0
+        with:
+          tarball: ${{ steps.pack.outputs.wasm_tarball }}
