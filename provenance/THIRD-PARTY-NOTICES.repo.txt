@@ -6,7 +6,7 @@ These files are inventories of detected third-party components and declared lice
 Some licenses may require additional attribution text or redistribution steps.
 
 Project: root
-- vite 8.0.8 — MIT
+- vite 8.0.11 — MIT
 
 Project: wasm
 - No licensed third-party dependencies were found.
