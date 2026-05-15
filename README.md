@@ -68,20 +68,18 @@ const search = new TextSearch([
   { pattern: "s.r.o.", literal: true, name: "company-type" },
 ]);
 
-const matches = search.findIter(
-  "Ing. Jan Novak, s.r.o., born 15.03.1990.",
-);
+const matches = search.findIter("Ing. Jan Novak, s.r.o., born 15.03.1990.");
 ```
 
 ## Routing model
 
 Patterns are classified once at construction time.
 
-| Engine | Used for |
-| --- | --- |
+| Engine       | Used for                                           |
+| ------------ | -------------------------------------------------- |
 | Aho-Corasick | Pure literals and explicit `literal: true` entries |
-| RegexSet | Standard regex patterns |
-| FuzzySearch | Entries with a `distance` field |
+| RegexSet     | Standard regex patterns                            |
+| FuzzySearch  | Entries with a `distance` field                    |
 
 Large alternation-heavy regexes are isolated into
 their own RegexSet instance so they do not poison
@@ -104,13 +102,13 @@ new TextSearch(patterns, {
 
 ## API
 
-| Method | Returns | Description |
-| --- | --- | --- |
-| `findIter(text)` | `Match[]` | Find matches in input text |
-| `isMatch(text)` | `boolean` | Fast yes/no check |
-| `whichMatch(text)` | `number[]` | Pattern indices that matched |
-| `replaceAll(text, replacements)` | `string` | Replace matched ranges |
-| `length` | `number` | Number of configured patterns |
+| Method                           | Returns    | Description                   |
+| -------------------------------- | ---------- | ----------------------------- |
+| `findIter(text)`                 | `Match[]`  | Find matches in input text    |
+| `isMatch(text)`                  | `boolean`  | Fast yes/no check             |
+| `whichMatch(text)`               | `number[]` | Pattern indices that matched  |
+| `replaceAll(text, replacements)` | `string`   | Replace matched ranges        |
+| `length`                         | `number`   | Number of configured patterns |
 
 ## Pattern entry types
 

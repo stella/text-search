@@ -82,9 +82,7 @@ function main() {
   }
 
   if (command === "check") {
-    const expectedVersion = args.get("tag")
-      ? args.get("tag").replace(/^v/, "")
-      : rootVersion;
+    const expectedVersion = args.get("tag") ? args.get("tag").replace(/^v/, "") : rootVersion;
     const mismatches = describeMismatches(expectedVersion);
     if (mismatches.length > 0) {
       console.error("Version drift detected:");

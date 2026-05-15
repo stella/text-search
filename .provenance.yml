@@ -5,8 +5,8 @@ notice:
     - "@stll"
 sbom:
   exclude_regexes:
-    - '(^|/)dist(?:/.*)?(?:#.*)?$'
-    - '(^|/)wasm/dist(?:/.*)?(?:#.*)?$'
+    - "(^|/)dist(?:/.*)?(?:#.*)?$"
+    - "(^|/)wasm/dist(?:/.*)?(?:#.*)?$"
 projects:
   - id: root
     path: .

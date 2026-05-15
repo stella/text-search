@@ -10,24 +10,16 @@ export const WASM_VITE_PACKAGES = [
   "@stll/regex-set-wasm32-wasi",
 ] as const;
 
-function mergeStrings(
-  existing: string[] | undefined,
-  additions: readonly string[],
-): string[] {
+function mergeStrings(existing: string[] | undefined, additions: readonly string[]): string[] {
   return [...new Set([...(existing ?? []), ...additions])];
 }
 
-export function buildTextSearchWasmViteConfig(
-  config: UserConfig = {},
-): UserConfig {
+export function buildTextSearchWasmViteConfig(config: UserConfig = {}): UserConfig {
   return {
     ...config,
     optimizeDeps: {
       ...config.optimizeDeps,
-      exclude: mergeStrings(
-        config.optimizeDeps?.exclude,
-        WASM_VITE_PACKAGES,
-      ),
+      exclude: mergeStrings(config.optimizeDeps?.exclude, WASM_VITE_PACKAGES),
     },
     ssr: {
       ...config.ssr,
