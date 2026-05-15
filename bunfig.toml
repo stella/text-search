@@ -1,12 +1,26 @@
 [install]
 # 5-day quarantine: reject package versions published
 # less than 5 days ago to mitigate supply chain attacks.
+# First-party @stll/* engines + their napi-rs platform sub-packages
+# are excluded so they're installable immediately after release.
 minimumReleaseAge = 432_000
 minimumReleaseAgeExcludes = [
   "@stll/aho-corasick",
-  "@stll/aho-corasick-wasm",
+  "@stll/aho-corasick-darwin-arm64",
+  "@stll/aho-corasick-darwin-x64",
+  "@stll/aho-corasick-linux-arm64-gnu",
+  "@stll/aho-corasick-linux-x64-gnu",
+  "@stll/aho-corasick-wasm32-wasi",
   "@stll/fuzzy-search",
-  "@stll/fuzzy-search-wasm",
+  "@stll/fuzzy-search-darwin-arm64",
+  "@stll/fuzzy-search-darwin-x64",
+  "@stll/fuzzy-search-linux-arm64-gnu",
+  "@stll/fuzzy-search-linux-x64-gnu",
+  "@stll/fuzzy-search-wasm32-wasi",
   "@stll/regex-set",
-  "@stll/regex-set-wasm",
+  "@stll/regex-set-darwin-arm64",
+  "@stll/regex-set-darwin-x64",
+  "@stll/regex-set-linux-arm64-gnu",
+  "@stll/regex-set-linux-x64-gnu",
+  "@stll/regex-set-wasm32-wasi",
 ]
