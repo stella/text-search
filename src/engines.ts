@@ -6,13 +6,38 @@
  * TextSearch instance is created.
  */
 
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-type Constructor = new (...args: any[]) => any;
+import type {
+  Options as AhoOptions,
+  PatternEntry as AhoPatternEntry,
+} from "@stll/aho-corasick";
+import type {
+  Options as FuzzyOptions,
+  PatternEntry as FuzzyPatternEntry,
+} from "@stll/fuzzy-search";
+import type {
+  Options as RegexOptions,
+  PatternEntry as RegexPatternEntry,
+} from "@stll/regex-set";
+import type { Match } from "./types";
+
+type Engine = {
+  isMatch: (haystack: string) => boolean;
+  findIter: (haystack: string) => Match[];
+};
 
 type Engines = {
-  AhoCorasick: Constructor;
-  FuzzySearch: Constructor;
-  RegexSet: Constructor;
+  AhoCorasick: new (
+    patterns: AhoPatternEntry[],
+    options?: AhoOptions,
+  ) => Engine;
+  FuzzySearch: new (
+    patterns: FuzzyPatternEntry[],
+    options?: FuzzyOptions,
+  ) => Engine;
+  RegexSet: new (
+    patterns: RegexPatternEntry[],
+    options?: RegexOptions,
+  ) => Engine;
 };
 
 let engines: Engines | undefined;

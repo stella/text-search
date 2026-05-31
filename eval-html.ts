@@ -8,7 +8,7 @@ import {
 } from "./packages/anonymize/src/index";
 import type { Entity, PipelineConfig } from "./packages/anonymize/src/types";
 
-const COLORS: Record<string, string> = {
+const COLORS: Partial<Record<string, string>> = {
   person: "#ff6b6b",
   organization: "#4ecdc4",
   address: "#45b7d1",
@@ -110,11 +110,12 @@ const args = process.argv.slice(2);
 let outputPath = "/tmp/eval-report.html";
 const inputs: string[] = [];
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--output" && args[i + 1]) {
-    outputPath = args[i + 1];
+  const arg = args[i];
+  const nextArg = args[i + 1];
+  if (arg === "--output" && nextArg !== undefined) {
+    outputPath = nextArg;
     i++;
   } else {
-    const arg = args[i];
     if (arg === undefined) {
       throw new Error(`Missing argument at index ${i}`);
     }
