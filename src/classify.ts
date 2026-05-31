@@ -167,7 +167,7 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
     }
 
     // Explicit literal: skip metachar detection
-    if ("literal" in entry && entry.literal) {
+    if (entry.literal === true) {
       const hasPerPatternOpts = "caseInsensitive" in entry || "wholeWords" in entry;
       const result: ClassifiedPattern = {
         originalIndex: i,

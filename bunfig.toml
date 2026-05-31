@@ -5,6 +5,8 @@
 # are excluded so they're installable immediately after release.
 minimumReleaseAge = 432_000
 minimumReleaseAgeExcludes = [
+  "@stll/typescript-config",
+  "@stll/oxlint-config",
   "@stll/aho-corasick",
   "@stll/aho-corasick-darwin-arm64",
   "@stll/aho-corasick-darwin-x64",

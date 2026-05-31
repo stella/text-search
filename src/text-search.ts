@@ -423,7 +423,13 @@ function buildFuzzyEngine(
     nameMap.push(cp.name);
   }
 
-  const fsOptions: Record<string, unknown> = {
+  const fsOptions: {
+    unicodeBoundaries: boolean;
+    wholeWords: boolean;
+    metric?: "levenshtein" | "damerau-levenshtein";
+    normalizeDiacritics?: boolean;
+    caseInsensitive?: boolean;
+  } = {
     unicodeBoundaries: options.unicodeBoundaries,
     wholeWords: options.wholeWords,
   };
@@ -449,6 +455,7 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
     case "regex":
       return engine.rs.isMatch(haystack);
   }
+  throw new Error("Unsupported engine type");
 }
 
 /**
@@ -463,6 +470,7 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
     case "regex":
       return engine.rs.findIter(haystack);
   }
+  throw new Error("Unsupported engine type");
 }
 
 /**
@@ -486,8 +494,8 @@ function remapMatches(matches: Match[], engine: EngineSlot): Match[] {
       result.name = name;
     }
     // Preserve edit distance from fuzzy matches
-    if ("distance" in m && m.distance !== undefined) {
-      result.distance = m.distance as number;
+    if (m.distance !== undefined) {
+      result.distance = m.distance;
     }
     return result;
   });

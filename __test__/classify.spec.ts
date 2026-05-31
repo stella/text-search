@@ -57,6 +57,12 @@ describe("classifyPatterns", () => {
     expect(result[0]!.name).toBe("test");
   });
 
+  test("literal false preserves regex classification", () => {
+    const result = classifyPatterns([{ pattern: "x|y", literal: false }]);
+    expect(result[0]!.alternationCount).toBe(2);
+    expect(result[0]!.isLiteral).toBe(false);
+  });
+
   test("preserves original indices", () => {
     const result = classifyPatterns(["a", "b|c", "d"]);
     expect(result[0]!.originalIndex).toBe(0);
