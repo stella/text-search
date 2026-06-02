@@ -47,7 +47,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "bun --bun oxlint -c oxlint.config.ts --report-unused-disable-directives-severity=error --deny-warnings --type-aware .",
     "lint:fix": "bun --bun oxlint -c oxlint.config.ts --type-aware --fix .",
-    "format": "oxfmt . '!.ai/**' '!.agents/**' '!.claude/**' '!AGENTS.md' '!CLAUDE.md' '!GEMINI.md'",
+    "format": "oxfmt . \"!.ai/**\" \"!.agents/**\" \"!.claude/**\" \"!AGENTS.md\" \"!CLAUDE.md\" \"!GEMINI.md\"",
     "version:check": "node scripts/version-sync.mjs check",
     "version:sync": "node scripts/version-sync.mjs sync",
     "sync-ai": "bash scripts/sync-ai-skills.sh",

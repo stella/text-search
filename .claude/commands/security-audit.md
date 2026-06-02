@@ -41,10 +41,11 @@ layer on repo-specific risks.
 7. **Review dependency risk**:
 
    ```bash
-   # use the repo's package manager or tooling
+   bun pm audit
    ```
 
-   Also check GitHub security or Dependabot alerts when available.
+   Use the repo's equivalent audit command if it does not use Bun. Also check
+   GitHub security or Dependabot alerts when available.
 
 8. **Review AI-specific risks** when applicable:
    - prompt injection exposure
