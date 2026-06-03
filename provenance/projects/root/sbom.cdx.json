@@ -2,18 +2,24 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
-      "bom-ref": "pkg:npm/vite@8.0.13",
+      "authors": [
+        {
+          "name": "Evan You"
+        }
+      ],
+      "bom-ref": "pkg:npm/vite@8.0.14",
+      "description": "Native-ESM powered web dev build tool",
       "evidence": {
         "identity": [
           {
-            "concludedValue": "package-lock.json",
-            "confidence": 1,
+            "concludedValue": "node_modules/vite/package.json",
+            "confidence": 0.7,
             "field": "purl",
             "methods": [
               {
-                "confidence": 1,
+                "confidence": 0.7,
                 "technique": "manifest-analysis",
-                "value": "package-lock.json"
+                "value": "node_modules/vite/package.json"
               }
             ]
           }
@@ -24,13 +30,17 @@
           }
         ]
       },
-      "group": "",
-      "hashes": [
+      "externalReferences": [
         {
-          "alg": "SHA-512",
-          "content": "305b63058833992c66800e1101f8c8c975a919ed6800b9e38144f3cd5ed02f1fd32b10b38ed307e8577dfde54afb9160d6a368cf9540c2c98cb3f3687eb989bf"
+          "type": "website",
+          "url": "https://vite.dev"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vitejs/vite.git"
         }
       ],
+      "group": "",
       "licenses": [
         {
           "license": {
@@ -43,25 +53,16 @@
       "properties": [
         {
           "name": "SrcFile",
-          "value": "package-lock.json"
-        },
-        {
-          "name": "ResolvedUrl",
-          "value": "https://registry.npmjs.org/vite/-/vite-8.0.13.tgz"
-        },
-        {
-          "name": "cdx:npm:versionMismatchError",
-          "value": "8.0.14 used instead of 8.0.13"
-        },
-        {
-          "name": "ImportedModules",
-          "value": "vite,Plugin,vite/Plugin,UserConfig,vite/UserConfig"
+          "value": "node_modules/vite/package.json"
         }
       ],
-      "purl": "pkg:npm/vite@8.0.13",
+      "purl": "pkg:npm/vite@8.0.14",
       "scope": "required",
+      "tags": [
+        "web"
+      ],
       "type": "library",
-      "version": "8.0.13"
+      "version": "8.0.14"
     }
   ],
   "compositions": [
@@ -70,18 +71,7 @@
       "bom-ref": "pkg:npm/@stll/text-search@1.0.2"
     }
   ],
-  "dependencies": [
-    {
-      "dependsOn": [],
-      "ref": "pkg:npm/vite@8.0.13"
-    },
-    {
-      "dependsOn": [
-        "pkg:npm/vite@8.0.13"
-      ],
-      "ref": "pkg:npm/@stll/text-search@1.0.2"
-    }
-  ],
+  "dependencies": [],
   "metadata": {
     "authors": [
       {
