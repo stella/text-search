@@ -7,4 +7,4 @@ This file is a generated inventory of detected third-party components and declar
 Some licenses may require additional attribution text or redistribution steps.
 
 Project: root
-- vite 8.0.14 — MIT
+- vite 8.0.13 — MIT

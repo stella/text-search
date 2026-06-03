@@ -49,6 +49,30 @@ describe("TextSearch", () => {
     const ts = new TextSearch(["a", "b"]);
     expect(() => ts.replaceAll("ab", ["x"])).toThrow();
   });
+
+  test("wide trailing lookahead preserves later legal-form matches", () => {
+    const lower = "a-záčďéěíňóřšťúůýžäöüßàâæçèêëîïôùûÿñąćęłńśźż\\u0131";
+    const upper = "A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽÄÖÜÀÂÆÇÈÊËÎÏÔÙÛŸÑĄĆĘŁŃŚŹŻ\\u0130";
+    const hspace = "[^\\S\\n]";
+    const simpleSep = `(?:${hspace}|[&,.-]){1,4}`;
+    const capWord = `[${upper}][${lower}${upper}]*`;
+    const capOrNum = `(?:${capWord}|[${upper}](?![${lower}${upper}])|\\d{1,4})`;
+    const head = `(?:${capWord})(?:${simpleSep}(?:${capOrNum})){0,10}`;
+    const suffixAlt = "LLC|Inc\\.|AG|SE|PA|AD";
+
+    const wideBoundary = `${head}(?:${hspace}+|,${hspace}*)(?:${suffixAlt})(?![${lower}${upper}\\p{N}])`;
+    const asciiBoundary = `${head}(?:${hspace}+|,${hspace}*)(?:${suffixAlt})(?![A-Za-z0-9])`;
+    const text =
+      "THIS AGREEMENT AND PLAN OF MERGER, dated as of April 25, 2022 " +
+      '(this "Agreement"), is made by and among Twitter, Inc., ' +
+      'a Delaware corporation (the "Company"), X Holdings I, Inc.';
+
+    const wideMatches = new TextSearch([wideBoundary]).findIter(text).map((m) => m.text);
+    const asciiMatches = new TextSearch([asciiBoundary]).findIter(text).map((m) => m.text);
+
+    expect(wideMatches).toEqual(asciiMatches);
+    expect(wideMatches).toEqual(["Twitter, Inc.", "X Holdings I, Inc."]);
+  });
 });
 
 // ─── Auto-optimization ──────────────────────

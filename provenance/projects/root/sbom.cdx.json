@@ -2,24 +2,18 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
-      "authors": [
-        {
-          "name": "Evan You"
-        }
-      ],
-      "bom-ref": "pkg:npm/vite@8.0.14",
-      "description": "Native-ESM powered web dev build tool",
+      "bom-ref": "pkg:npm/vite@8.0.13",
       "evidence": {
         "identity": [
           {
-            "concludedValue": "node_modules/vite/package.json",
-            "confidence": 0.7,
+            "concludedValue": "package-lock.json",
+            "confidence": 1,
             "field": "purl",
             "methods": [
               {
-                "confidence": 0.7,
+                "confidence": 1,
                 "technique": "manifest-analysis",
-                "value": "node_modules/vite/package.json"
+                "value": "package-lock.json"
               }
             ]
           }
@@ -30,17 +24,13 @@
           }
         ]
       },
-      "externalReferences": [
+      "group": "",
+      "hashes": [
         {
-          "type": "website",
-          "url": "https://vite.dev"
-        },
-        {
-          "type": "vcs",
-          "url": "git+https://github.com/vitejs/vite.git"
+          "alg": "SHA-512",
+          "content": "305b63058833992c66800e1101f8c8c975a919ed6800b9e38144f3cd5ed02f1fd32b10b38ed307e8577dfde54afb9160d6a368cf9540c2c98cb3f3687eb989bf"
         }
       ],
-      "group": "",
       "licenses": [
         {
           "license": {
@@ -53,25 +43,45 @@
       "properties": [
         {
           "name": "SrcFile",
-          "value": "node_modules/vite/package.json"
+          "value": "package-lock.json"
+        },
+        {
+          "name": "ResolvedUrl",
+          "value": "https://registry.npmjs.org/vite/-/vite-8.0.13.tgz"
+        },
+        {
+          "name": "cdx:npm:versionMismatchError",
+          "value": "8.0.14 used instead of 8.0.13"
+        },
+        {
+          "name": "ImportedModules",
+          "value": "vite,Plugin,vite/Plugin,UserConfig,vite/UserConfig"
         }
       ],
-      "purl": "pkg:npm/vite@8.0.14",
+      "purl": "pkg:npm/vite@8.0.13",
       "scope": "required",
-      "tags": [
-        "web"
-      ],
       "type": "library",
-      "version": "8.0.14"
+      "version": "8.0.13"
     }
   ],
   "compositions": [
     {
       "aggregate": "incomplete",
-      "bom-ref": "pkg:npm/@stll/text-search@1.0.1"
+      "bom-ref": "pkg:npm/@stll/text-search@1.0.2"
     }
   ],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "dependsOn": [],
+      "ref": "pkg:npm/vite@8.0.13"
+    },
+    {
+      "dependsOn": [
+        "pkg:npm/vite@8.0.13"
+      ],
+      "ref": "pkg:npm/@stll/text-search@1.0.2"
+    }
+  ],
   "metadata": {
     "authors": [
       {
@@ -79,7 +89,7 @@
       }
     ],
     "component": {
-      "bom-ref": "pkg:npm/@stll/text-search@1.0.1",
+      "bom-ref": "pkg:npm/@stll/text-search@1.0.2",
       "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
       "externalReferences": [
         {
@@ -101,9 +111,9 @@
         }
       ],
       "name": "text-search",
-      "purl": "pkg:npm/%40stll/text-search@1.0.1",
+      "purl": "pkg:npm/%40stll/text-search@1.0.2",
       "type": "application",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     "lifecycles": [
       {
