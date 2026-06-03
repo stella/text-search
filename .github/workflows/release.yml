@@ -178,7 +178,7 @@ jobs:
     name: Update CHANGELOG
     needs: publish
     if: inputs.publish_to_npm
-    uses: stella/.github/.github/workflows/changelog-update.yml@d11bdc933dec609e291f6685f470b039d8342b6a
+    uses: stella/.github/.github/workflows/changelog-update.yml@314d81ed84537155fb17d57ebdf227aeaca4f907
     with:
       tag: ${{ inputs.tag }}
     permissions:

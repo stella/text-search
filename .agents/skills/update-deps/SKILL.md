@@ -56,7 +56,7 @@ If the request is vague, default to:
    - Dockerfiles and base image digests
 
 2. **Inventory outdated candidates**:
-   - run `bun outdated --recursive` for Bun packages
+   - run `bun outdated --filter="*"` for Bun workspace packages
    - run `cargo outdated --root-deps-only` for Cargo crates. If
      `cargo-outdated` is missing, prefer `cargo binstall
      cargo-outdated` when available (prebuilt binary, seconds)
@@ -120,8 +120,7 @@ If the request is vague, default to:
    Good defaults:
 
    ```bash
-   bun info <pkg>@<version> --json
-   npm view <pkg>@<version>
+   npm view <pkg>@<version> --json
    bun pm untrusted
    ```
 
