@@ -25,6 +25,10 @@ export type PatternEntry =
       pattern: string | RegExp;
       name?: string;
       literal?: false;
+      lazy?: boolean;
+      prefilterAny?: readonly string[];
+      prefilterCaseInsensitive?: boolean;
+      prefilterRegex?: RegExp;
     }
   | {
       pattern: string;
@@ -72,6 +76,17 @@ export type TextSearchOptions = {
    * @default 50
    */
   maxAlternations?: number;
+
+  /**
+   * Max normal regex patterns per shared RegexSet.
+   * When omitted, TextSearch uses complexity-aware
+   * auto chunking: simple regexes share bounded
+   * RegexSet instances, while complex regexes are
+   * isolated to avoid shared DFA state blowups.
+   * Set a number to override the heuristic.
+   * @default auto
+   */
+  regexChunkSize?: number;
 
   /**
    * Fuzzy matching metric.
