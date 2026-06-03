@@ -21,18 +21,18 @@ export type Match = {
 export type PatternEntry =
   | string
   | RegExp
-	  | {
-	      pattern: string | RegExp;
-	      name?: string;
-	      literal?: false;
-	    }
-	  | {
-	      pattern: string;
-	      name?: string;
-	      literal?: false;
-	      /** Fuzzy matching distance. Routes to
-	       *  @stll/fuzzy-search instead of regex. */
-	      distance: number | "auto";
+  | {
+      pattern: string | RegExp;
+      name?: string;
+      literal?: false;
+    }
+  | {
+      pattern: string;
+      name?: string;
+      literal?: false;
+      /** Fuzzy matching distance. Routes to
+       *  @stll/fuzzy-search instead of regex. */
+      distance: number | "auto";
     }
   | {
       pattern: string;
