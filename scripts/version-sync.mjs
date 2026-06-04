@@ -19,6 +19,14 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function readVersion() {
+  return fs.readFileSync(repoPath("VERSION"), "utf8").trim();
+}
+
+function writeVersion(version) {
+  fs.writeFileSync(repoPath("VERSION"), `${version}\n`);
+}
+
 function parseArgs() {
   const [command, ...rest] = process.argv.slice(2);
   const args = new Map();
@@ -47,6 +55,7 @@ function syncVersion(nextVersion) {
   const root = readJson(rootPath);
   const wasm = readJson(wasmPath);
 
+  writeVersion(nextVersion);
   root.version = nextVersion;
   wasm.version = nextVersion;
 
@@ -62,6 +71,10 @@ function describeMismatches(expectedVersion) {
   const root = readJson(rootPath);
   const wasm = readJson(wasmPath);
 
+  const version = readVersion();
+  if (version !== expectedVersion) {
+    mismatches.push(`${repoPath("VERSION")}: version=${version}`);
+  }
   if (root.version !== expectedVersion) {
     mismatches.push(`${rootPath}: version=${root.version}`);
   }
@@ -74,16 +87,23 @@ function describeMismatches(expectedVersion) {
 
 function main() {
   const { command, args } = parseArgs();
-  const rootVersion = readJson(repoPath("package.json")).version;
+
+  if (command !== "sync" && command !== "check") {
+    console.error(
+      "Usage: node scripts/version-sync.mjs <sync|check> [--version <semver>] [--tag <git-tag>]",
+    );
+    process.exit(1);
+  }
+
+  const version = args.get("version") ?? args.get("tag")?.replace(/^v/, "") ?? readVersion();
 
   if (command === "sync") {
-    syncVersion(args.get("version") ?? rootVersion);
+    syncVersion(version);
     return;
   }
 
   if (command === "check") {
-    const expectedVersion = args.get("tag") ? args.get("tag").replace(/^v/, "") : rootVersion;
-    const mismatches = describeMismatches(expectedVersion);
+    const mismatches = describeMismatches(version);
     if (mismatches.length > 0) {
       console.error("Version drift detected:");
       for (const mismatch of mismatches) {
@@ -93,11 +113,6 @@ function main() {
     }
     return;
   }
-
-  console.error(
-    "Usage: node scripts/version-sync.mjs <sync|check> [--version <semver>] [--tag <git-tag>]",
-  );
-  process.exit(1);
 }
 
 main();

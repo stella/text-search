@@ -2,52 +2,71 @@ name: Release
 
 env:
   NODE_VERSION: "22"
-  NPM_VERSION: "11.11.1"
   CDXGEN_VERSION: "12.1.5"
 
 on:
+  push:
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing git tag to release, e.g. v1.0.0
-        required: true
-        type: string
       publish_to_npm:
-        description: Publish npm packages after creating the GitHub release
+        description: Publish the current VERSION to npm after verification
         required: true
         default: false
         type: boolean
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
+  release-ref:
+    name: Release ref
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.publish_to_npm
+      && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: |
+          echo "::error::Manual npm publishing must run from main."
+          exit 1
+
+  preflight:
+    name: Preflight
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.publish_to_npm != true
+      || github.ref == 'refs/heads/main'
+    uses: stella/.github/.github/workflows/npm-version-preflight.yml@1372ecc2728373e324db00eb0c99825a852e60a9
+    with:
+      package-files: |
+        package.json
+        wasm/package.json
+      publish-to-npm: >-
+        ${{ github.event_name == 'push'
+            || (inputs.publish_to_npm && github.ref == 'refs/heads/main') }}
+
   verify:
-    name: Verify release inputs
+    name: Verify
+    needs: preflight
+    if: needs.preflight.outputs.already-released != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-          fetch-depth: 0
-
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-
-      - name: Validate tag and package versions
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          git rev-parse --verify "refs/tags/${RELEASE_TAG}" >/dev/null
-          node scripts/version-sync.mjs check --tag "${RELEASE_TAG}"
-
+      - run: node scripts/version-sync.mjs check
       - run: bun install --frozen-lockfile
       - run: bun run lint
 
@@ -62,54 +81,38 @@ jobs:
       - run: bun run test:runtime:bun
       - run: bun run test:runtime:node
 
-  publish:
-    name: Publish
-    needs: [verify]
+  pack:
+    name: Pack
+    needs: [preflight, verify]
+    if: needs.preflight.outputs.already-released != 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
-
-      - name: Install npm for trusted publishing
-        run: npm install --global "npm@${{ env.NPM_VERSION }}"
-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
-
-      - name: Install cdxgen
-        run: npm install --global "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"
-
-      - name: Build release artifacts
-        run: bun run build:js
+      - run: npm install --global "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"
+      - run: bun run build:js
 
       - name: Pack release tarballs
-        id: pack
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p release-artifacts
 
-          root_json="$(npm pack --json --ignore-scripts --pack-destination release-artifacts)"
-          root_file="$(echo "$root_json" | jq -r '.[0].filename')"
-
-          wasm_json="$(cd wasm && npm pack --json --ignore-scripts --pack-destination ../release-artifacts)"
-          wasm_file="$(echo "$wasm_json" | jq -r '.[0].filename')"
-
-          sha256sum "release-artifacts/$root_file" "release-artifacts/$wasm_file" \
-            > release-artifacts/SHA256SUMS
-
-          echo "root_tarball=release-artifacts/$root_file" >> "$GITHUB_OUTPUT"
-          echo "wasm_tarball=release-artifacts/$wasm_file" >> "$GITHUB_OUTPUT"
+          npm pack --json --ignore-scripts --pack-destination release-artifacts
+          (
+            cd wasm
+            npm pack --json --ignore-scripts --pack-destination ../release-artifacts
+          )
+          (
+            cd release-artifacts
+            sha256sum -- ./*.tgz > SHA256SUMS
+          )
 
       - name: Generate attestation SBOM
         run: cdxgen -o release-artifacts/sbom.attest.cdx.json
@@ -130,60 +133,29 @@ jobs:
           cp provenance/projects/wasm/THIRD-PARTY-NOTICES.txt \
             release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
 
-      - name: Create or update GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          assets=(
-            "${{ steps.pack.outputs.root_tarball }}"
-            "${{ steps.pack.outputs.wasm_tarball }}"
-            release-artifacts/SHA256SUMS
-            release-artifacts/sbom.attest.cdx.json
-            release-artifacts/provenance-report.json
-            release-artifacts/provenance-THIRD-PARTY-NOTICES.repo.txt
-            release-artifacts/provenance-root-sbom.cdx.json
-            release-artifacts/provenance-root-THIRD-PARTY-NOTICES.txt
-            release-artifacts/provenance-wasm-sbom.cdx.json
-            release-artifacts/provenance-wasm-THIRD-PARTY-NOTICES.txt
-          )
-
-          prerelease_flag=()
-          if [[ "$RELEASE_TAG" == *-* ]]; then
-            prerelease_flag+=(--prerelease)
-          fi
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "${assets[@]}" \
-              "${prerelease_flag[@]}" \
-              --title "$RELEASE_TAG"
-          fi
-
-      - name: Publish root to npm
-        if: inputs.publish_to_npm
-        uses: stella/.github/.github/actions/npm-publish-hardened@96b8912e0786548c4e62046ce3965769991dd0e0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          tarball: ${{ steps.pack.outputs.root_tarball }}
+          name: release-artifacts
+          path: release-artifacts
+          if-no-files-found: error
 
-      - name: Publish wasm to npm
-        if: inputs.publish_to_npm
-        uses: stella/.github/.github/actions/npm-publish-hardened@96b8912e0786548c4e62046ce3965769991dd0e0
-        with:
-          tarball: ${{ steps.pack.outputs.wasm_tarball }}
-
-  update-changelog:
-    name: Update CHANGELOG
-    needs: publish
-    if: inputs.publish_to_npm
-    uses: stella/.github/.github/workflows/changelog-update.yml@314d81ed84537155fb17d57ebdf227aeaca4f907
+  finalize:
+    name: Finalize
+    needs: [preflight, pack]
+    if: >-
+      needs.preflight.outputs.already-released != 'true'
+      && (github.event_name == 'push'
+          || (inputs.publish_to_npm && github.ref == 'refs/heads/main'))
+    uses: stella/.github/.github/workflows/npm-version-finalize.yml@1372ecc2728373e324db00eb0c99825a852e60a9
     with:
-      tag: ${{ inputs.tag }}
+      package-files: |
+        package.json
+        wasm/package.json
+      publish-to-npm: >-
+        ${{ github.event_name == 'push'
+            || (inputs.publish_to_npm && github.ref == 'refs/heads/main') }}
     permissions:
       contents: write
+      id-token: write
       pull-requests: write
-    secrets:
-      app_id: ${{ secrets.CHANGELOG_APP_ID }}
-      app_private_key: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}
+    secrets: inherit
