@@ -184,3 +184,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    secrets:
+      app_id: ${{ secrets.CHANGELOG_APP_ID }}
+      app_private_key: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}
