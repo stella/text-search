@@ -28,6 +28,7 @@ jobs:
           filters: |
             code:
               - '.github/workflows/**'
+              - 'VERSION'
               - '__test__/**'
               - 'src/**'
               - 'scripts/**'
@@ -41,6 +42,7 @@ jobs:
               - 'wasm/**'
             provenance:
               - '.github/workflows/**'
+              - 'VERSION'
               - 'bunfig.toml'
               - 'bun.lock'
               - '**/package.json'
