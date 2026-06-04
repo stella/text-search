@@ -97,6 +97,66 @@ describe("auto-optimization", () => {
     expect(matches).toHaveLength(2);
   });
 
+  test("simple regex patterns auto-chunk", () => {
+    const patterns = Array.from({ length: 100 }, (_, i) => `field${i}\\s*:\\s*\\d+`);
+
+    const ts = new TextSearch(patterns, { maxAlternations: 50 });
+    const engines = Reflect.get(ts, "engines");
+    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+
+    expect(regexEngines.length).toBeGreaterThan(1);
+    expect(regexEngines.length).toBeLessThan(patterns.length);
+    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
+  });
+
+  test("complex regex patterns auto-isolate", () => {
+    const patterns = Array.from(
+      { length: 10 },
+      (_, i) => `(?<![\\p{L}\\p{N}])entity${i}[\\p{L}\\p{N}]{1,20}(?![\\p{L}\\p{N}])`,
+    );
+
+    const ts = new TextSearch(patterns, { maxAlternations: 50 });
+    const engines = Reflect.get(ts, "engines");
+    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+
+    expect(regexEngines).toHaveLength(patterns.length);
+    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
+  });
+
+  test("regexChunkSize opts into bounded shared chunks", () => {
+    const patterns = Array.from({ length: 100 }, (_, i) => `field${i}\\s*:\\s*\\d+`);
+
+    const ts = new TextSearch(patterns, {
+      maxAlternations: 50,
+      regexChunkSize: 32,
+    });
+    const engines = Reflect.get(ts, "engines");
+    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+
+    expect(regexEngines).toHaveLength(4);
+    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
+  });
+
+  test("single regex slots infer mandatory leading literal prefilters", () => {
+    const ts = new TextSearch(["(?<!\\w)DE[\\s\\-./]?\\d{9}(?!\\w)"]);
+    const engines = Reflect.get(ts, "engines");
+
+    expect(engines[0]?.prefilter).toBeDefined();
+    expect(ts.findIter("CZ123456789")).toEqual([]);
+    expect(ts.findIter("DE123456789").map((match) => match.text)).toEqual(["DE123456789"]);
+  });
+
+  test("leading literal prefilters avoid optional and alternating prefixes", () => {
+    expect(new TextSearch(["AB?C"]).findIter("AC").map((match) => match.text)).toEqual(["AC"]);
+    expect(new TextSearch(["DE|FR"]).findIter("FR").map((match) => match.text)).toEqual(["FR"]);
+  });
+
   test("pattern indices preserved after split", () => {
     const titles = Array.from({ length: 80 }, (_, i) => `t${i}`).join("|");
 
@@ -116,6 +176,100 @@ describe("auto-optimization", () => {
     expect(patterns).toContain(0);
     expect(patterns).toContain(1);
     expect(patterns).toContain(2);
+  });
+
+  test("lazy isolated regex skips build when prefilter misses", () => {
+    const terms = Array.from({ length: 80 }, (_, i) => `secret${i}`).join("|");
+    const ts = new TextSearch([
+      {
+        pattern: `(?:${terms})\\s+\\d+`,
+        lazy: true,
+        prefilterAny: ["secret"],
+      },
+    ]);
+    const engines = Reflect.get(ts, "engines");
+    const slot = engines[0]!;
+
+    expect(slot.rs).toBeUndefined();
+    expect(ts.findIter("public 123")).toEqual([]);
+    expect(slot.rs).toBeUndefined();
+
+    const matches = ts.findIter("secret42 123");
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.text).toBe("secret42 123");
+    expect(slot.rs).toBeDefined();
+  });
+
+  test("small lazy regex skips shared eager build", () => {
+    const ts = new TextSearch([
+      "public",
+      {
+        pattern: "EUR\\s+\\d+",
+        lazy: true,
+        prefilterAny: ["EUR"],
+      },
+    ]);
+    const engines = Reflect.get(ts, "engines");
+    const lazySlot = engines.find((engine: { build?: unknown; indexMap: number[]; rs?: unknown }) =>
+      engine.indexMap.includes(1),
+    );
+
+    expect(lazySlot?.build).toBeDefined();
+    expect(lazySlot?.rs).toBeUndefined();
+    expect(ts.findIter("public 123")).toEqual([
+      {
+        pattern: 0,
+        start: 0,
+        end: 6,
+        text: "public",
+      },
+    ]);
+    expect(lazySlot?.rs).toBeUndefined();
+
+    const matches = ts.findIter("public EUR 42");
+    expect(matches.map((match) => match.pattern)).toContain(1);
+    expect(lazySlot?.rs).toBeDefined();
+  });
+
+  test("all-literal string sets use identity AC mapping", () => {
+    const ts = new TextSearch(["alpha", "beta", "gamma"], {
+      allLiteral: true,
+      wholeWords: true,
+      caseInsensitive: true,
+      overlapStrategy: "all",
+    });
+    const engines = Reflect.get(ts, "engines");
+
+    expect(engines).toHaveLength(1);
+    expect(engines[0]!.type).toBe("ac");
+    expect(engines[0]!.identityMap).toBe(true);
+    expect(engines[0]!.patternCount).toBe(3);
+    expect(ts.findIter("ALPHA beta alphabet").map((match) => match.pattern)).toEqual([0, 1]);
+  });
+
+  test("large all-literal whole-word sets split without changing global selection", () => {
+    const patterns = Array.from({ length: 120_001 }, (_, index) => `term-${index}`);
+    patterns[0] = "alpha";
+    patterns[40_000] = "alpha beta";
+
+    const ts = new TextSearch(patterns, {
+      allLiteral: true,
+      wholeWords: true,
+      caseInsensitive: true,
+      overlapStrategy: "all",
+    });
+    const engines = Reflect.get(ts, "engines");
+
+    expect(engines).toHaveLength(1);
+    expect(engines[0]!.type).toBe("split-ac");
+    expect(ts.findIter("alpha beta")).toEqual([
+      {
+        pattern: 40_000,
+        start: 0,
+        end: 10,
+        text: "alpha beta",
+      },
+    ]);
   });
 });
 

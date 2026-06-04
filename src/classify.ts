@@ -36,6 +36,19 @@ export type ClassifiedPattern = {
     caseInsensitive?: boolean;
     wholeWords?: boolean;
   };
+  regexOptions?: {
+    lazy?: boolean;
+    prefilterAny?: readonly string[];
+    prefilterCaseInsensitive?: boolean;
+    prefilterRegex?: RegExp;
+  };
+  /**
+   * Heuristic cost used for automatic RegexSet chunking.
+   * Higher scores are more likely to suffer from shared
+   * DFA state interaction and should be isolated or kept
+   * in smaller chunks.
+   */
+  regexComplexity: number;
 };
 
 /**
@@ -130,26 +143,52 @@ export function countAlternations(pattern: string): number {
   return max;
 }
 
+export function scoreRegexComplexity(
+  pattern: string,
+  alternationCount = countAlternations(pattern),
+): number {
+  let score = 1;
+
+  if (pattern.length > 80) score += 2;
+  if (pattern.length > 160) score += 2;
+  if (alternationCount > 1) score += alternationCount >= 4 ? 2 : 1;
+  if (/\\p\{/.test(pattern)) score += 3;
+  if (/\(\?<?[!=]/.test(pattern)) score += 4;
+  if (/\\[bBAZz]/.test(pattern)) score += 1;
+  if (/\.\*|\.\+/.test(pattern)) score += 3;
+  if (/\[[^\]]+\][*+{]/.test(pattern)) score += 2;
+  if (/\{[\d,]+\}/.test(pattern)) score += 2;
+  if (/(?:\\[dDsSwW]|\\p\{[^}]+\}|\[[^\]]+\])[*+]/.test(pattern)) {
+    score += 1;
+  }
+
+  return score;
+}
+
 /**
  * Classify and normalize pattern entries.
  */
 export function classifyPatterns(entries: PatternEntry[], allLiteral = false): ClassifiedPattern[] {
   return entries.map((entry, i) => {
     if (typeof entry === "string") {
+      const alternationCount = allLiteral ? 0 : countAlternations(entry);
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: allLiteral ? 0 : countAlternations(entry),
+        alternationCount,
         isLiteral: allLiteral || isLiteralPattern(entry),
+        regexComplexity: scoreRegexComplexity(entry, alternationCount),
       };
     }
 
     if (entry instanceof RegExp) {
+      const alternationCount = countAlternations(entry.source);
       return {
         originalIndex: i,
         pattern: entry,
-        alternationCount: countAlternations(entry.source),
+        alternationCount,
         isLiteral: false, // RegExp is never literal
+        regexComplexity: scoreRegexComplexity(entry.source, alternationCount),
       };
     }
 
@@ -161,6 +200,7 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
         alternationCount: 0,
         isLiteral: false,
         fuzzyDistance: entry.distance,
+        regexComplexity: 0,
       };
       if (entry.name !== undefined) result.name = entry.name;
       return result;
@@ -174,6 +214,7 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
         pattern: entry.pattern,
         alternationCount: 0,
         isLiteral: true,
+        regexComplexity: 0,
       };
       if (entry.name !== undefined) result.name = entry.name;
       if (hasPerPatternOpts) {
@@ -187,14 +228,25 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
 
     const pat = entry.pattern;
     const source = pat instanceof RegExp ? pat.source : pat;
+    const alternationCount = allLiteral ? 0 : countAlternations(source);
 
     const result: ClassifiedPattern = {
       originalIndex: i,
       pattern: pat,
-      alternationCount: allLiteral ? 0 : countAlternations(source),
+      alternationCount,
       isLiteral: typeof pat === "string" && (allLiteral || isLiteralPattern(pat)),
+      regexComplexity: scoreRegexComplexity(source, alternationCount),
     };
     if (entry.name !== undefined) result.name = entry.name;
+    const regexOptions: NonNullable<ClassifiedPattern["regexOptions"]> = {};
+    if (entry.lazy === true) regexOptions.lazy = true;
+    if (entry.prefilterAny !== undefined) regexOptions.prefilterAny = entry.prefilterAny;
+    if (entry.prefilterCaseInsensitive !== undefined)
+      regexOptions.prefilterCaseInsensitive = entry.prefilterCaseInsensitive;
+    if (entry.prefilterRegex !== undefined) regexOptions.prefilterRegex = entry.prefilterRegex;
+    if (Object.keys(regexOptions).length > 0) {
+      result.regexOptions = regexOptions;
+    }
     return result;
   });
 }
