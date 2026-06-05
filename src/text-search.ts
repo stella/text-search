@@ -7,8 +7,8 @@ import type { Match, PatternEntry, TextSearchOptions } from "./types";
 const AUTO_REGEX_CHUNK_MAX_SIZE = 16;
 const AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET = 6;
 const AUTO_REGEX_ISOLATE_COMPLEXITY = 7;
-const SPLIT_IDENTITY_AC_MIN_PATTERNS = 120_000;
-const SPLIT_IDENTITY_AC_CHUNK_SIZE = 80_000;
+const SPLIT_IDENTITY_AC_CHUNK_SIZE = 20_000;
+const SPLIT_IDENTITY_AC_MIN_PATTERNS = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 
 /** Common engine interface for dispatch. */
 type Engine = {

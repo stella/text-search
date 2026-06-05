@@ -1,6 +1,6 @@
 {
   "name": "@stll/text-search-wasm",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Browser/WebAssembly build of @stll/text-search with the same API and Vite integration helpers.",
   "keywords": [
     "aho-corasick",
@@ -41,9 +41,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@stll/aho-corasick-wasm": "^1.0.2",
-    "@stll/fuzzy-search-wasm": "^1.1.0",
-    "@stll/regex-set-wasm": "^1.0.3"
+    "@stll/aho-corasick-wasm": "^1.0.3",
+    "@stll/fuzzy-search-wasm": "^1.1.1",
+    "@stll/regex-set-wasm": "^1.0.4"
   },
   "peerDependencies": {
     "vite": ">=5 <10"
