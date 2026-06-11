@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.6] - 2026-06-11
 
-### Added
+### Changed
 
-- Windows x64 support: require native engine versions that ship the
-  `win32-x64-msvc` binding (`aho-corasick` >=1.0.4, `fuzzy-search`
-  >=1.1.2, `regex-set` >=1.0.5).
+- Bump text-search to 1.0.6 with win32-capable engines (#56)
+
+## [1.0.5] - 2026-06-05
+
+### Changed
+
+- Refresh CHANGELOG.md (#48)
+- Use app token for changelog PRs (#49)
+- Standardize npm release workflow
+- Pin release workflow to npm visibility retry (#52)
+
+### Fixed
+
+- Keep large whole-word literal builds bounded
 
 ## [1.0.4] - 2026-06-04
 
@@ -65,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct license holder casing and fix non-code PR checks (#24)
 - Cut 1.0.0 (#25)
 
+[1.0.6]: https://github.com/stella/text-search/compare/v1.0.5..v1.0.6
+[1.0.5]: https://github.com/stella/text-search/compare/v1.0.4..v1.0.5
 [1.0.4]: https://github.com/stella/text-search/compare/v1.0.3..v1.0.4
 [1.0.3]: https://github.com/stella/text-search/compare/v1.0.2..v1.0.3
 [1.0.2]: https://github.com/stella/text-search/compare/v1.0.1..v1.0.2
