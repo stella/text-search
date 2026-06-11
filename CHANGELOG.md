@@ -1,19 +1,17 @@
 # Changelog
 
-## 1.0.6
-
-### Features
-
-- Windows support: require native engine versions that
-  ship the `win32-x64-msvc` binding (`aho-corasick`
-  >=1.0.4, `fuzzy-search` >=1.1.2, `regex-set`
-  >=1.0.5). `@stll/text-search` now loads natively on
-  Windows x64.
-
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.6] - 2026-06-11
+
+### Added
+
+- Windows x64 support: require native engine versions that ship the
+  `win32-x64-msvc` binding (`aho-corasick` >=1.0.4, `fuzzy-search`
+  >=1.1.2, `regex-set` >=1.0.5).
 
 ## [1.0.4] - 2026-06-04
 
