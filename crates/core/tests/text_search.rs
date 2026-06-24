@@ -166,6 +166,37 @@ fn lazy_regex_prefilter_skips_regex_build_when_prefilter_misses() {
 }
 
 #[test]
+fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
+  // A non-lazy regex carrying `prefilter_any` shares a chunked slot with other
+  // regexes. The prefilter must not be promoted to a slot-wide gate, otherwise
+  // a haystack that only matches a sibling pattern would be skipped. This
+  // mirrors the TS layer, which applies explicit prefilters to lazy patterns
+  // only.
+  let mut prefiltered = RegexPattern::new("foo");
+  prefiltered.prefilter_any.push(String::from("needle"));
+
+  let search = TextSearch::new(
+    vec![
+      PatternEntry::Regex(prefiltered),
+      PatternEntry::Regex(RegexPattern::new("bar")),
+    ],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  // "bar" contains neither "foo" nor the "needle" prefilter literal, yet the
+  // second pattern must still match.
+  let matches = search.find_iter("bar").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| found.pattern)
+      .collect::<Vec<_>>(),
+    vec![1]
+  );
+}
+
+#[test]
 fn all_literal_identity_sets_split_and_select_globally() {
   let mut patterns = (0..20_001)
     .map(|index| PatternEntry::from(format!("term-{index}")))

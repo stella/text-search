@@ -261,7 +261,7 @@ pub struct LiteralOptions {
   pub whole_words: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RegexOptions {
   pub lazy: bool,
   pub prefilter_any: Vec<String>,
@@ -385,13 +385,21 @@ impl TextSearch {
     for chunk in
       chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
     {
-      engines.push(EngineSlot::Regex(build_regex_engine(chunk, options)?));
+      engines
+        .push(EngineSlot::Regex(build_regex_engine(chunk, options, None)?));
     }
 
     for pattern in isolated_regex {
+      // Mirror the TS layer: isolated regexes carry their own prefilter
+      // options. Passing `Some(..)` (even when the pattern has no explicit
+      // options) marks this as the isolated path, which suppresses the
+      // shared-path leading-literal prefilter inference.
+      let lazy_options =
+        Some(pattern.regex_options.clone().unwrap_or_default());
       engines.push(EngineSlot::Regex(build_regex_engine(
         vec![pattern],
         options,
+        lazy_options,
       )?));
     }
 
@@ -498,9 +506,10 @@ impl TextSearch {
 
     let mut result = String::with_capacity(haystack.len());
     let mut last_byte = 0;
+    let mut converter = Utf16ToByteOffset::new(haystack);
     for found in matches {
-      let start = byte_offset_for_utf16(haystack, found.start)?;
-      let end = byte_offset_for_utf16(haystack, found.end)?;
+      let start = converter.find(haystack, found.start)?;
+      let end = converter.find(haystack, found.end)?;
       result.push_str(str_span(haystack, last_byte, start)?);
       let replacement_index = usize::try_from(found.pattern).map_err(|_| {
         Error::PatternIndexNotAddressable {
@@ -852,45 +861,33 @@ fn build_literal_engine(
   })
 }
 
+/// Builds a regex slot.
+///
+/// `lazy_options` mirrors the TS layer's `lazyOptions`: `None` marks the shared
+/// chunk path, `Some(..)` marks the isolated path. Explicit `prefilter_any`
+/// filters apply only to lazy patterns (always isolated, single-pattern slots),
+/// so a prefilter can never gate an unrelated pattern sharing the slot. The
+/// leading-literal prefilter is inferred only on the shared path for
+/// single-pattern chunks.
 fn build_regex_engine(
   patterns: Vec<ClassifiedPattern>,
   options: TextSearchOptions,
+  lazy_options: Option<RegexOptions>,
 ) -> Result<RegexSlot> {
-  let pattern_regex_options = patterns
-    .first()
-    .and_then(|pattern| pattern.regex_options.as_ref())
-    .cloned();
-  let is_lazy = pattern_regex_options
-    .as_ref()
-    .is_some_and(|regex_options| regex_options.lazy);
-  let explicit_prefilter = pattern_regex_options
-    .as_ref()
-    .filter(|regex_options| !regex_options.prefilter_any.is_empty())
-    .map(|regex_options| {
-      build_literal_prefilter(
-        &regex_options.prefilter_any,
-        regex_options
-          .prefilter_case_insensitive
-          .unwrap_or(options.case_insensitive),
-      )
-    })
-    .transpose()?;
-  let inferred_prefilter =
-    if explicit_prefilter.is_none() && !is_lazy && patterns.len() == 1 {
-      patterns
-        .first()
-        .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
-        .map(|prefilter| {
-          build_literal_prefilter(
-            &[prefilter.literal],
-            prefilter.case_insensitive || options.case_insensitive,
-          )
-        })
-        .transpose()?
-    } else {
-      None
-    };
-  let prefilter = explicit_prefilter.or(inferred_prefilter);
+  let inferred_prefilter = if lazy_options.is_none() && patterns.len() == 1 {
+    patterns
+      .first()
+      .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
+      .map(|prefilter| {
+        build_literal_prefilter(
+          &[prefilter.literal],
+          prefilter.case_insensitive || options.case_insensitive,
+        )
+      })
+      .transpose()?
+  } else {
+    None
+  };
 
   let mut values = Vec::with_capacity(patterns.len());
   let mut index_map = Vec::with_capacity(patterns.len());
@@ -905,17 +902,33 @@ fn build_regex_engine(
     whole_words: options.whole_words,
     unicode_boundaries: options.unicode_boundaries,
   };
-  let engine = if is_lazy {
-    RegexEngine::Lazy {
-      patterns: values,
-      options: engine_options,
-      cell: OnceLock::new(),
+
+  let (engine, prefilter) = match lazy_options {
+    Some(lazy_options) if lazy_options.lazy => {
+      let prefilter = if lazy_options.prefilter_any.is_empty() {
+        None
+      } else {
+        Some(build_literal_prefilter(
+          &lazy_options.prefilter_any,
+          lazy_options
+            .prefilter_case_insensitive
+            .unwrap_or(options.case_insensitive),
+        )?)
+      };
+      let engine = RegexEngine::Lazy {
+        patterns: values,
+        options: engine_options,
+        cell: OnceLock::new(),
+      };
+      (engine, prefilter)
     }
-  } else {
-    RegexEngine::Eager(Box::new(
-      regex_core::RegexSet::new(values, engine_options)
-        .map_err(|error| Error::BuildRegex(error.to_string()))?,
-    ))
+    _ => {
+      let engine = RegexEngine::Eager(Box::new(
+        regex_core::RegexSet::new(values, engine_options)
+          .map_err(|error| Error::BuildRegex(error.to_string()))?,
+      ));
+      (engine, inferred_prefilter)
+    }
   };
 
   Ok(RegexSlot {
@@ -1304,6 +1317,7 @@ fn extend_triple_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
+  let mut converter = Utf16ToByteOffset::new(haystack);
   for chunk in chunks {
     let [local_pattern, start, end] = chunk else {
       return Err(Error::InvalidPackedSearchResult {
@@ -1312,11 +1326,13 @@ fn extend_triple_matches(
       });
     };
     let (pattern, name) = remap_pattern(remap, *local_pattern)?;
+    let start_byte = converter.find(haystack, *start)?;
+    let end_byte = converter.find(haystack, *end)?;
     matches.push(Match {
       pattern,
       start: *start,
       end: *end,
-      text: text_by_utf16(haystack, *start, *end)?,
+      text: str_span(haystack, start_byte, end_byte)?.to_owned(),
       name,
       distance: None,
     });
@@ -1339,6 +1355,7 @@ fn extend_fuzzy_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
+  let mut converter = Utf16ToByteOffset::new(haystack);
   for chunk in chunks {
     let [local_pattern, start, end, distance] = chunk else {
       return Err(Error::InvalidPackedSearchResult {
@@ -1357,11 +1374,13 @@ fn extend_fuzzy_matches(
         len: packed.len(),
       });
     };
+    let start_byte = converter.find(haystack, *start)?;
+    let end_byte = converter.find(haystack, *end)?;
     matches.push(Match {
       pattern,
       start: *start,
       end: *end,
-      text: text_by_utf16(haystack, *start, *end)?,
+      text: str_span(haystack, start_byte, end_byte)?.to_owned(),
       name: name_map.get(pattern_index).cloned().flatten(),
       distance: Some(*distance),
     });
@@ -1613,30 +1632,55 @@ const fn is_quantifier_start(ch: char) -> bool {
   matches!(ch, '*' | '+' | '{')
 }
 
-fn text_by_utf16(haystack: &str, start: u32, end: u32) -> Result<String> {
-  let start_byte = byte_offset_for_utf16(haystack, start)?;
-  let end_byte = byte_offset_for_utf16(haystack, end)?;
-  Ok(str_span(haystack, start_byte, end_byte)?.to_owned())
-}
-
 fn str_span(haystack: &str, start: usize, end: usize) -> Result<&str> {
   haystack
     .get(start..end)
     .ok_or(Error::InvalidUtf8Span { start, end })
 }
 
-fn byte_offset_for_utf16(haystack: &str, target: u32) -> Result<usize> {
-  let mut offset = 0_u32;
-  for (byte_index, ch) in haystack.char_indices() {
-    if offset == target {
-      return Ok(byte_index);
+/// Stateful UTF-16 to byte offset translator.
+///
+/// Engine matches arrive sorted by start offset, so a single forward pass over
+/// the haystack resolves every offset in `O(N)` total instead of rescanning
+/// from the start for each lookup (`O(N * M)`). Offsets that move backwards
+/// (not expected, but cheap to guard) reset the cursor so the result stays
+/// correct regardless of call order.
+struct Utf16ToByteOffset<'a> {
+  char_indices: std::str::CharIndices<'a>,
+  current_byte: usize,
+  current_utf16: u32,
+}
+
+impl<'a> Utf16ToByteOffset<'a> {
+  fn new(haystack: &'a str) -> Self {
+    Self {
+      char_indices: haystack.char_indices(),
+      current_byte: 0,
+      current_utf16: 0,
     }
-    offset = offset.saturating_add(if ch.len_utf16() == 1 { 1 } else { 2 });
   }
-  if offset == target {
-    return Ok(haystack.len());
+
+  fn find(&mut self, haystack: &'a str, target: u32) -> Result<usize> {
+    if target < self.current_utf16 {
+      self.char_indices = haystack.char_indices();
+      self.current_byte = 0;
+      self.current_utf16 = 0;
+    }
+    while self.current_utf16 < target {
+      let Some((byte_index, ch)) = self.char_indices.next() else {
+        break;
+      };
+      self.current_byte = byte_index.saturating_add(ch.len_utf8());
+      self.current_utf16 = self
+        .current_utf16
+        .saturating_add(if ch.len_utf16() == 1 { 1 } else { 2 });
+    }
+    if self.current_utf16 == target {
+      Ok(self.current_byte)
+    } else {
+      Err(Error::InvalidUtf16Offset { offset: target })
+    }
   }
-  Err(Error::InvalidUtf16Offset { offset: target })
 }
 
 fn pattern_index(index: usize) -> Result<u32> {
