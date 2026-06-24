@@ -24,8 +24,6 @@ pub enum Error {
   InvalidPackedSearchResult { engine: SearchEngine, len: usize },
   PatternIndexOutOfRange { index: usize },
   PatternIndexNotAddressable { pattern: u32 },
-  InvalidUtf16Offset { offset: u32 },
-  ByteOffsetOutOfRange { offset: usize },
   InvalidUtf8Span { start: usize, end: usize },
   ReplacementCountMismatch { expected: usize, actual: usize },
   MissingReplacement { pattern: u32 },
@@ -52,12 +50,6 @@ impl fmt::Display for Error {
       }
       Self::PatternIndexNotAddressable { pattern } => {
         write!(formatter, "Pattern index is not addressable: {pattern}")
-      }
-      Self::InvalidUtf16Offset { offset } => {
-        write!(formatter, "Invalid UTF-16 offset: {offset}")
-      }
-      Self::ByteOffsetOutOfRange { offset } => {
-        write!(formatter, "Byte offset exceeds u32 range: {offset}")
       }
       Self::InvalidUtf8Span { start, end } => {
         write!(formatter, "Invalid UTF-8 span: {start}..{end}")
