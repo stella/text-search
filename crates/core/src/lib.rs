@@ -1303,7 +1303,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
       haystack,
       &slot
         .engine
-        .find_iter_packed(haystack)
+        .find_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?,
       &Remap::Mapped {
         index_map: &slot.index_map,
@@ -1320,7 +1320,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
         SearchEngine::Regex,
         haystack,
         &regex_slot_engine(slot)?
-          .find_iter_packed(haystack)
+          .find_iter_packed_bytes(haystack)
           .map_err(|error| Error::BuildRegex(error.to_string()))?,
         &Remap::Mapped {
           index_map: &slot.index_map,
@@ -1333,7 +1333,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
       haystack,
       &slot
         .engine
-        .find_iter_packed(haystack)
+        .find_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildFuzzy(error.to_string()))?,
       &slot.index_map,
       &slot.name_map,
@@ -1349,7 +1349,7 @@ fn split_literal_find_iter(
   for engine in &slot.engines {
     let packed = engine
       .engine
-      .find_overlapping_iter_packed(haystack)
+      .find_overlapping_iter_packed_bytes(haystack)
       .map_err(|error| Error::BuildLiteral(error.to_string()))?;
     matches.extend(extend_triple_matches(
       SearchEngine::Literal,
@@ -1390,7 +1390,6 @@ fn extend_triple_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
-  let mut converter = Utf16ToByteOffset::new(haystack);
   for chunk in chunks {
     let [local_pattern, start, end] = chunk else {
       return Err(Error::InvalidPackedSearchResult {
@@ -1399,13 +1398,13 @@ fn extend_triple_matches(
       });
     };
     let (pattern, name) = remap_pattern(remap, *local_pattern)?;
-    let start_byte = converter.find(haystack, *start)?;
-    let end_byte = converter.find(haystack, *end)?;
+    // Engines return UTF-8 byte offsets directly, so no conversion is needed.
     matches.push(Match {
       pattern,
-      start: offset_u32(start_byte)?,
-      end: offset_u32(end_byte)?,
-      text: str_span(haystack, start_byte, end_byte)?.to_owned(),
+      start: *start,
+      end: *end,
+      text: str_span(haystack, byte_index(*start), byte_index(*end))?
+        .to_owned(),
       name,
       distance: None,
     });
@@ -1428,7 +1427,6 @@ fn extend_fuzzy_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
-  let mut converter = Utf16ToByteOffset::new(haystack);
   for chunk in chunks {
     let [local_pattern, start, end, distance] = chunk else {
       return Err(Error::InvalidPackedSearchResult {
@@ -1447,13 +1445,13 @@ fn extend_fuzzy_matches(
         len: packed.len(),
       });
     };
-    let start_byte = converter.find(haystack, *start)?;
-    let end_byte = converter.find(haystack, *end)?;
+    // Engines return UTF-8 byte offsets directly, so no conversion is needed.
     matches.push(Match {
       pattern,
-      start: offset_u32(start_byte)?,
-      end: offset_u32(end_byte)?,
-      text: str_span(haystack, start_byte, end_byte)?.to_owned(),
+      start: *start,
+      end: *end,
+      text: str_span(haystack, byte_index(*start), byte_index(*end))?
+        .to_owned(),
       name: name_map.get(pattern_index).cloned().flatten(),
       distance: Some(*distance),
     });
@@ -1710,12 +1708,6 @@ fn str_span(haystack: &str, start: usize, end: usize) -> Result<&str> {
     .ok_or(Error::InvalidUtf8Span { start, end })
 }
 
-/// Narrows a `usize` byte offset to the `u32` used by [`Match`].
-fn offset_u32(value: usize) -> Result<u32> {
-  u32::try_from(value)
-    .map_err(|_| Error::ByteOffsetOutOfRange { offset: value })
-}
-
 /// Widens a [`Match`] `u32` byte offset to a `usize` index. `u32` always fits
 /// `usize` on supported (>= 32-bit pointer) targets; the fallback keeps the
 /// result in range so [`str_span`] reports a clean error otherwise.
@@ -1723,53 +1715,7 @@ fn byte_index(value: u32) -> usize {
   usize::try_from(value).unwrap_or(usize::MAX)
 }
 
-/// Stateful UTF-16 to byte offset translator.
-///
-/// Engine matches arrive sorted by start offset, so a single forward pass over
-/// the haystack resolves every offset in `O(N)` total instead of rescanning
-/// from the start for each lookup (`O(N * M)`). Offsets that move backwards
-/// (not expected, but cheap to guard) reset the cursor so the result stays
-/// correct regardless of call order.
-struct Utf16ToByteOffset<'a> {
-  char_indices: std::str::CharIndices<'a>,
-  current_byte: usize,
-  current_utf16: u32,
-}
-
-impl<'a> Utf16ToByteOffset<'a> {
-  fn new(haystack: &'a str) -> Self {
-    Self {
-      char_indices: haystack.char_indices(),
-      current_byte: 0,
-      current_utf16: 0,
-    }
-  }
-
-  fn find(&mut self, haystack: &'a str, target: u32) -> Result<usize> {
-    if target < self.current_utf16 {
-      self.char_indices = haystack.char_indices();
-      self.current_byte = 0;
-      self.current_utf16 = 0;
-    }
-    while self.current_utf16 < target {
-      let Some((byte_pos, ch)) = self.char_indices.next() else {
-        break;
-      };
-      self.current_byte = byte_pos.saturating_add(ch.len_utf8());
-      self.current_utf16 = self
-        .current_utf16
-        .saturating_add(if ch.len_utf16() == 1 { 1 } else { 2 });
-    }
-    if self.current_utf16 == target {
-      Ok(self.current_byte)
-    } else {
-      Err(Error::InvalidUtf16Offset { offset: target })
-    }
-  }
-}
-
-/// Stateful byte to UTF-16 offset translator: the inverse of
-/// [`Utf16ToByteOffset`], used only on the UTF-16 edge path
+/// Stateful byte to UTF-16 offset translator, used only on the UTF-16 edge path
 /// ([`TextSearch::find_iter_utf16`]). Same single forward pass with a
 /// backwards-move guard.
 struct ByteToUtf16Offset<'a> {
