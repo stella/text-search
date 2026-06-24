@@ -310,10 +310,12 @@ struct LiteralSlot {
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
   identity_map: bool,
+  overlap_strategy: OverlapStrategy,
 }
 
 struct SplitLiteralSlot {
   engines: Vec<SplitLiteralEngine>,
+  overlap_strategy: OverlapStrategy,
 }
 
 struct SplitLiteralEngine {
@@ -401,6 +403,7 @@ impl TextSearch {
       engines.push(EngineSlot::Literal(build_literal_engine(
         group,
         literal_options,
+        options.overlap_strategy,
       )?));
     }
 
@@ -875,7 +878,10 @@ fn build_identity_literal_engine(
         pattern_offset: pattern_index(offset)?,
       });
     }
-    return Ok(EngineSlot::SplitLiteral(SplitLiteralSlot { engines }));
+    return Ok(EngineSlot::SplitLiteral(SplitLiteralSlot {
+      engines,
+      overlap_strategy: options.overlap_strategy,
+    }));
   }
 
   Ok(EngineSlot::Literal(LiteralSlot {
@@ -883,12 +889,14 @@ fn build_identity_literal_engine(
     index_map: Vec::new(),
     name_map: Vec::new(),
     identity_map: true,
+    overlap_strategy: options.overlap_strategy,
   }))
 }
 
 fn build_literal_engine(
   patterns: Vec<ClassifiedPattern>,
   options: LiteralOptions,
+  overlap_strategy: OverlapStrategy,
 ) -> Result<LiteralSlot> {
   let mut values = Vec::with_capacity(patterns.len());
   let mut index_map = Vec::with_capacity(patterns.len());
@@ -904,6 +912,7 @@ fn build_literal_engine(
     index_map,
     name_map,
     identity_map: false,
+    overlap_strategy,
   })
 }
 
@@ -1290,19 +1299,24 @@ fn engine_is_match(engine: &EngineSlot, haystack: &str) -> Result<bool> {
 
 fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
   match engine {
-    EngineSlot::Literal(slot) => extend_triple_matches(
-      SearchEngine::Literal,
-      haystack,
-      &slot
-        .engine
-        .find_iter_packed_bytes(haystack)
-        .map_err(|error| Error::BuildLiteral(error.to_string()))?,
-      &Remap::Mapped {
-        index_map: &slot.index_map,
-        name_map: &slot.name_map,
-        identity: slot.identity_map,
-      },
-    ),
+    EngineSlot::Literal(slot) => {
+      let packed = if slot.overlap_strategy == OverlapStrategy::All {
+        slot.engine.find_overlapping_iter_packed_bytes(haystack)
+      } else {
+        slot.engine.find_iter_packed_bytes(haystack)
+      }
+      .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+      extend_triple_matches(
+        SearchEngine::Literal,
+        haystack,
+        &packed,
+        &Remap::Mapped {
+          index_map: &slot.index_map,
+          name_map: &slot.name_map,
+          identity: slot.identity_map,
+        },
+      )
+    }
     EngineSlot::SplitLiteral(slot) => split_literal_find_iter(slot, haystack),
     EngineSlot::Regex(slot) => {
       if !regex_prefilter_matches(slot, haystack)? {
@@ -1352,6 +1366,10 @@ fn split_literal_find_iter(
       },
     )?);
   }
+  if slot.overlap_strategy == OverlapStrategy::All {
+    return Ok(matches);
+  }
+
   Ok(select_leftmost_longest_matches(matches))
 }
 

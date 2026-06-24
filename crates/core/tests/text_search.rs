@@ -258,10 +258,73 @@ fn all_literal_identity_sets_split_and_select_globally() {
   assert_eq!(stats.split_literal_slots, 1);
   assert_eq!(stats.split_literal_engines, 2);
   let matches = search.find_iter("ALPHA beta").unwrap();
-  assert_eq!(matches.len(), 1);
-  let found = matches.first().unwrap();
-  assert_eq!(found.pattern, 20_000);
-  assert_eq!(found.text, "ALPHA beta");
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+  );
+}
+
+#[test]
+fn literal_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::from("Alice"),
+      PatternEntry::from("Alice Smith"),
+    ],
+    TextSearchOptions {
+      whole_words: true,
+      overlap_strategy: OverlapStrategy::All,
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn explicit_literal_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Literal(LiteralPattern {
+        pattern: String::from("Alice"),
+        name: None,
+        case_insensitive: None,
+        whole_words: Some(true),
+      }),
+      PatternEntry::Literal(LiteralPattern {
+        pattern: String::from("Alice Smith"),
+        name: None,
+        case_insensitive: None,
+        whole_words: Some(true),
+      }),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
 }
 
 #[test]
