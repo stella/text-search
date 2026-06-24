@@ -25,6 +25,7 @@ pub enum Error {
   PatternIndexOutOfRange { index: usize },
   PatternIndexNotAddressable { pattern: u32 },
   InvalidUtf16Offset { offset: u32 },
+  ByteOffsetOutOfRange { offset: usize },
   InvalidUtf8Span { start: usize, end: usize },
   ReplacementCountMismatch { expected: usize, actual: usize },
   MissingReplacement { pattern: u32 },
@@ -54,6 +55,9 @@ impl fmt::Display for Error {
       }
       Self::InvalidUtf16Offset { offset } => {
         write!(formatter, "Invalid UTF-16 offset: {offset}")
+      }
+      Self::ByteOffsetOutOfRange { offset } => {
+        write!(formatter, "Byte offset exceeds u32 range: {offset}")
       }
       Self::InvalidUtf8Span { start, end } => {
         write!(formatter, "Invalid UTF-8 span: {start}..{end}")
@@ -223,8 +227,29 @@ impl Default for TextSearchOptions {
   }
 }
 
+/// A match with UTF-8 byte offsets.
+///
+/// `start`/`end` are byte indices into the haystack, so `&haystack[start..end]`
+/// is the matched span with no conversion. This is the native unit for Rust
+/// consumers; use [`TextSearch::find_iter_utf16`] when offsets must index a
+/// UTF-16 string (e.g. at a JavaScript boundary).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Match {
+  pub pattern: u32,
+  pub start: u32,
+  pub end: u32,
+  pub text: String,
+  pub name: Option<String>,
+  pub distance: Option<u32>,
+}
+
+/// A match with UTF-16 code-unit offsets.
+///
+/// Derived from [`Match`] via [`TextSearch::find_iter_utf16`] for consumers that
+/// index UTF-16 strings. Rust consumers should prefer [`Match`] (byte offsets);
+/// converting to UTF-16 costs one extra linear pass over the haystack.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Utf16Match {
   pub pattern: u32,
   pub start: u32,
   pub end: u32,
@@ -477,6 +502,30 @@ impl TextSearch {
     Ok(merge_and_select(matches))
   }
 
+  /// Like [`find_iter`](Self::find_iter) but reports UTF-16 code-unit offsets.
+  ///
+  /// For consumers that index UTF-16 strings (e.g. a JavaScript boundary).
+  /// Rust consumers should prefer [`find_iter`](Self::find_iter); this variant
+  /// costs one additional linear pass to remap byte offsets to UTF-16.
+  pub fn find_iter_utf16(&self, haystack: &str) -> Result<Vec<Utf16Match>> {
+    let matches = self.find_iter(haystack)?;
+    let mut converter = ByteToUtf16Offset::new(haystack);
+    let mut out = Vec::with_capacity(matches.len());
+    for found in matches {
+      let start = converter.find(haystack, byte_index(found.start))?;
+      let end = converter.find(haystack, byte_index(found.end))?;
+      out.push(Utf16Match {
+        pattern: found.pattern,
+        start,
+        end,
+        text: found.text,
+        name: found.name,
+        distance: found.distance,
+      });
+    }
+    Ok(out)
+  }
+
   pub fn which_match(&self, haystack: &str) -> Result<Vec<u32>> {
     let mut matches = Vec::new();
     for engine in &self.engines {
@@ -511,10 +560,9 @@ impl TextSearch {
 
     let mut result = String::with_capacity(haystack.len());
     let mut last_byte = 0;
-    let mut converter = Utf16ToByteOffset::new(haystack);
     for found in matches {
-      let start = converter.find(haystack, found.start)?;
-      let end = converter.find(haystack, found.end)?;
+      let start = byte_index(found.start);
+      let end = byte_index(found.end);
       result.push_str(str_span(haystack, last_byte, start)?);
       let replacement_index = usize::try_from(found.pattern).map_err(|_| {
         Error::PatternIndexNotAddressable {
@@ -1355,8 +1403,8 @@ fn extend_triple_matches(
     let end_byte = converter.find(haystack, *end)?;
     matches.push(Match {
       pattern,
-      start: *start,
-      end: *end,
+      start: offset_u32(start_byte)?,
+      end: offset_u32(end_byte)?,
       text: str_span(haystack, start_byte, end_byte)?.to_owned(),
       name,
       distance: None,
@@ -1403,8 +1451,8 @@ fn extend_fuzzy_matches(
     let end_byte = converter.find(haystack, *end)?;
     matches.push(Match {
       pattern,
-      start: *start,
-      end: *end,
+      start: offset_u32(start_byte)?,
+      end: offset_u32(end_byte)?,
       text: str_span(haystack, start_byte, end_byte)?.to_owned(),
       name: name_map.get(pattern_index).cloned().flatten(),
       distance: Some(*distance),
@@ -1662,6 +1710,19 @@ fn str_span(haystack: &str, start: usize, end: usize) -> Result<&str> {
     .ok_or(Error::InvalidUtf8Span { start, end })
 }
 
+/// Narrows a `usize` byte offset to the `u32` used by [`Match`].
+fn offset_u32(value: usize) -> Result<u32> {
+  u32::try_from(value)
+    .map_err(|_| Error::ByteOffsetOutOfRange { offset: value })
+}
+
+/// Widens a [`Match`] `u32` byte offset to a `usize` index. `u32` always fits
+/// `usize` on supported (>= 32-bit pointer) targets; the fallback keeps the
+/// result in range so [`str_span`] reports a clean error otherwise.
+fn byte_index(value: u32) -> usize {
+  usize::try_from(value).unwrap_or(usize::MAX)
+}
+
 /// Stateful UTF-16 to byte offset translator.
 ///
 /// Engine matches arrive sorted by start offset, so a single forward pass over
@@ -1691,10 +1752,10 @@ impl<'a> Utf16ToByteOffset<'a> {
       self.current_utf16 = 0;
     }
     while self.current_utf16 < target {
-      let Some((byte_index, ch)) = self.char_indices.next() else {
+      let Some((byte_pos, ch)) = self.char_indices.next() else {
         break;
       };
-      self.current_byte = byte_index.saturating_add(ch.len_utf8());
+      self.current_byte = byte_pos.saturating_add(ch.len_utf8());
       self.current_utf16 = self
         .current_utf16
         .saturating_add(if ch.len_utf16() == 1 { 1 } else { 2 });
@@ -1703,6 +1764,51 @@ impl<'a> Utf16ToByteOffset<'a> {
       Ok(self.current_byte)
     } else {
       Err(Error::InvalidUtf16Offset { offset: target })
+    }
+  }
+}
+
+/// Stateful byte to UTF-16 offset translator: the inverse of
+/// [`Utf16ToByteOffset`], used only on the UTF-16 edge path
+/// ([`TextSearch::find_iter_utf16`]). Same single forward pass with a
+/// backwards-move guard.
+struct ByteToUtf16Offset<'a> {
+  char_indices: std::str::CharIndices<'a>,
+  current_byte: usize,
+  current_utf16: u32,
+}
+
+impl<'a> ByteToUtf16Offset<'a> {
+  fn new(haystack: &'a str) -> Self {
+    Self {
+      char_indices: haystack.char_indices(),
+      current_byte: 0,
+      current_utf16: 0,
+    }
+  }
+
+  fn find(&mut self, haystack: &'a str, target: usize) -> Result<u32> {
+    if target < self.current_byte {
+      self.char_indices = haystack.char_indices();
+      self.current_byte = 0;
+      self.current_utf16 = 0;
+    }
+    while self.current_byte < target {
+      let Some((byte_pos, ch)) = self.char_indices.next() else {
+        break;
+      };
+      self.current_byte = byte_pos.saturating_add(ch.len_utf8());
+      self.current_utf16 = self
+        .current_utf16
+        .saturating_add(if ch.len_utf16() == 1 { 1 } else { 2 });
+    }
+    if self.current_byte == target {
+      Ok(self.current_utf16)
+    } else {
+      Err(Error::InvalidUtf8Span {
+        start: target,
+        end: target,
+      })
     }
   }
 }

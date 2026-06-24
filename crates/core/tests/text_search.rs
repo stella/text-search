@@ -78,6 +78,42 @@ fn which_match_and_replace_all_use_original_indexes() {
 }
 
 #[test]
+fn find_iter_reports_byte_offsets_with_utf16_edge_variant() {
+  // `ä` is 2 UTF-8 bytes but 1 UTF-16 code unit, so the two units diverge.
+  let search = TextSearch::new(
+    vec![PatternEntry::from("b")],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  let bytes = search.find_iter("äb").unwrap();
+  let found = bytes.first().unwrap();
+  assert_eq!((found.start, found.end), (2, 3));
+  assert_eq!(found.text, "b");
+  // Byte offsets index the haystack directly.
+  assert_eq!(&"äb"[found.start as usize..found.end as usize], "b");
+
+  let utf16 = search.find_iter_utf16("äb").unwrap();
+  let found16 = utf16.first().unwrap();
+  assert_eq!((found16.start, found16.end), (1, 2));
+  assert_eq!(found16.text, "b");
+}
+
+#[test]
+fn replace_all_slices_multibyte_haystack_by_bytes() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from("ö")],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert_eq!(
+    search.replace_all("aöb", &[String::from("X")]).unwrap(),
+    "aXb"
+  );
+}
+
+#[test]
 fn literal_pattern_options_fall_back_to_global_options() {
   let search = TextSearch::new(
     vec![PatternEntry::Literal(LiteralPattern::new("alpha"))],
