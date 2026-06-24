@@ -85,6 +85,15 @@ Large alternation-heavy regexes are isolated into
 their own RegexSet instance so they do not poison
 the shared DFA for simpler patterns.
 
+## Rust core
+
+The repository also contains `stella-text-search-core`
+in `crates/core`. It mirrors the orchestration layer:
+classification, engine routing, regex chunking, lazy
+prefilters, split literal search, match merging, and
+replacement. The crate is not published yet; it exists
+as the native core boundary for downstream bindings.
+
 ## Options
 
 ```ts
@@ -144,6 +153,9 @@ bun test
 bun run lint
 bun run format
 bun run build
+cargo fmt --all --check
+cargo clippy --all-targets --locked
+cargo test --locked
 ```
 
 ## Built on

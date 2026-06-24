@@ -352,4 +352,15 @@ describe("fuzzy matching", () => {
     const result = ts.replaceAll("Smi1h and exact", ["[NAME]", "[WORD]"]);
     expect(result).toBe("[NAME] and [WORD]");
   });
+
+  test("case-insensitive prefilter folds like the engine", () => {
+    // The inferred leading-literal prefilter for `(?i)search` must fold like
+    // the regex engine. U+017F (long s) folds to `s` under Unicode simple case
+    // folding, so the engine matches `ſearch`. A `toLowerCase`-based prefilter
+    // would leave the long s unchanged and wrongly skip the regex.
+    const ts = new TextSearch(["(?i)search"]);
+    const matches = ts.findIter("ſearch");
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.start).toBe(0);
+  });
 });
