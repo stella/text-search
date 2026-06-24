@@ -247,3 +247,65 @@ fn classify_patterns_preserves_metadata() {
   assert_eq!(pattern.name.as_deref(), Some("test"));
   assert!(!pattern.is_literal);
 }
+
+#[test]
+fn case_insensitive_prefilter_uses_engine_case_folding() {
+  // The inferred leading-literal prefilter for `(?i)search` must fold like the
+  // regex engine. U+017F (long s) folds to `s` under Unicode simple case
+  // folding, so the engine matches `ſearch`. A `to_lowercase`-based prefilter
+  // would leave the long s unchanged and wrongly skip the regex, a false
+  // negative. Routing case-insensitive prefilters through Aho-Corasick keeps
+  // the gate consistent with the engine.
+  let search = TextSearch::new(
+    vec![PatternEntry::from("(?i)search")],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  let matches = search.find_iter("\u{017F}earch").unwrap();
+  assert_eq!(matches.len(), 1);
+  assert_eq!(matches.first().map(|found| found.start), Some(0));
+}
+
+#[test]
+fn lazy_regex_prefilter_regex_gates_engine_build() {
+  // `prefilter_regex` is a secondary gate: the regex engine is only evaluated
+  // when the prefilter regex also matches. The pattern `(` is invalid, so a
+  // gate miss must short-circuit without building the engine, and a gate hit
+  // must surface the build error. Mirrors the TS `prefilterRegex.test` gate.
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_regex = Some(String::from(r"\d{3}"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(!search.is_match("no digits here").unwrap());
+  assert!(search.is_match("year 123").is_err());
+}
+
+#[test]
+fn lazy_regex_prefilter_any_and_regex_are_combined() {
+  // When both prefilters are present they form an AND gate: the engine runs
+  // only if the literal prefilter and the regex prefilter both match.
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("token"));
+  regex.prefilter_regex = Some(String::from(r"\d{3}"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  // Literal present but regex misses: gated out, no build.
+  assert!(!search.is_match("token only").unwrap());
+  // Regex matches but literal missing: gated out, no build.
+  assert!(!search.is_match("123 only").unwrap());
+  // Both present: gate opens and the invalid engine build surfaces.
+  assert!(search.is_match("token 123").is_err());
+}

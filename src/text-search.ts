@@ -579,17 +579,18 @@ function buildLiteralPrefilter(
   options: { caseInsensitive: boolean },
 ): Engine {
   const unique = [...new Set(literals.filter((literal) => literal.length > 0))];
-  if (unique.length === 1) {
+  // Case-insensitive matching must use the engines' Unicode simple case
+  // folding, which `toLowerCase` does not replicate (e.g. `ſ` folds to `s` yet
+  // is already lowercase). Route case-insensitive prefilters through
+  // Aho-Corasick, which folds identically to the search engines; reserve the
+  // single-literal fast path for the case-sensitive exact-substring check.
+  if (unique.length === 1 && !options.caseInsensitive) {
     const literal = unique[0];
     if (literal === undefined) {
       throw new Error("Expected single literal after length check");
     }
-    const needle = options.caseInsensitive ? literal.toLowerCase() : literal;
     return {
-      isMatch: (haystack) =>
-        options.caseInsensitive
-          ? haystack.toLowerCase().includes(needle)
-          : haystack.includes(needle),
+      isMatch: (haystack) => haystack.includes(literal),
       findIter: () => [],
     };
   }

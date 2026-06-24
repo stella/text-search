@@ -114,6 +114,11 @@ pub struct RegexPattern {
   pub lazy: bool,
   pub prefilter_any: Vec<String>,
   pub prefilter_case_insensitive: Option<bool>,
+  /// Optional secondary regex prefilter (source string, inline flags such as
+  /// `(?i)` allowed). Mirrors the TS `prefilterRegex` `RegExp` gate: the slot's
+  /// regex engine is skipped unless this pattern also matches. Lazy patterns
+  /// only, matching the TS layer.
+  pub prefilter_regex: Option<String>,
 }
 
 impl RegexPattern {
@@ -125,6 +130,7 @@ impl RegexPattern {
       lazy: false,
       prefilter_any: Vec::new(),
       prefilter_case_insensitive: None,
+      prefilter_regex: None,
     }
   }
 }
@@ -266,6 +272,7 @@ pub struct RegexOptions {
   pub lazy: bool,
   pub prefilter_any: Vec<String>,
   pub prefilter_case_insensitive: Option<bool>,
+  pub prefilter_regex: Option<String>,
 }
 
 pub struct TextSearch {
@@ -300,6 +307,7 @@ struct SplitLiteralEngine {
 struct RegexSlot {
   engine: RegexEngine,
   prefilter: Option<LiteralPrefilter>,
+  prefilter_regex: Option<Box<regex_core::RegexSet>>,
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
 }
@@ -320,10 +328,7 @@ struct FuzzySlot {
 }
 
 enum LiteralPrefilter {
-  Single {
-    needle: String,
-    case_insensitive: bool,
-  },
+  Single { needle: String },
   Many(aho_core::AhoCorasick),
 }
 
@@ -569,6 +574,7 @@ pub fn classify_patterns(
             lazy: pattern.lazy,
             prefilter_any: pattern.prefilter_any.clone(),
             prefilter_case_insensitive: pattern.prefilter_case_insensitive,
+            prefilter_regex: pattern.prefilter_regex.clone(),
           }),
           regex_complexity: score_regex_complexity(
             &pattern.pattern,
@@ -903,7 +909,7 @@ fn build_regex_engine(
     unicode_boundaries: options.unicode_boundaries,
   };
 
-  let (engine, prefilter) = match lazy_options {
+  let (engine, prefilter, prefilter_regex) = match lazy_options {
     Some(lazy_options) if lazy_options.lazy => {
       let prefilter = if lazy_options.prefilter_any.is_empty() {
         None
@@ -915,25 +921,31 @@ fn build_regex_engine(
             .unwrap_or(options.case_insensitive),
         )?)
       };
+      let prefilter_regex = lazy_options
+        .prefilter_regex
+        .map(build_prefilter_regex)
+        .transpose()?
+        .map(Box::new);
       let engine = RegexEngine::Lazy {
         patterns: values,
         options: engine_options,
         cell: OnceLock::new(),
       };
-      (engine, prefilter)
+      (engine, prefilter, prefilter_regex)
     }
     _ => {
       let engine = RegexEngine::Eager(Box::new(
         regex_core::RegexSet::new(values, engine_options)
           .map_err(|error| Error::BuildRegex(error.to_string()))?,
       ));
-      (engine, inferred_prefilter)
+      (engine, inferred_prefilter, None)
     }
   };
 
   Ok(RegexSlot {
     engine,
     prefilter,
+    prefilter_regex,
     index_map,
     name_map,
   })
@@ -1154,16 +1166,14 @@ fn build_literal_prefilter(
     }
   }
 
-  if unique.len() == 1 {
+  // Case-insensitive matching must use the engines' Unicode simple case
+  // folding, which `str::to_lowercase` does not replicate (e.g. `ſ` folds to
+  // `s` yet is already lowercase). Route case-insensitive prefilters through
+  // Aho-Corasick, which folds identically to the search engines; reserve the
+  // single-literal fast path for the case-sensitive exact-substring check.
+  if unique.len() == 1 && !case_insensitive {
     let needle = unique.pop().unwrap_or_default();
-    return Ok(LiteralPrefilter::Single {
-      needle: if case_insensitive {
-        needle.to_lowercase()
-      } else {
-        needle
-      },
-      case_insensitive,
-    });
+    return Ok(LiteralPrefilter::Single { needle });
   }
 
   build_aho(
@@ -1174,6 +1184,21 @@ fn build_literal_prefilter(
     },
   )
   .map(LiteralPrefilter::Many)
+}
+
+/// Builds a secondary regex prefilter gate.
+///
+/// Mirrors the TS `prefilterRegex.test(haystack)` check: a bare match test with
+/// no whole-word wrapping, independent of the slot's own engine options.
+fn build_prefilter_regex(source: String) -> Result<regex_core::RegexSet> {
+  regex_core::RegexSet::new(
+    vec![source],
+    regex_core::Options {
+      whole_words: false,
+      unicode_boundaries: true,
+    },
+  )
+  .map_err(|error| Error::BuildRegex(error.to_string()))
 }
 
 fn build_aho(
@@ -1420,24 +1445,23 @@ fn remap_pattern(
 }
 
 fn regex_prefilter_matches(slot: &RegexSlot, haystack: &str) -> Result<bool> {
-  let Some(prefilter) = &slot.prefilter else {
-    return Ok(true);
-  };
-  match prefilter {
-    LiteralPrefilter::Single {
-      needle,
-      case_insensitive,
-    } => {
-      if *case_insensitive {
-        Ok(haystack.to_lowercase().contains(needle))
-      } else {
-        Ok(haystack.contains(needle))
-      }
+  if let Some(prefilter) = &slot.prefilter {
+    let literal_matches = match prefilter {
+      LiteralPrefilter::Single { needle } => haystack.contains(needle),
+      LiteralPrefilter::Many(engine) => engine
+        .is_match(haystack)
+        .map_err(|error| Error::BuildLiteral(error.to_string()))?,
+    };
+    if !literal_matches {
+      return Ok(false);
     }
-    LiteralPrefilter::Many(engine) => engine
-      .is_match(haystack)
-      .map_err(|error| Error::BuildLiteral(error.to_string())),
   }
+  if let Some(prefilter_regex) = &slot.prefilter_regex
+    && !prefilter_regex.is_match(haystack)
+  {
+    return Ok(false);
+  }
+  Ok(true)
 }
 
 fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
