@@ -91,7 +91,9 @@ fn find_iter_reports_byte_offsets_with_utf16_edge_variant() {
   assert_eq!((found.start, found.end), (2, 3));
   assert_eq!(found.text, "b");
   // Byte offsets index the haystack directly.
-  assert_eq!(&"äb"[found.start as usize..found.end as usize], "b");
+  let start = usize::try_from(found.start).unwrap();
+  let end = usize::try_from(found.end).unwrap();
+  assert_eq!("äb".get(start..end), Some("b"));
 
   let utf16 = search.find_iter_utf16("äb").unwrap();
   let found16 = utf16.first().unwrap();
