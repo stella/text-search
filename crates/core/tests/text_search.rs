@@ -201,7 +201,8 @@ fn prepared_artifacts_reject_missing_extra_and_mismatched_aho() {
   );
 
   let mut extra = artifacts.clone();
-  extra.aho_automata.push(Vec::new());
+  let duplicate = artifacts.aho_automata.first().unwrap().clone();
+  extra.aho_automata.push(duplicate);
   let extra_result =
     TextSearch::with_prepared_artifacts(base_patterns, options, &extra);
   assert!(
@@ -211,15 +212,36 @@ fn prepared_artifacts_reject_missing_extra_and_mismatched_aho() {
     ),
     "extra prepared Aho artifact should fail"
   );
+}
 
-  let mismatched = TextSearch::with_prepared_artifacts(
+#[test]
+fn prepared_artifacts_reject_stale_same_count_aho() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    ..TextSearchOptions::default()
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(vec![PatternEntry::from("alpha")], options)
+      .unwrap();
+
+  let stale = TextSearch::with_prepared_artifacts(
+    vec![PatternEntry::from("beta")],
+    options,
+    &artifacts,
+  );
+  assert!(
+    matches!(stale, Err(Error::PreparedAhoFingerprintMismatch { .. })),
+    "same-count stale prepared Aho artifacts should fail"
+  );
+
+  let mismatched_count = TextSearch::with_prepared_artifacts(
     vec![PatternEntry::from("alpha"), PatternEntry::from("beta")],
     options,
     &artifacts,
   );
   assert!(
     matches!(
-      mismatched,
+      mismatched_count,
       Err(Error::PreparedAhoPatternCountMismatch { .. })
     ),
     "wrong prepared Aho pattern count should fail"
@@ -317,7 +339,7 @@ fn prepared_artifacts_reject_invalid_bytes() {
 fn prepared_artifacts_reject_impossible_artifact_count() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&1u32.to_le_bytes());
+  bytes.extend_from_slice(&2u32.to_le_bytes());
   bytes.extend_from_slice(&u32::MAX.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
