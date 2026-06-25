@@ -364,7 +364,7 @@ impl TextSearch {
       && all_auto_patterns(&patterns)
       && !patterns.is_empty()
     {
-      engines.push(build_identity_literal_engine(&patterns, options)?);
+      engines.push(build_identity_literal_engine(patterns, options)?);
       return Ok(Self {
         engines,
         pattern_count,
@@ -372,7 +372,7 @@ impl TextSearch {
       });
     }
 
-    let classified = classify_patterns(&patterns, options.all_literal)?;
+    let classified = classify_pattern_entries(patterns, options.all_literal)?;
     let mut fuzzy = Vec::new();
     let mut literals = Vec::new();
     let mut shared_regex = Vec::new();
@@ -581,54 +581,71 @@ pub fn classify_patterns(
   entries: &[PatternEntry],
   all_literal: bool,
 ) -> Result<Vec<ClassifiedPattern>> {
+  classify_pattern_entries(entries.to_vec(), all_literal)
+}
+
+fn classify_pattern_entries(
+  entries: Vec<PatternEntry>,
+  all_literal: bool,
+) -> Result<Vec<ClassifiedPattern>> {
   let mut result = Vec::with_capacity(entries.len());
-  for (index, entry) in entries.iter().enumerate() {
+  for (index, entry) in entries.into_iter().enumerate() {
     let original_index = pattern_index(index)?;
     result.push(match entry {
       PatternEntry::Auto(pattern) => {
         let alternation_count = if all_literal {
           0
         } else {
-          count_alternations(pattern)
+          count_alternations(&pattern)
         };
+        let is_literal = all_literal || is_literal_pattern(&pattern);
+        let regex_complexity =
+          score_regex_complexity(&pattern, alternation_count);
         ClassifiedPattern {
           original_index,
-          pattern: pattern.clone(),
+          pattern,
           name: None,
           alternation_count,
-          is_literal: all_literal || is_literal_pattern(pattern),
+          is_literal,
           fuzzy_distance: None,
           ac_options: None,
           regex_options: None,
-          regex_complexity: score_regex_complexity(pattern, alternation_count),
+          regex_complexity,
         }
       }
-      PatternEntry::Regex(pattern) => {
-        let alternation_count = count_alternations(&pattern.pattern);
+      PatternEntry::Regex(regex_pattern) => {
+        let RegexPattern {
+          pattern: source,
+          name,
+          lazy,
+          prefilter_any,
+          prefilter_case_insensitive,
+          prefilter_regex,
+        } = regex_pattern;
+        let alternation_count = count_alternations(&source);
+        let regex_complexity =
+          score_regex_complexity(&source, alternation_count);
         ClassifiedPattern {
           original_index,
-          pattern: pattern.pattern.clone(),
-          name: pattern.name.clone(),
+          pattern: source,
+          name,
           alternation_count,
           is_literal: false,
           fuzzy_distance: None,
           ac_options: None,
           regex_options: Some(RegexOptions {
-            lazy: pattern.lazy,
-            prefilter_any: pattern.prefilter_any.clone(),
-            prefilter_case_insensitive: pattern.prefilter_case_insensitive,
-            prefilter_regex: pattern.prefilter_regex.clone(),
+            lazy,
+            prefilter_any,
+            prefilter_case_insensitive,
+            prefilter_regex,
           }),
-          regex_complexity: score_regex_complexity(
-            &pattern.pattern,
-            alternation_count,
-          ),
+          regex_complexity,
         }
       }
       PatternEntry::Literal(pattern) => ClassifiedPattern {
         original_index,
-        pattern: pattern.pattern.clone(),
-        name: pattern.name.clone(),
+        pattern: pattern.pattern,
+        name: pattern.name,
         alternation_count: 0,
         is_literal: true,
         fuzzy_distance: None,
@@ -643,8 +660,8 @@ pub fn classify_patterns(
       },
       PatternEntry::Fuzzy(pattern) => ClassifiedPattern {
         original_index,
-        pattern: pattern.pattern.clone(),
-        name: pattern.name.clone(),
+        pattern: pattern.pattern,
+        name: pattern.name,
         alternation_count: 0,
         is_literal: false,
         fuzzy_distance: Some(pattern.distance),
@@ -850,38 +867,57 @@ fn flush_chunk(
 }
 
 fn build_identity_literal_engine(
-  patterns: &[PatternEntry],
+  patterns: Vec<PatternEntry>,
   options: TextSearchOptions,
 ) -> Result<EngineSlot> {
-  let pattern_strings = patterns
-    .iter()
-    .filter_map(|pattern| match pattern {
-      PatternEntry::Auto(value) => Some(value.clone()),
-      _ => None,
-    })
-    .collect::<Vec<_>>();
+  let pattern_count = patterns.len();
 
   if options.whole_words
     && options.unicode_boundaries
-    && pattern_strings.len() >= SPLIT_IDENTITY_AC_MIN_PATTERNS
+    && pattern_count >= SPLIT_IDENTITY_AC_MIN_PATTERNS
   {
-    let mut engines = Vec::new();
-    for (chunk_index, chunk) in pattern_strings
-      .chunks(SPLIT_IDENTITY_AC_CHUNK_SIZE)
-      .enumerate()
-    {
-      let offset = chunk_index
-        .checked_mul(SPLIT_IDENTITY_AC_CHUNK_SIZE)
-        .ok_or(Error::PatternIndexOutOfRange { index: usize::MAX })?;
-      engines.push(SplitLiteralEngine {
-        engine: build_aho(chunk.to_vec(), options.into())?,
-        pattern_offset: pattern_index(offset)?,
-      });
+    let mut engines =
+      Vec::with_capacity(pattern_count.div_ceil(SPLIT_IDENTITY_AC_CHUNK_SIZE));
+    let mut offset = 0_usize;
+    let mut values =
+      Vec::with_capacity(pattern_count.min(SPLIT_IDENTITY_AC_CHUNK_SIZE));
+    for pattern in patterns {
+      let PatternEntry::Auto(value) = pattern else {
+        return Err(Error::BuildLiteral(String::from(
+          "Identity literal engine received a non-literal pattern",
+        )));
+      };
+      values.push(value);
+      if values.len() == SPLIT_IDENTITY_AC_CHUNK_SIZE {
+        push_split_literal_engine(&mut engines, values, offset, options)?;
+        offset = offset
+          .checked_add(SPLIT_IDENTITY_AC_CHUNK_SIZE)
+          .ok_or(Error::PatternIndexOutOfRange { index: usize::MAX })?;
+        values = Vec::with_capacity(
+          pattern_count
+            .saturating_sub(offset)
+            .min(SPLIT_IDENTITY_AC_CHUNK_SIZE),
+        );
+      }
     }
+    if !values.is_empty() {
+      push_split_literal_engine(&mut engines, values, offset, options)?;
+    }
+
     return Ok(EngineSlot::SplitLiteral(SplitLiteralSlot {
       engines,
       overlap_strategy: options.overlap_strategy,
     }));
+  }
+
+  let mut pattern_strings = Vec::with_capacity(pattern_count);
+  for pattern in patterns {
+    let PatternEntry::Auto(value) = pattern else {
+      return Err(Error::BuildLiteral(String::from(
+        "Identity literal engine received a non-literal pattern",
+      )));
+    };
+    pattern_strings.push(value);
   }
 
   Ok(EngineSlot::Literal(LiteralSlot {
@@ -891,6 +927,19 @@ fn build_identity_literal_engine(
     identity_map: true,
     overlap_strategy: options.overlap_strategy,
   }))
+}
+
+fn push_split_literal_engine(
+  engines: &mut Vec<SplitLiteralEngine>,
+  patterns: Vec<String>,
+  offset: usize,
+  options: TextSearchOptions,
+) -> Result<()> {
+  engines.push(SplitLiteralEngine {
+    engine: build_aho(patterns, options.into())?,
+    pattern_offset: pattern_index(offset)?,
+  });
+  Ok(())
 }
 
 fn build_literal_engine(
