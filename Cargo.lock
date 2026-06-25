@@ -81,7 +81,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "stella-aho-corasick-core"
 version = "1.0.4"
-source = "git+https://github.com/stella/aho-corasick?rev=28226295ca5df514cd915e7c26af6fd605348b81#28226295ca5df514cd915e7c26af6fd605348b81"
+source = "git+https://github.com/stella/aho-corasick?rev=38bdcbf11bfbe389c8f2b7b40eb03ac50371e1e1#38bdcbf11bfbe389c8f2b7b40eb03ac50371e1e1"
 dependencies = [
  "daachorse",
  "unicode-case-mapping",

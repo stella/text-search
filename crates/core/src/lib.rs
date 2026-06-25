@@ -352,6 +352,14 @@ impl PreparedTextSearchArtifacts {
       return Err(invalid_prepared_artifact("unsupported version"));
     }
     let count = reader.read_usize()?;
+    let min_payload_len = count
+      .checked_mul(std::mem::size_of::<u32>())
+      .ok_or_else(|| invalid_prepared_artifact("artifact count overflow"))?;
+    if min_payload_len > reader.remaining_len() {
+      return Err(invalid_prepared_artifact(
+        "artifact count exceeds payload length",
+      ));
+    }
     let mut aho_automata = Vec::with_capacity(count);
     for _ in 0..count {
       aho_automata.push(reader.read_len_prefixed_bytes()?.to_vec());
@@ -571,7 +579,24 @@ impl TextSearch {
     } else {
       let (slot, pattern_count) =
         load_identity_literal_engine(options, aho_mode)?;
-      (EngineSlot::Literal(slot), pattern_count)
+      if options.whole_words
+        && options.unicode_boundaries
+        && pattern_count >= SPLIT_IDENTITY_AC_MIN_PATTERNS
+      {
+        let LiteralSlot { engine, .. } = slot;
+        (
+          EngineSlot::SplitLiteral(SplitLiteralSlot {
+            engines: vec![SplitLiteralEngine {
+              engine,
+              pattern_offset: 0,
+            }],
+            overlap_strategy: options.overlap_strategy,
+          }),
+          pattern_count,
+        )
+      } else {
+        (EngineSlot::Literal(slot), pattern_count)
+      }
     };
 
     Ok(Self {
@@ -1677,6 +1702,10 @@ struct PreparedArtifactReader<'a> {
 impl<'a> PreparedArtifactReader<'a> {
   const fn new(bytes: &'a [u8]) -> Self {
     Self { bytes, offset: 0 }
+  }
+
+  const fn remaining_len(&self) -> usize {
+    self.bytes.len().saturating_sub(self.offset)
   }
 
   fn read_u32(&mut self) -> Result<u32> {

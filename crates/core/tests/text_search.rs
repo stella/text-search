@@ -277,6 +277,32 @@ fn prepared_all_literal_artifacts_load_without_patterns() {
 }
 
 #[test]
+fn prepared_all_literal_artifacts_preserve_exact_split_threshold() {
+  let mut patterns = (0..20_000)
+    .map(|index| PatternEntry::from(format!("term-{index}")))
+    .collect::<Vec<_>>();
+  *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    unicode_boundaries: true,
+    ..TextSearchOptions::default()
+  };
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let artifacts = TextSearch::prepare_artifacts(patterns, options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .unwrap();
+
+  assert_eq!(prepared.engine_stats(), direct.engine_stats());
+  assert_eq!(
+    prepared.find_iter("alpha").unwrap(),
+    direct.find_iter("alpha").unwrap()
+  );
+}
+
+#[test]
 fn prepared_artifacts_reject_invalid_bytes() {
   let error =
     PreparedTextSearchArtifacts::from_bytes(b"not-valid").unwrap_err();
@@ -284,6 +310,21 @@ fn prepared_artifacts_reject_invalid_bytes() {
   assert!(
     matches!(error, Error::PreparedArtifactInvalid { .. }),
     "invalid artifact bytes should fail at the format boundary"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_impossible_artifact_count() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&1u32.to_le_bytes());
+  bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "impossible artifact counts should fail before allocation"
   );
 }
 
