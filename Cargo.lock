@@ -27,6 +27,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
+name = "daachorse"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99251f238b74cd219a86fe6ea9328308ebb223fcbb5b8eb5aa400b847a41dded"
+
+[[package]]
 name = "fancy-regex"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,9 +81,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "stella-aho-corasick-core"
 version = "1.0.4"
-source = "git+https://github.com/stella/aho-corasick?rev=b67e487aedc17725f57fb5b5d60678475b6b6667#b67e487aedc17725f57fb5b5d60678475b6b6667"
+source = "git+https://github.com/stella/aho-corasick?rev=28226295ca5df514cd915e7c26af6fd605348b81#28226295ca5df514cd915e7c26af6fd605348b81"
 dependencies = [
- "aho-corasick",
+ "daachorse",
  "unicode-case-mapping",
 ]
 
