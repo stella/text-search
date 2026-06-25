@@ -606,6 +606,30 @@ fn explicit_literal_overlap_all_returns_same_start_matches() {
 }
 
 #[test]
+fn regex_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice")),
+      PatternEntry::Regex(RegexPattern::new("Alice Smith")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
 fn count_alternations_ignores_escaped_and_class_pipes() {
   assert_eq!(count_alternations("a|b|c"), 3);
   assert_eq!(count_alternations(r"a\|b"), 1);

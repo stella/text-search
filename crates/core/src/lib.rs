@@ -725,12 +725,23 @@ impl TextSearch {
       )?));
     }
 
-    for chunk in
-      chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-    {
-      engines.push(EngineSlot::Regex(build_regex_engine(
-        chunk, options, None, aho_mode,
-      )?));
+    if options.overlap_strategy == OverlapStrategy::All {
+      for pattern in shared_regex {
+        engines.push(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          None,
+          aho_mode,
+        )?));
+      }
+    } else {
+      for chunk in
+        chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
+      {
+        engines.push(EngineSlot::Regex(build_regex_engine(
+          chunk, options, None, aho_mode,
+        )?));
+      }
     }
 
     for pattern in isolated_regex {
