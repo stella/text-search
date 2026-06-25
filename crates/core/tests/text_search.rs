@@ -325,6 +325,31 @@ fn prepared_all_literal_artifacts_preserve_exact_split_threshold() {
 }
 
 #[test]
+fn prepared_all_literal_artifacts_reject_literal_option_mismatch() {
+  let patterns = vec![PatternEntry::from("alpha")];
+  let prepare_options = TextSearchOptions {
+    all_literal: true,
+    whole_words: false,
+    ..TextSearchOptions::default()
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns, prepare_options).unwrap();
+
+  let load_options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let loaded =
+    TextSearch::with_prepared_all_literal_artifacts(load_options, &artifacts);
+
+  assert!(
+    matches!(loaded, Err(Error::PreparedAhoOptionsMismatch { .. })),
+    "all-literal prepared artifacts should reject literal option drift"
+  );
+}
+
+#[test]
 fn prepared_artifacts_reject_invalid_bytes() {
   let error =
     PreparedTextSearchArtifacts::from_bytes(b"not-valid").unwrap_err();
@@ -339,7 +364,7 @@ fn prepared_artifacts_reject_invalid_bytes() {
 fn prepared_artifacts_reject_impossible_artifact_count() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&2u32.to_le_bytes());
+  bytes.extend_from_slice(&3u32.to_le_bytes());
   bytes.extend_from_slice(&u32::MAX.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
