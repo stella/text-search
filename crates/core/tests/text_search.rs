@@ -630,6 +630,30 @@ fn regex_overlap_all_returns_same_start_matches() {
 }
 
 #[test]
+fn regex_overlap_all_does_not_infer_single_pattern_prefilters() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice.*|Bob")),
+      PatternEntry::Regex(RegexPattern::new("Carol")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Bob and Carol").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 3, "Bob"), (1, 8, 13, "Carol")]
+  );
+}
+
+#[test]
 fn count_alternations_ignores_escaped_and_class_pipes() {
   assert_eq!(count_alternations("a|b|c"), 3);
   assert_eq!(count_alternations(r"a\|b"), 1);

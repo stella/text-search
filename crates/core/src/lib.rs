@@ -727,10 +727,12 @@ impl TextSearch {
 
     if options.overlap_strategy == OverlapStrategy::All {
       for pattern in shared_regex {
+        let regex_options =
+          Some(pattern.regex_options.clone().unwrap_or_default());
         engines.push(EngineSlot::Regex(build_regex_engine(
           vec![pattern],
           options,
-          None,
+          regex_options,
           aho_mode,
         )?));
       }
