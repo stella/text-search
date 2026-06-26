@@ -379,10 +379,25 @@ fn prepared_artifacts_reject_invalid_bytes() {
 }
 
 #[test]
+fn prepared_artifacts_reject_previous_artifact_version() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&4u32.to_le_bytes());
+  bytes.extend_from_slice(&0u32.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "previous prepared artifact versions should fail at the format boundary"
+  );
+}
+
+#[test]
 fn prepared_artifacts_reject_impossible_artifact_count() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&3u32.to_le_bytes());
+  bytes.extend_from_slice(&5u32.to_le_bytes());
   bytes.extend_from_slice(&u32::MAX.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
@@ -602,6 +617,54 @@ fn explicit_literal_overlap_all_returns_same_start_matches() {
       .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
       .collect::<Vec<_>>(),
     vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn regex_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice")),
+      PatternEntry::Regex(RegexPattern::new("Alice Smith")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn regex_overlap_all_does_not_infer_single_pattern_prefilters() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice.*|Bob")),
+      PatternEntry::Regex(RegexPattern::new("Carol")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Bob and Carol").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 3, "Bob"), (1, 8, 13, "Carol")]
   );
 }
 

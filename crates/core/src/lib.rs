@@ -16,7 +16,7 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 4;
+const PREPARED_ARTIFACTS_VERSION: u32 = 5;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
@@ -725,12 +725,25 @@ impl TextSearch {
       )?));
     }
 
-    for chunk in
-      chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-    {
-      engines.push(EngineSlot::Regex(build_regex_engine(
-        chunk, options, None, aho_mode,
-      )?));
+    if options.overlap_strategy == OverlapStrategy::All {
+      for pattern in shared_regex {
+        let regex_options =
+          Some(pattern.regex_options.clone().unwrap_or_default());
+        engines.push(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          regex_options,
+          aho_mode,
+        )?));
+      }
+    } else {
+      for chunk in
+        chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
+      {
+        engines.push(EngineSlot::Regex(build_regex_engine(
+          chunk, options, None, aho_mode,
+        )?));
+      }
     }
 
     for pattern in isolated_regex {
