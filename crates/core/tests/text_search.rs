@@ -5,9 +5,9 @@
 )]
 
 use stella_text_search_core::{
-  FuzzyDistance, FuzzyPattern, LiteralPattern, OverlapStrategy, PatternEntry,
-  RegexPattern, TextSearch, TextSearchOptions, classify_patterns,
-  count_alternations,
+  Error, FuzzyDistance, FuzzyPattern, LiteralPattern, OverlapStrategy,
+  PatternEntry, PreparedTextSearchArtifacts, RegexPattern, TextSearch,
+  TextSearchOptions, classify_patterns, count_alternations,
 };
 
 #[test]
@@ -112,6 +112,299 @@ fn replace_all_slices_multibyte_haystack_by_bytes() {
   assert_eq!(
     search.replace_all("aöb", &[String::from("X")]).unwrap(),
     "aXb"
+  );
+}
+
+#[test]
+fn prepared_artifacts_match_direct_search() {
+  let mut literal = LiteralPattern::new("Alice");
+  literal.name = Some(String::from("person"));
+  let patterns = vec![
+    PatternEntry::Literal(literal),
+    PatternEntry::from(r"\d+"),
+    PatternEntry::from("signed"),
+  ];
+  let options = TextSearchOptions {
+    case_insensitive: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert!(
+    !artifacts.aho_automata.is_empty(),
+    "literal engines should produce prepared Aho artifacts"
+  );
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+  let haystack = "Alice signed 123";
+
+  assert_eq!(
+    prepared.find_iter(haystack).unwrap(),
+    direct.find_iter(haystack).unwrap()
+  );
+  assert_eq!(
+    prepared.which_match(haystack).unwrap(),
+    direct.which_match(haystack).unwrap()
+  );
+}
+
+#[test]
+fn prepared_artifacts_preserve_ascii_boundaries() {
+  let patterns = vec![PatternEntry::from("idea")];
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    unicode_boundaries: false,
+    ..TextSearchOptions::default()
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let search =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  let matches = search.find_iter("нетidea").unwrap();
+  assert_eq!(matches.len(), 1);
+  assert_eq!(
+    matches
+      .first()
+      .map(|found| (found.start, found.end, found.text.as_str())),
+    Some((6, 10, "idea"))
+  );
+  assert!(
+    search.find_iter("xidea").unwrap().is_empty(),
+    "ASCII boundary mode should reject ASCII word neighbors"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_missing_extra_and_mismatched_aho() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    ..TextSearchOptions::default()
+  };
+  let base_patterns = vec![PatternEntry::from("alpha")];
+  let artifacts =
+    TextSearch::prepare_artifacts(base_patterns.clone(), options).unwrap();
+  let empty_artifacts = PreparedTextSearchArtifacts::default();
+
+  let missing = TextSearch::with_prepared_artifacts(
+    base_patterns.clone(),
+    options,
+    &empty_artifacts,
+  );
+  assert!(
+    matches!(missing, Err(Error::PreparedAhoArtifactMissing { .. })),
+    "missing prepared Aho artifact should fail"
+  );
+
+  let mut extra = artifacts.clone();
+  let duplicate = artifacts.aho_automata.first().unwrap().clone();
+  extra.aho_automata.push(duplicate);
+  let extra_result =
+    TextSearch::with_prepared_artifacts(base_patterns, options, &extra);
+  assert!(
+    matches!(
+      extra_result,
+      Err(Error::PreparedAhoArtifactCountMismatch { .. })
+    ),
+    "extra prepared Aho artifact should fail"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_stale_same_count_aho() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    ..TextSearchOptions::default()
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(vec![PatternEntry::from("alpha")], options)
+      .unwrap();
+
+  let stale = TextSearch::with_prepared_artifacts(
+    vec![PatternEntry::from("beta")],
+    options,
+    &artifacts,
+  );
+  assert!(
+    matches!(stale, Err(Error::PreparedAhoFingerprintMismatch { .. })),
+    "same-count stale prepared Aho artifacts should fail"
+  );
+
+  let mismatched_count = TextSearch::with_prepared_artifacts(
+    vec![PatternEntry::from("alpha"), PatternEntry::from("beta")],
+    options,
+    &artifacts,
+  );
+  assert!(
+    matches!(
+      mismatched_count,
+      Err(Error::PreparedAhoPatternCountMismatch { .. })
+    ),
+    "wrong prepared Aho pattern count should fail"
+  );
+}
+
+#[test]
+fn prepared_artifacts_roundtrip_bytes() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    case_insensitive: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let patterns = vec![PatternEntry::from("alpha"), PatternEntry::from("beta")];
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let bytes = artifacts.to_bytes().unwrap();
+  let decoded = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
+
+  assert_eq!(decoded, artifacts);
+
+  let search =
+    TextSearch::with_prepared_artifacts(patterns, options, &decoded).unwrap();
+  assert_eq!(search.find_iter("alpha beta").unwrap().len(), 2);
+}
+
+#[test]
+fn prepared_all_literal_artifacts_load_without_patterns() {
+  let mut patterns = (0..20_001)
+    .map(|index| PatternEntry::from(format!("term-{index}")))
+    .collect::<Vec<_>>();
+  *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
+  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    case_insensitive: true,
+    overlap_strategy: OverlapStrategy::All,
+    ..TextSearchOptions::default()
+  };
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let artifacts = TextSearch::prepare_artifacts(patterns, options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .unwrap();
+
+  assert_eq!(prepared.len(), direct.len());
+  assert_eq!(prepared.engine_stats(), direct.engine_stats());
+  assert_eq!(
+    prepared.find_iter("ALPHA beta").unwrap(),
+    direct.find_iter("ALPHA beta").unwrap()
+  );
+}
+
+#[test]
+fn prepared_all_literal_artifacts_preserve_exact_split_threshold() {
+  let mut patterns = (0..20_000)
+    .map(|index| PatternEntry::from(format!("term-{index}")))
+    .collect::<Vec<_>>();
+  *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    unicode_boundaries: true,
+    ..TextSearchOptions::default()
+  };
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let artifacts = TextSearch::prepare_artifacts(patterns, options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .unwrap();
+
+  assert_eq!(prepared.engine_stats(), direct.engine_stats());
+  assert_eq!(
+    prepared.find_iter("alpha").unwrap(),
+    direct.find_iter("alpha").unwrap()
+  );
+}
+
+#[test]
+fn prepared_all_literal_artifacts_reject_literal_option_mismatch() {
+  let patterns = vec![PatternEntry::from("alpha")];
+  let prepare_options = TextSearchOptions {
+    all_literal: true,
+    whole_words: false,
+    ..TextSearchOptions::default()
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns, prepare_options).unwrap();
+
+  let load_options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let loaded =
+    TextSearch::with_prepared_all_literal_artifacts(load_options, &artifacts);
+
+  assert!(
+    matches!(loaded, Err(Error::PreparedAhoOptionsMismatch { .. })),
+    "all-literal prepared artifacts should reject literal option drift"
+  );
+}
+
+#[test]
+fn prepared_all_literal_artifacts_reject_non_identity_artifacts() {
+  let patterns = vec![
+    PatternEntry::Fuzzy(FuzzyPattern::new("alpha", FuzzyDistance::Exact(1))),
+    PatternEntry::from("beta"),
+  ];
+  let options = TextSearchOptions::default();
+  let artifacts = TextSearch::prepare_artifacts(patterns, options).unwrap();
+
+  let loaded =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts);
+
+  assert!(
+    matches!(loaded, Err(Error::PreparedAhoIdentityMismatch { .. })),
+    "no-pattern all-literal loading should require identity artifacts"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_invalid_bytes() {
+  let error =
+    PreparedTextSearchArtifacts::from_bytes(b"not-valid").unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "invalid artifact bytes should fail at the format boundary"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_previous_artifact_version() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&4u32.to_le_bytes());
+  bytes.extend_from_slice(&0u32.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "previous prepared artifact versions should fail at the format boundary"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_impossible_artifact_count() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&5u32.to_le_bytes());
+  bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "impossible artifact counts should fail before allocation"
   );
 }
 
@@ -258,10 +551,121 @@ fn all_literal_identity_sets_split_and_select_globally() {
   assert_eq!(stats.split_literal_slots, 1);
   assert_eq!(stats.split_literal_engines, 2);
   let matches = search.find_iter("ALPHA beta").unwrap();
-  assert_eq!(matches.len(), 1);
-  let found = matches.first().unwrap();
-  assert_eq!(found.pattern, 20_000);
-  assert_eq!(found.text, "ALPHA beta");
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+  );
+}
+
+#[test]
+fn literal_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::from("Alice"),
+      PatternEntry::from("Alice Smith"),
+    ],
+    TextSearchOptions {
+      whole_words: true,
+      overlap_strategy: OverlapStrategy::All,
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn explicit_literal_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Literal(LiteralPattern {
+        pattern: String::from("Alice"),
+        name: None,
+        case_insensitive: None,
+        whole_words: Some(true),
+      }),
+      PatternEntry::Literal(LiteralPattern {
+        pattern: String::from("Alice Smith"),
+        name: None,
+        case_insensitive: None,
+        whole_words: Some(true),
+      }),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn regex_overlap_all_returns_same_start_matches() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice")),
+      PatternEntry::Regex(RegexPattern::new("Alice Smith")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Alice Smith signed").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 5, "Alice"), (1, 0, 11, "Alice Smith")]
+  );
+}
+
+#[test]
+fn regex_overlap_all_does_not_infer_single_pattern_prefilters() {
+  let search = TextSearch::new(
+    [
+      PatternEntry::Regex(RegexPattern::new("Alice.*|Bob")),
+      PatternEntry::Regex(RegexPattern::new("Carol")),
+    ],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let matches = search.find_iter("Bob and Carol").unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 3, "Bob"), (1, 8, 13, "Carol")]
+  );
 }
 
 #[test]
