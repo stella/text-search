@@ -382,7 +382,7 @@ fn prepared_artifacts_reject_invalid_bytes() {
 fn prepared_artifacts_reject_previous_artifact_version() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&3u32.to_le_bytes());
+  bytes.extend_from_slice(&4u32.to_le_bytes());
   bytes.extend_from_slice(&0u32.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
@@ -397,7 +397,7 @@ fn prepared_artifacts_reject_previous_artifact_version() {
 fn prepared_artifacts_reject_impossible_artifact_count() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&4u32.to_le_bytes());
+  bytes.extend_from_slice(&5u32.to_le_bytes());
   bytes.extend_from_slice(&u32::MAX.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
