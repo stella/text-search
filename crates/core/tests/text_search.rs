@@ -350,6 +350,24 @@ fn prepared_all_literal_artifacts_reject_literal_option_mismatch() {
 }
 
 #[test]
+fn prepared_all_literal_artifacts_reject_non_identity_artifacts() {
+  let patterns = vec![
+    PatternEntry::Fuzzy(FuzzyPattern::new("alpha", FuzzyDistance::Exact(1))),
+    PatternEntry::from("beta"),
+  ];
+  let options = TextSearchOptions::default();
+  let artifacts = TextSearch::prepare_artifacts(patterns, options).unwrap();
+
+  let loaded =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts);
+
+  assert!(
+    matches!(loaded, Err(Error::PreparedAhoIdentityMismatch { .. })),
+    "no-pattern all-literal loading should require identity artifacts"
+  );
+}
+
+#[test]
 fn prepared_artifacts_reject_invalid_bytes() {
   let error =
     PreparedTextSearchArtifacts::from_bytes(b"not-valid").unwrap_err();

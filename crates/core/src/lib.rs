@@ -16,8 +16,9 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 3;
+const PREPARED_ARTIFACTS_VERSION: u32 = 4;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
+  + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u32>();
 const AHO_FINGERPRINT_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -65,6 +66,9 @@ pub enum Error {
     artifact: usize,
   },
   PreparedAhoOptionsMismatch {
+    artifact: usize,
+  },
+  PreparedAhoIdentityMismatch {
     artifact: usize,
   },
   PreparedArtifactInvalid {
@@ -130,6 +134,10 @@ impl fmt::Display for Error {
       Self::PreparedAhoOptionsMismatch { artifact } => write!(
         formatter,
         "Prepared Aho artifact {artifact} was built with different literal options"
+      ),
+      Self::PreparedAhoIdentityMismatch { artifact } => write!(
+        formatter,
+        "Prepared Aho artifact {artifact} was not built as an identity literal artifact"
       ),
       Self::PreparedArtifactInvalid { reason } => {
         write!(formatter, "Prepared artifact is invalid: {reason}")
@@ -352,6 +360,7 @@ pub struct PreparedTextSearchArtifacts {
 pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
   pub options: LiteralOptions,
+  pub identity: bool,
   pub bytes: Vec<u8>,
 }
 
@@ -367,6 +376,7 @@ impl PreparedTextSearchArtifacts {
     for artifact in &self.aho_automata {
       write_u64(&mut bytes, artifact.fingerprint);
       write_u8(&mut bytes, literal_options_to_flags(artifact.options));
+      write_u8(&mut bytes, u8::from(artifact.identity));
       write_u32(
         &mut bytes,
         checked_len_u32(artifact.bytes.len(), "aho_automata.bytes")?,
@@ -399,10 +409,12 @@ impl PreparedTextSearchArtifacts {
     for _ in 0..count {
       let fingerprint = reader.read_u64()?;
       let options = literal_options_from_flags(reader.read_u8()?)?;
+      let identity = read_identity_flag(reader.read_u8()?)?;
       let automaton = reader.read_len_prefixed_bytes()?.to_vec();
       aho_automata.push(PreparedAhoArtifact {
         fingerprint,
         options,
+        identity,
         bytes: automaton,
       });
     }
@@ -525,7 +537,7 @@ impl AhoBuildMode<'_> {
 
   fn next_prepared_aho(
     &mut self,
-  ) -> Result<(usize, LiteralOptions, u64, &[u8])> {
+  ) -> Result<(usize, LiteralOptions, bool, u64, &[u8])> {
     let Self::Load { automata, index } = self else {
       return Err(Error::BuildLiteral(String::from(
         "Prepared Aho artifact requested outside load mode",
@@ -539,6 +551,7 @@ impl AhoBuildMode<'_> {
     Ok((
       current,
       artifact.options,
+      artifact.identity,
       artifact.fingerprint,
       &artifact.bytes,
     ))
@@ -1242,7 +1255,7 @@ fn build_identity_literal_engine(
   }
 
   Ok(EngineSlot::Literal(LiteralSlot {
-    engine: build_aho(pattern_strings, options.into(), aho_mode)?,
+    engine: build_aho(pattern_strings, options.into(), true, aho_mode)?,
     index_map: Vec::new(),
     name_map: Vec::new(),
     identity_map: true,
@@ -1258,7 +1271,7 @@ fn push_split_literal_engine(
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<()> {
   engines.push(SplitLiteralEngine {
-    engine: build_aho(patterns, options.into(), aho_mode)?,
+    engine: build_aho(patterns, options.into(), true, aho_mode)?,
     pattern_offset: pattern_index(offset)?,
   });
   Ok(())
@@ -1273,9 +1286,10 @@ fn load_split_literal_engines(
   let mut engines = Vec::with_capacity(automata_count);
   let mut offset = 0usize;
   for _ in 0..automata_count {
-    let (artifact, actual_options, _, engine, count) =
+    let (artifact, actual_options, actual_identity, _, engine, count) =
       load_prepared_aho_any(aho_mode)?;
     validate_prepared_aho_options(artifact, actual_options, expected_options)?;
+    validate_prepared_aho_identity(artifact, actual_identity, true)?;
     engines.push(SplitLiteralEngine {
       engine,
       pattern_offset: pattern_index(offset)?,
@@ -1301,9 +1315,10 @@ fn load_identity_literal_engine(
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<(LiteralSlot, usize)> {
   let expected_options = options.into();
-  let (artifact, actual_options, _, engine, pattern_count) =
+  let (artifact, actual_options, actual_identity, _, engine, pattern_count) =
     load_prepared_aho_any(aho_mode)?;
   validate_prepared_aho_options(artifact, actual_options, expected_options)?;
+  validate_prepared_aho_identity(artifact, actual_identity, true)?;
   let pattern_count = usize::try_from(pattern_count)
     .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
   Ok((
@@ -1334,7 +1349,7 @@ fn build_literal_engine(
   }
 
   Ok(LiteralSlot {
-    engine: build_aho(values, options, aho_mode)?,
+    engine: build_aho(values, options, false, aho_mode)?,
     index_map,
     name_map,
     identity_map: false,
@@ -1662,6 +1677,7 @@ fn build_literal_prefilter(
       whole_words: false,
       unicode_boundaries: true,
     },
+    false,
     aho_mode,
   )
   .map(Box::new)
@@ -1686,6 +1702,7 @@ fn build_prefilter_regex(source: String) -> Result<regex_core::RegexSet> {
 fn build_aho(
   patterns: Vec<String>,
   options: LiteralOptions,
+  identity: bool,
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<aho_core::AhoCorasick> {
   let expected = u32::try_from(patterns.len()).map_err(|_| {
@@ -1714,6 +1731,7 @@ fn build_aho(
       automata.push(PreparedAhoArtifact {
         fingerprint,
         options,
+        identity,
         bytes,
       });
       Ok(engine)
@@ -1722,7 +1740,7 @@ fn build_aho(
       let fingerprint = aho_fingerprint(&patterns, options)?;
       let expected = usize::try_from(expected)
         .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
-      load_prepared_aho(aho_mode, expected, fingerprint)
+      load_prepared_aho(aho_mode, expected, fingerprint, identity)
     }
   }
 }
@@ -1731,10 +1749,11 @@ fn load_prepared_aho(
   aho_mode: &mut AhoBuildMode<'_>,
   expected: usize,
   fingerprint: u64,
+  identity: bool,
 ) -> Result<aho_core::AhoCorasick> {
   let expected = u32::try_from(expected)
     .map_err(|_| Error::PatternIndexOutOfRange { index: expected })?;
-  let (artifact, _, actual_fingerprint, engine, actual) =
+  let (artifact, _, actual_identity, actual_fingerprint, engine, actual) =
     load_prepared_aho_any(aho_mode)?;
   if actual != expected {
     return Err(Error::PreparedAhoPatternCountMismatch {
@@ -1746,17 +1765,19 @@ fn load_prepared_aho(
   if actual_fingerprint != fingerprint {
     return Err(Error::PreparedAhoFingerprintMismatch { artifact });
   }
+  validate_prepared_aho_identity(artifact, actual_identity, identity)?;
   Ok(engine)
 }
 
 fn load_prepared_aho_any(
   aho_mode: &mut AhoBuildMode<'_>,
-) -> Result<(usize, LiteralOptions, u64, aho_core::AhoCorasick, u32)> {
-  let (artifact, options, fingerprint, bytes) = aho_mode.next_prepared_aho()?;
+) -> Result<(usize, LiteralOptions, bool, u64, aho_core::AhoCorasick, u32)> {
+  let (artifact, options, identity, fingerprint, bytes) =
+    aho_mode.next_prepared_aho()?;
   let engine = aho_core::AhoCorasick::from_prepared(bytes)
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
   let actual = engine.pattern_count();
-  Ok((artifact, options, fingerprint, engine, actual))
+  Ok((artifact, options, identity, fingerprint, engine, actual))
 }
 
 fn validate_prepared_aho_options(
@@ -1768,6 +1789,17 @@ fn validate_prepared_aho_options(
     return Ok(());
   }
   Err(Error::PreparedAhoOptionsMismatch { artifact })
+}
+
+const fn validate_prepared_aho_identity(
+  artifact: usize,
+  actual: bool,
+  expected: bool,
+) -> Result<()> {
+  if actual == expected {
+    return Ok(());
+  }
+  Err(Error::PreparedAhoIdentityMismatch { artifact })
 }
 
 fn aho_fingerprint(
@@ -1833,6 +1865,16 @@ fn literal_options_from_flags(flags: u8) -> Result<LiteralOptions> {
     whole_words: flags & PREPARED_LITERAL_WHOLE_WORDS != 0,
     unicode_boundaries: flags & PREPARED_LITERAL_UNICODE_BOUNDARIES != 0,
   })
+}
+
+fn read_identity_flag(value: u8) -> Result<bool> {
+  match value {
+    0 => Ok(false),
+    1 => Ok(true),
+    _ => Err(invalid_prepared_artifact(
+      "unsupported identity artifact flag",
+    )),
+  }
 }
 
 struct PreparedArtifactReader<'a> {
