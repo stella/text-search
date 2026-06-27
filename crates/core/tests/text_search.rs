@@ -564,6 +564,22 @@ fn prepared_artifacts_reject_impossible_artifact_count() {
 }
 
 #[test]
+fn prepared_artifacts_reject_impossible_regex_artifact_count() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&6u32.to_le_bytes());
+  bytes.extend_from_slice(&0u32.to_le_bytes());
+  bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "impossible regex artifact counts should fail before allocation"
+  );
+}
+
+#[test]
 fn literal_pattern_options_fall_back_to_global_options() {
   let search = TextSearch::new(
     vec![PatternEntry::Literal(LiteralPattern::new("alpha"))],

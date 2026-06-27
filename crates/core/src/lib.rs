@@ -453,6 +453,16 @@ impl PreparedTextSearchArtifacts {
       });
     }
     let regex_count = reader.read_usize()?;
+    let min_regex_payload_len = regex_count
+      .checked_mul(std::mem::size_of::<u32>())
+      .ok_or_else(|| {
+        invalid_prepared_artifact("regex artifact count overflow")
+      })?;
+    if min_regex_payload_len > reader.remaining_len() {
+      return Err(invalid_prepared_artifact(
+        "regex artifact count exceeds payload length",
+      ));
+    }
     let mut regex_sets = Vec::with_capacity(regex_count);
     for _ in 0..regex_count {
       regex_sets.push(PreparedRegexArtifact {
@@ -1632,14 +1642,13 @@ fn build_regex_set(
     RegexBuildMode::Capture(artifacts) => {
       let bytes = regex_core::RegexSet::prepare(patterns.clone(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
-      artifacts.push(PreparedRegexArtifact {
-        bytes: bytes.clone(),
-      });
-      regex_core::RegexSet::with_prepared(patterns, options, &bytes)
+      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes);
+      artifacts.push(PreparedRegexArtifact { bytes });
+      set
     }
     RegexBuildMode::Load { .. } => {
-      let bytes = regex_mode.next_prepared_regex()?.to_vec();
-      regex_core::RegexSet::with_prepared(patterns, options, &bytes)
+      let bytes = regex_mode.next_prepared_regex()?;
+      regex_core::RegexSet::with_prepared(patterns, options, bytes)
     }
   }
   .map_err(|error| Error::BuildRegex(error.to_string()))
