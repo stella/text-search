@@ -16,7 +16,7 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 5;
+const PREPARED_ARTIFACTS_VERSION: u32 = 6;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
@@ -70,6 +70,13 @@ pub enum Error {
   },
   PreparedAhoIdentityMismatch {
     artifact: usize,
+  },
+  PreparedRegexArtifactCountMismatch {
+    expected: usize,
+    actual: usize,
+  },
+  PreparedRegexArtifactMissing {
+    index: usize,
   },
   PreparedArtifactInvalid {
     reason: String,
@@ -139,6 +146,16 @@ impl fmt::Display for Error {
         formatter,
         "Prepared Aho artifact {artifact} was not built as an identity literal artifact"
       ),
+      Self::PreparedRegexArtifactCountMismatch { expected, actual } => write!(
+        formatter,
+        "Expected {expected} prepared regex artifacts, got {actual}"
+      ),
+      Self::PreparedRegexArtifactMissing { index } => {
+        write!(
+          formatter,
+          "Missing prepared regex artifact at index {index}"
+        )
+      }
       Self::PreparedArtifactInvalid { reason } => {
         write!(formatter, "Prepared artifact is invalid: {reason}")
       }
@@ -354,6 +371,7 @@ pub struct EngineStats {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PreparedTextSearchArtifacts {
   pub aho_automata: Vec<PreparedAhoArtifact>,
+  pub regex_sets: Vec<PreparedRegexArtifact>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -361,6 +379,11 @@ pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
   pub options: LiteralOptions,
   pub identity: bool,
+  pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreparedRegexArtifact {
   pub bytes: Vec<u8>,
 }
 
@@ -380,6 +403,17 @@ impl PreparedTextSearchArtifacts {
       write_u32(
         &mut bytes,
         checked_len_u32(artifact.bytes.len(), "aho_automata.bytes")?,
+      );
+      bytes.extend_from_slice(&artifact.bytes);
+    }
+    write_u32(
+      &mut bytes,
+      checked_len_u32(self.regex_sets.len(), "regex_sets")?,
+    );
+    for artifact in &self.regex_sets {
+      write_u32(
+        &mut bytes,
+        checked_len_u32(artifact.bytes.len(), "regex_sets.bytes")?,
       );
       bytes.extend_from_slice(&artifact.bytes);
     }
@@ -418,8 +452,28 @@ impl PreparedTextSearchArtifacts {
         bytes: automaton,
       });
     }
+    let regex_count = reader.read_usize()?;
+    let min_regex_payload_len = regex_count
+      .checked_mul(std::mem::size_of::<u32>())
+      .ok_or_else(|| {
+        invalid_prepared_artifact("regex artifact count overflow")
+      })?;
+    if min_regex_payload_len > reader.remaining_len() {
+      return Err(invalid_prepared_artifact(
+        "regex artifact count exceeds payload length",
+      ));
+    }
+    let mut regex_sets = Vec::with_capacity(regex_count);
+    for _ in 0..regex_count {
+      regex_sets.push(PreparedRegexArtifact {
+        bytes: reader.read_len_prefixed_bytes()?.to_vec(),
+      });
+    }
     reader.finish()?;
-    Ok(Self { aho_automata })
+    Ok(Self {
+      aho_automata,
+      regex_sets,
+    })
   }
 }
 
@@ -501,6 +555,7 @@ enum RegexEngine {
   Lazy {
     patterns: Vec<String>,
     options: regex_core::Options,
+    prepared: Option<Vec<u8>>,
     cell: OnceLock<Box<regex_core::RegexSet>>,
   },
 }
@@ -523,6 +578,44 @@ enum AhoBuildMode<'a> {
     automata: &'a [PreparedAhoArtifact],
     index: usize,
   },
+}
+
+enum RegexBuildMode<'a> {
+  Build,
+  Capture(&'a mut Vec<PreparedRegexArtifact>),
+  Load {
+    artifacts: &'a [PreparedRegexArtifact],
+    index: usize,
+  },
+}
+
+impl RegexBuildMode<'_> {
+  fn next_prepared_regex(&mut self) -> Result<&[u8]> {
+    let Self::Load { artifacts, index } = self else {
+      return Err(Error::BuildRegex(String::from(
+        "Prepared regex artifact requested outside load mode",
+      )));
+    };
+    let current = *index;
+    let Some(artifact) = artifacts.get(current) else {
+      return Err(Error::PreparedRegexArtifactMissing { index: current });
+    };
+    *index = current.saturating_add(1);
+    Ok(&artifact.bytes)
+  }
+
+  const fn finish(&self) -> Result<()> {
+    let Self::Load { artifacts, index } = self else {
+      return Ok(());
+    };
+    if *index == artifacts.len() {
+      return Ok(());
+    }
+    Err(Error::PreparedRegexArtifactCountMismatch {
+      expected: *index,
+      actual: artifacts.len(),
+    })
+  }
 }
 
 impl AhoBuildMode<'_> {
@@ -577,7 +670,8 @@ impl TextSearch {
     options: TextSearchOptions,
   ) -> Result<Self> {
     let mut aho_mode = AhoBuildMode::Build;
-    Self::build_with_aho_mode(patterns, options, &mut aho_mode)
+    let mut regex_mode = RegexBuildMode::Build;
+    Self::build_with_modes(patterns, options, &mut aho_mode, &mut regex_mode)
   }
 
   pub fn prepare_artifacts(
@@ -585,9 +679,19 @@ impl TextSearch {
     options: TextSearchOptions,
   ) -> Result<PreparedTextSearchArtifacts> {
     let mut aho_automata = Vec::new();
+    let mut regex_sets = Vec::new();
     let mut aho_mode = AhoBuildMode::Capture(&mut aho_automata);
-    _ = Self::build_with_aho_mode(patterns, options, &mut aho_mode)?;
-    Ok(PreparedTextSearchArtifacts { aho_automata })
+    let mut regex_mode = RegexBuildMode::Capture(&mut regex_sets);
+    _ = Self::build_with_modes(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )?;
+    Ok(PreparedTextSearchArtifacts {
+      aho_automata,
+      regex_sets,
+    })
   }
 
   pub fn with_prepared_artifacts(
@@ -599,8 +703,18 @@ impl TextSearch {
       automata: &artifacts.aho_automata,
       index: 0,
     };
-    let search = Self::build_with_aho_mode(patterns, options, &mut aho_mode)?;
+    let mut regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
+    let search = Self::build_with_modes(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )?;
     aho_mode.finish()?;
+    regex_mode.finish()?;
     Ok(search)
   }
 
@@ -612,9 +726,14 @@ impl TextSearch {
       automata: &artifacts.aho_automata,
       index: 0,
     };
+    let regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
     let search =
       Self::build_all_literal_from_aho_artifacts(options, &mut aho_mode)?;
     aho_mode.finish()?;
+    regex_mode.finish()?;
     Ok(search)
   }
 
@@ -668,10 +787,11 @@ impl TextSearch {
     })
   }
 
-  fn build_with_aho_mode(
+  fn build_with_modes(
     patterns: impl IntoIterator<Item = PatternEntry>,
     options: TextSearchOptions,
     aho_mode: &mut AhoBuildMode<'_>,
+    regex_mode: &mut RegexBuildMode<'_>,
   ) -> Result<Self> {
     let patterns = patterns.into_iter().collect::<Vec<_>>();
     let pattern_count = patterns.len();
@@ -734,6 +854,7 @@ impl TextSearch {
           options,
           regex_options,
           aho_mode,
+          regex_mode,
         )?));
       }
     } else {
@@ -741,7 +862,7 @@ impl TextSearch {
         chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
       {
         engines.push(EngineSlot::Regex(build_regex_engine(
-          chunk, options, None, aho_mode,
+          chunk, options, None, aho_mode, regex_mode,
         )?));
       }
     }
@@ -758,6 +879,7 @@ impl TextSearch {
         options,
         lazy_options,
         aho_mode,
+        regex_mode,
       )?));
     }
 
@@ -802,6 +924,13 @@ impl TextSearch {
       }
     }
     stats
+  }
+
+  pub fn warm_lazy_regex(&self) -> Result<()> {
+    for engine in &self.engines {
+      warm_engine_lazy_regex(engine)?;
+    }
+    Ok(())
   }
 
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
@@ -908,6 +1037,13 @@ impl TextSearch {
     result.push_str(str_span(haystack, last_byte, haystack.len())?);
     Ok(result)
   }
+}
+
+fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
+  if let EngineSlot::Regex(slot) = engine {
+    _ = regex_slot_engine(slot)?;
+  }
+  Ok(())
 }
 
 pub fn classify_patterns(
@@ -1383,6 +1519,7 @@ fn build_regex_engine(
   options: TextSearchOptions,
   lazy_options: Option<RegexOptions>,
   aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
 ) -> Result<RegexSlot> {
   let inferred_prefilter = if lazy_options.is_none() && patterns.len() == 1 {
     patterns
@@ -1429,21 +1566,25 @@ fn build_regex_engine(
       };
       let prefilter_regex = lazy_options
         .prefilter_regex
-        .map(build_prefilter_regex)
+        .map(|source| build_prefilter_regex(source, regex_mode))
         .transpose()?
         .map(Box::new);
+      let prepared =
+        capture_or_load_lazy_regex(&values, engine_options, regex_mode)?;
       let engine = RegexEngine::Lazy {
         patterns: values,
         options: engine_options,
+        prepared,
         cell: OnceLock::new(),
       };
       (engine, prefilter, prefilter_regex)
     }
     _ => {
-      let engine = RegexEngine::Eager(Box::new(
-        regex_core::RegexSet::new(values, engine_options)
-          .map_err(|error| Error::BuildRegex(error.to_string()))?,
-      ));
+      let engine = RegexEngine::Eager(Box::new(build_regex_set(
+        values,
+        engine_options,
+        regex_mode,
+      )?));
       (engine, inferred_prefilter, None)
     }
   };
@@ -1463,18 +1604,73 @@ fn regex_slot_engine(slot: &RegexSlot) -> Result<&regex_core::RegexSet> {
     RegexEngine::Lazy {
       patterns,
       options,
+      prepared,
       cell,
     } => {
       if let Some(engine) = cell.get() {
         return Ok(engine.as_ref());
       }
 
-      let engine = regex_core::RegexSet::new(patterns.clone(), *options)
+      let engine = prepared
+        .as_deref()
+        .map_or_else(
+          || regex_core::RegexSet::new(patterns.clone(), *options),
+          |bytes| {
+            regex_core::RegexSet::with_prepared(
+              patterns.clone(),
+              *options,
+              bytes,
+            )
+          },
+        )
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
       _ = cell.set(Box::new(engine));
       cell.get().map(Box::as_ref).ok_or_else(|| {
         Error::BuildRegex(String::from("Lazy regex engine was not initialized"))
       })
+    }
+  }
+}
+
+fn build_regex_set(
+  patterns: Vec<String>,
+  options: regex_core::Options,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<regex_core::RegexSet> {
+  match regex_mode {
+    RegexBuildMode::Build => regex_core::RegexSet::new(patterns, options),
+    RegexBuildMode::Capture(artifacts) => {
+      let bytes = regex_core::RegexSet::prepare(patterns.clone(), options)
+        .map_err(|error| Error::BuildRegex(error.to_string()))?;
+      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes);
+      artifacts.push(PreparedRegexArtifact { bytes });
+      set
+    }
+    RegexBuildMode::Load { .. } => {
+      let bytes = regex_mode.next_prepared_regex()?;
+      regex_core::RegexSet::with_prepared(patterns, options, bytes)
+    }
+  }
+  .map_err(|error| Error::BuildRegex(error.to_string()))
+}
+
+fn capture_or_load_lazy_regex(
+  patterns: &[String],
+  options: regex_core::Options,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<Option<Vec<u8>>> {
+  match regex_mode {
+    RegexBuildMode::Build => Ok(None),
+    RegexBuildMode::Capture(artifacts) => {
+      let bytes = regex_core::RegexSet::prepare(patterns.to_vec(), options)
+        .map_err(|error| Error::BuildRegex(error.to_string()))?;
+      artifacts.push(PreparedRegexArtifact {
+        bytes: bytes.clone(),
+      });
+      Ok(Some(bytes))
+    }
+    RegexBuildMode::Load { .. } => {
+      Ok(Some(regex_mode.next_prepared_regex()?.to_vec()))
     }
   }
 }
@@ -1701,15 +1897,18 @@ fn build_literal_prefilter(
 ///
 /// Mirrors the TS `prefilterRegex.test(haystack)` check: a bare match test with
 /// no whole-word wrapping, independent of the slot's own engine options.
-fn build_prefilter_regex(source: String) -> Result<regex_core::RegexSet> {
-  regex_core::RegexSet::new(
+fn build_prefilter_regex(
+  source: String,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<regex_core::RegexSet> {
+  build_regex_set(
     vec![source],
     regex_core::Options {
       whole_words: false,
       unicode_boundaries: true,
     },
+    regex_mode,
   )
-  .map_err(|error| Error::BuildRegex(error.to_string()))
 }
 
 fn build_aho(

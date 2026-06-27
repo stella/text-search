@@ -152,6 +152,89 @@ fn prepared_artifacts_match_direct_search() {
 }
 
 #[test]
+fn prepared_artifacts_capture_regex_sets() {
+  let mut account = RegexPattern::new(r"ACC-\d{3}");
+  account.name = Some(String::from("account"));
+  let patterns = vec![
+    PatternEntry::from("Alice"),
+    PatternEntry::Regex(account),
+    PatternEntry::from(r"\b\d{4}-\d{2}-\d{2}\b"),
+  ];
+  let options = TextSearchOptions {
+    case_insensitive: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert!(
+    !artifacts.regex_sets.is_empty(),
+    "regex engines should produce prepared regex artifacts"
+  );
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+  let haystack = "alice ACC-123 signed 2026-06-26";
+
+  assert_eq!(
+    prepared.find_iter(haystack).unwrap(),
+    direct.find_iter(haystack).unwrap()
+  );
+  assert_eq!(
+    prepared
+      .replace_all(
+        haystack,
+        &[
+          String::from("[PERSON]"),
+          String::from("[ACCOUNT]"),
+          String::from("[DATE]"),
+        ],
+      )
+      .unwrap(),
+    direct
+      .replace_all(
+        haystack,
+        &[
+          String::from("[PERSON]"),
+          String::from("[ACCOUNT]"),
+          String::from("[DATE]"),
+        ],
+      )
+      .unwrap()
+  );
+}
+
+#[test]
+fn prepared_artifacts_capture_lazy_regex_sets() {
+  let mut regex = RegexPattern::new(r"token-\d+");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("token"));
+  regex.prefilter_regex = Some(String::from(r"\d+"));
+  let patterns = vec![PatternEntry::Regex(regex)];
+  let options = TextSearchOptions::default();
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert_eq!(
+    artifacts.regex_sets.len(),
+    2,
+    "lazy regex with a regex prefilter should prepare both regex sets"
+  );
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert_eq!(
+    prepared.find_iter("token-42").unwrap(),
+    direct.find_iter("token-42").unwrap()
+  );
+  assert!(!prepared.is_match("token").unwrap());
+}
+
+#[test]
 fn prepared_artifacts_preserve_ascii_boundaries() {
   let patterns = vec![PatternEntry::from("idea")];
   let options = TextSearchOptions {
@@ -249,6 +332,50 @@ fn prepared_artifacts_reject_stale_same_count_aho() {
 }
 
 #[test]
+fn prepared_artifacts_reject_missing_extra_and_stale_regex() {
+  let options = TextSearchOptions::default();
+  let patterns = vec![PatternEntry::from(r"\d+")];
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert_eq!(artifacts.regex_sets.len(), 1);
+
+  let mut missing = artifacts.clone();
+  missing.regex_sets.clear();
+  let missing_result =
+    TextSearch::with_prepared_artifacts(patterns.clone(), options, &missing);
+  assert!(
+    matches!(
+      missing_result,
+      Err(Error::PreparedRegexArtifactMissing { .. })
+    ),
+    "missing prepared regex artifact should fail"
+  );
+
+  let mut extra = artifacts.clone();
+  let duplicate = artifacts.regex_sets.first().unwrap().clone();
+  extra.regex_sets.push(duplicate);
+  let extra_result =
+    TextSearch::with_prepared_artifacts(patterns, options, &extra);
+  assert!(
+    matches!(
+      extra_result,
+      Err(Error::PreparedRegexArtifactCountMismatch { .. })
+    ),
+    "extra prepared regex artifact should fail"
+  );
+
+  let stale = TextSearch::with_prepared_artifacts(
+    vec![PatternEntry::from(r"[a-z]+")],
+    options,
+    &artifacts,
+  );
+  assert!(
+    matches!(stale, Err(Error::BuildRegex(_))),
+    "same-count stale prepared regex artifacts should fail"
+  );
+}
+
+#[test]
 fn prepared_artifacts_roundtrip_bytes() {
   let options = TextSearchOptions {
     all_literal: true,
@@ -267,6 +394,34 @@ fn prepared_artifacts_roundtrip_bytes() {
   let search =
     TextSearch::with_prepared_artifacts(patterns, options, &decoded).unwrap();
   assert_eq!(search.find_iter("alpha beta").unwrap().len(), 2);
+}
+
+#[test]
+fn prepared_regex_artifacts_roundtrip_bytes() {
+  let options = TextSearchOptions {
+    case_insensitive: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let patterns = vec![
+    PatternEntry::from(r"\b[A-Z]{2}-\d{4}\b"),
+    PatternEntry::from("approved"),
+  ];
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert!(!artifacts.regex_sets.is_empty());
+
+  let bytes = artifacts.to_bytes().unwrap();
+  let decoded = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
+  assert_eq!(decoded, artifacts);
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &decoded).unwrap();
+  assert_eq!(
+    prepared.find_iter("AB-1234 approved").unwrap(),
+    direct.find_iter("AB-1234 approved").unwrap()
+  );
 }
 
 #[test]
@@ -397,7 +552,7 @@ fn prepared_artifacts_reject_previous_artifact_version() {
 fn prepared_artifacts_reject_impossible_artifact_count() {
   let mut bytes = Vec::new();
   bytes.extend_from_slice(b"TXSRCH01");
-  bytes.extend_from_slice(&5u32.to_le_bytes());
+  bytes.extend_from_slice(&6u32.to_le_bytes());
   bytes.extend_from_slice(&u32::MAX.to_le_bytes());
 
   let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
@@ -405,6 +560,22 @@ fn prepared_artifacts_reject_impossible_artifact_count() {
   assert!(
     matches!(error, Error::PreparedArtifactInvalid { .. }),
     "impossible artifact counts should fail before allocation"
+  );
+}
+
+#[test]
+fn prepared_artifacts_reject_impossible_regex_artifact_count() {
+  let mut bytes = Vec::new();
+  bytes.extend_from_slice(b"TXSRCH01");
+  bytes.extend_from_slice(&6u32.to_le_bytes());
+  bytes.extend_from_slice(&0u32.to_le_bytes());
+  bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+
+  let error = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap_err();
+
+  assert!(
+    matches!(error, Error::PreparedArtifactInvalid { .. }),
+    "impossible regex artifact counts should fail before allocation"
   );
 }
 
@@ -494,6 +665,21 @@ fn lazy_regex_prefilter_skips_regex_build_when_prefilter_misses() {
 
   assert!(!search.is_match("haystack").unwrap());
   assert!(search.is_match("needle").is_err());
+}
+
+#[test]
+fn warm_lazy_regex_initializes_without_prefilter_hit() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("needle"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.warm_lazy_regex().is_err());
 }
 
 #[test]
