@@ -17,7 +17,7 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 6;
+const PREPARED_ARTIFACTS_VERSION: u32 = 7;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
@@ -32,6 +32,8 @@ const PREPARED_LITERAL_FLAGS_MASK: u8 = PREPARED_LITERAL_CASE_INSENSITIVE
   | PREPARED_LITERAL_WHOLE_WORDS
   | PREPARED_LITERAL_UNICODE_BOUNDARIES;
 const PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS: usize = 4;
+const INLINE_LITERAL_PREFILTER_MAX_PATTERNS: usize = 4;
+const INLINE_LITERAL_PREFILTER_MAX_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -599,7 +601,13 @@ struct FuzzySlot {
 }
 
 enum LiteralPrefilter {
-  Single { needle: String },
+  Single {
+    needle: String,
+  },
+  Inline {
+    needles: Vec<String>,
+    case_insensitive: bool,
+  },
   Many(Box<aho_core::AhoCorasick>),
 }
 
@@ -2435,6 +2443,13 @@ fn build_literal_prefilter(
     return Ok(LiteralPrefilter::Single { needle });
   }
 
+  if should_inline_literal_prefilter(&unique) {
+    return Ok(LiteralPrefilter::Inline {
+      needles: unique,
+      case_insensitive,
+    });
+  }
+
   build_aho(
     unique,
     LiteralOptions {
@@ -2447,6 +2462,59 @@ fn build_literal_prefilter(
   )
   .map(Box::new)
   .map(LiteralPrefilter::Many)
+}
+
+fn should_inline_literal_prefilter(literals: &[String]) -> bool {
+  if literals.is_empty()
+    || literals.len() > INLINE_LITERAL_PREFILTER_MAX_PATTERNS
+  {
+    return false;
+  }
+  let byte_len = literals
+    .iter()
+    .map(String::len)
+    .try_fold(0usize, usize::checked_add);
+  byte_len.is_some_and(|len| len <= INLINE_LITERAL_PREFILTER_MAX_BYTES)
+}
+
+fn inline_literal_prefilter_matches(
+  haystack: &str,
+  needle: &str,
+  case_insensitive: bool,
+) -> bool {
+  if haystack.contains(needle) {
+    return true;
+  }
+  if !case_insensitive {
+    return false;
+  }
+  if haystack.is_ascii() && needle.is_ascii() {
+    return contains_ignore_ascii_case(haystack.as_bytes(), needle.as_bytes());
+  }
+  contains_unicode_case_insensitive(haystack, needle)
+}
+
+fn contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
+  if needle.is_empty() {
+    return true;
+  }
+  haystack
+    .windows(needle.len())
+    .any(|candidate| candidate.eq_ignore_ascii_case(needle))
+}
+
+fn contains_unicode_case_insensitive(haystack: &str, needle: &str) -> bool {
+  let needle_lower = needle.to_lowercase();
+  let haystack_lower = haystack.to_lowercase();
+  if haystack_lower.contains(&needle_lower) {
+    return true;
+  }
+
+  let needle_upper = needle.to_uppercase();
+  if needle_upper == needle_lower {
+    return false;
+  }
+  haystack.to_uppercase().contains(&needle_upper)
 }
 
 /// Builds a secondary regex prefilter gate.
@@ -2972,6 +3040,12 @@ fn regex_prefilter_matches(slot: &RegexSlot, haystack: &str) -> Result<bool> {
   if let Some(prefilter) = &slot.prefilter {
     let literal_matches = match prefilter {
       LiteralPrefilter::Single { needle } => haystack.contains(needle),
+      LiteralPrefilter::Inline {
+        needles,
+        case_insensitive,
+      } => needles.iter().any(|needle| {
+        inline_literal_prefilter_matches(haystack, needle, *case_insensitive)
+      }),
       LiteralPrefilter::Many(engine) => engine
         .is_match(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?,

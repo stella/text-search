@@ -272,6 +272,31 @@ fn prepared_artifacts_capture_lazy_regex_sets() {
 }
 
 #[test]
+fn small_lazy_prefilters_stay_inline_in_prepared_artifacts() {
+  let mut regex = RegexPattern::new(
+    r"(?i)\boddíl[^\S\n]+[A-Z][^\S\n]*,[^\S\n]*vložka[^\S\n]+\d{1,6}\b",
+  );
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("oddíl"));
+  regex.prefilter_any.push(String::from("vložka"));
+  regex.prefilter_case_insensitive = Some(true);
+  let patterns = vec![PatternEntry::Regex(regex)];
+  let options = TextSearchOptions::default();
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+
+  assert_eq!(artifacts.aho_automata.len(), 0);
+  assert_eq!(artifacts.regex_sets.len(), 1);
+
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert!(prepared.is_match("ODDÍL C, VLOŽKA 334648").unwrap());
+  assert!(!prepared.is_match("plain contract text").unwrap());
+}
+
+#[test]
 fn prepared_artifacts_preserve_ascii_boundaries() {
   let patterns = vec![PatternEntry::from("idea")];
   let options = TextSearchOptions {
