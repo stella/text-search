@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 stella-aho-corasick-core = { version = "1.0.4", git = "https://github.com/stella/aho-corasick", rev = "38bdcbf11bfbe389c8f2b7b40eb03ac50371e1e1" }
 stella-fuzzy-search-core = { version = "1.1.3", git = "https://github.com/stella/fuzzy-search", rev = "0743b9c6710a84bb7e6863fdcda9a9cc1dce4fa2" }
-stella-regex-set-core = { version = "1.0.5", path = "/private/tmp/stll-regex-rust-policy/crates/core" }
+stella-regex-set-core = { version = "1.0.5", git = "https://github.com/stella/regex-set", rev = "f72e369995ccaefbe36b313469f70486b7a9dd7c" }
 
 [lints]
 workspace = true
