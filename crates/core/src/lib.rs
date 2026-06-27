@@ -32,6 +32,9 @@ const PREPARED_LITERAL_FLAGS_MASK: u8 = PREPARED_LITERAL_CASE_INSENSITIVE
   | PREPARED_LITERAL_WHOLE_WORDS
   | PREPARED_LITERAL_UNICODE_BOUNDARIES;
 const PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS: usize = 4;
+const PARALLEL_FIND_MIN_ENGINES: usize = 4;
+const PARALLEL_FIND_MIN_BYTES: usize = 32 * 1024;
+const PARALLEL_FIND_MAX_WORKERS: usize = 4;
 const INLINE_LITERAL_PREFILTER_MAX_PATTERNS: usize = 4;
 const INLINE_LITERAL_PREFILTER_MAX_BYTES: usize = 128;
 
@@ -1269,10 +1272,7 @@ impl TextSearch {
   }
 
   pub fn find_iter(&self, haystack: &str) -> Result<Vec<Match>> {
-    let mut matches = Vec::new();
-    for engine in &self.engines {
-      matches.extend(engine_find_iter(engine, haystack)?);
-    }
+    let mut matches = find_iter_engines(&self.engines, haystack)?;
 
     if matches.len() <= 1 {
       return Ok(matches);
@@ -2881,6 +2881,69 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
       &slot.name_map,
     ),
   }
+}
+
+fn find_iter_engines(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  if should_parallel_find(engines, haystack) {
+    return find_iter_engines_parallel(engines, haystack);
+  }
+
+  find_iter_engines_sequential(engines, haystack)
+}
+
+fn find_iter_engines_sequential(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let mut matches = Vec::new();
+  for engine in engines {
+    matches.extend(engine_find_iter(engine, haystack)?);
+  }
+  Ok(matches)
+}
+
+fn find_iter_engines_parallel(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let workers = parallel_find_workers(engines.len());
+  if workers <= 1 {
+    return find_iter_engines_sequential(engines, haystack);
+  }
+
+  let chunk_size = engines.len().div_ceil(workers);
+  std::thread::scope(|scope| {
+    let mut handles = Vec::new();
+    for chunk in engines.chunks(chunk_size) {
+      handles.push(
+        scope.spawn(move || find_iter_engines_sequential(chunk, haystack)),
+      );
+    }
+
+    let mut matches = Vec::new();
+    for handle in handles {
+      let chunk_matches = handle.join().map_err(|_| {
+        Error::BuildRegex(String::from("Parallel search panicked"))
+      })??;
+      matches.extend(chunk_matches);
+    }
+    Ok(matches)
+  })
+}
+
+const fn should_parallel_find(engines: &[EngineSlot], haystack: &str) -> bool {
+  haystack.len() >= PARALLEL_FIND_MIN_BYTES
+    && engines.len() >= PARALLEL_FIND_MIN_ENGINES
+}
+
+fn parallel_find_workers(engine_count: usize) -> usize {
+  std::thread::available_parallelism()
+    .map_or(1, std::num::NonZeroUsize::get)
+    .min(PARALLEL_FIND_MAX_WORKERS)
+    .min(engine_count)
 }
 
 fn split_literal_find_iter(

@@ -189,6 +189,34 @@ fn prepared_build_stats_report_internal_regex_slots() {
 }
 
 #[test]
+fn long_multi_slot_regex_search_preserves_match_order() {
+  let mut patterns = Vec::new();
+  for index in 0..6 {
+    let mut pattern = RegexPattern::new(format!(r"TOKEN{index}-\d+"));
+    pattern.lazy = true;
+    patterns.push(PatternEntry::Regex(pattern));
+  }
+  let search = TextSearch::new(patterns, TextSearchOptions::default()).unwrap();
+  assert_eq!(search.engine_stats().regex_slots, 6);
+
+  let haystack = format!(
+    "{} TOKEN3-42 {} TOKEN0-9 {} TOKEN5-77",
+    "x".repeat(33_000),
+    "y".repeat(128),
+    "z".repeat(128),
+  );
+
+  let matches = search.find_iter(&haystack).unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(3, "TOKEN3-42"), (0, "TOKEN0-9"), (5, "TOKEN5-77")]
+  );
+}
+
+#[test]
 fn prepared_artifacts_capture_regex_sets() {
   let mut account = RegexPattern::new(r"ACC-\d{3}");
   account.name = Some(String::from("account"));
