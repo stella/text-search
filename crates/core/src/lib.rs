@@ -916,6 +916,13 @@ impl TextSearch {
     stats
   }
 
+  pub fn warm_lazy_regex(&self) -> Result<()> {
+    for engine in &self.engines {
+      warm_engine_lazy_regex(engine)?;
+    }
+    Ok(())
+  }
+
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
     for engine in &self.engines {
       if engine_is_match(engine, haystack)? {
@@ -1020,6 +1027,13 @@ impl TextSearch {
     result.push_str(str_span(haystack, last_byte, haystack.len())?);
     Ok(result)
   }
+}
+
+fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
+  if let EngineSlot::Regex(slot) = engine {
+    _ = regex_slot_engine(slot)?;
+  }
+  Ok(())
 }
 
 pub fn classify_patterns(

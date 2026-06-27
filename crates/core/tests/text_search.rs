@@ -652,6 +652,21 @@ fn lazy_regex_prefilter_skips_regex_build_when_prefilter_misses() {
 }
 
 #[test]
+fn warm_lazy_regex_initializes_without_prefilter_hit() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("needle"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.warm_lazy_regex().is_err());
+}
+
+#[test]
 fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
   // A non-lazy regex carrying `prefilter_any` shares a chunked slot with other
   // regexes. The prefilter must not be promoted to a slot-wide gate, otherwise
