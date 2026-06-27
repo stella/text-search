@@ -30,6 +30,7 @@ const PREPARED_LITERAL_UNICODE_BOUNDARIES: u8 = 1 << 2;
 const PREPARED_LITERAL_FLAGS_MASK: u8 = PREPARED_LITERAL_CASE_INSENSITIVE
   | PREPARED_LITERAL_WHOLE_WORDS
   | PREPARED_LITERAL_UNICODE_BOUNDARIES;
+const PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS: usize = 4;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -927,10 +928,35 @@ impl TextSearch {
   }
 
   pub fn warm_lazy_regex(&self) -> Result<()> {
-    for engine in &self.engines {
-      warm_engine_lazy_regex(engine)?;
+    let lazy_count = self
+      .engines
+      .iter()
+      .filter(|engine| engine_has_uninitialized_lazy_regex(engine))
+      .count();
+    if lazy_count < PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS {
+      return warm_engines_lazy_regex(&self.engines);
     }
-    Ok(())
+
+    let workers = std::thread::available_parallelism()
+      .map_or(1, usize::from)
+      .min(lazy_count);
+    if workers <= 1 {
+      return warm_engines_lazy_regex(&self.engines);
+    }
+
+    let chunk_size = self.engines.len().div_ceil(workers);
+    std::thread::scope(|scope| {
+      let mut handles = Vec::with_capacity(workers);
+      for chunk in self.engines.chunks(chunk_size) {
+        handles.push(scope.spawn(move || warm_engines_lazy_regex(chunk)));
+      }
+      for handle in handles {
+        handle.join().map_err(|_| {
+          Error::BuildRegex(String::from("Lazy regex warm-up panicked"))
+        })??;
+      }
+      Ok(())
+    })
   }
 
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
@@ -1044,6 +1070,23 @@ fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
     _ = regex_slot_engine(slot)?;
   }
   Ok(())
+}
+
+fn warm_engines_lazy_regex(engines: &[EngineSlot]) -> Result<()> {
+  for engine in engines {
+    warm_engine_lazy_regex(engine)?;
+  }
+  Ok(())
+}
+
+fn engine_has_uninitialized_lazy_regex(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      engine: RegexEngine::Lazy { cell, .. },
+      ..
+    }) if cell.get().is_none()
+  )
 }
 
 pub fn classify_patterns(

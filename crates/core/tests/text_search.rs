@@ -683,6 +683,29 @@ fn warm_lazy_regex_initializes_without_prefilter_hit() {
 }
 
 #[test]
+fn warm_lazy_regex_initializes_prepared_lazy_slots() {
+  let mut patterns = Vec::new();
+  for index in 0..8 {
+    let mut regex = RegexPattern::new(format!("token{index}\\s+\\d+"));
+    regex.lazy = true;
+    patterns.push(PatternEntry::Regex(regex));
+  }
+  let options = TextSearchOptions::default();
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let search =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert_eq!(search.engine_stats().regex_slots, 8);
+  search.warm_lazy_regex().unwrap();
+
+  let matches = search.find_iter("before token6 42 after").unwrap();
+
+  assert_eq!(matches.len(), 1);
+  assert_eq!(matches.first().map(|match_| match_.pattern), Some(6));
+}
+
+#[test]
 fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
   // A non-lazy regex carrying `prefilter_any` shares a chunked slot with other
   // regexes. The prefilter must not be promoted to a slot-wide gate, otherwise
