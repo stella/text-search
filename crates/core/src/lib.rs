@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
+use std::time::Instant;
 use std::{error, fmt};
 
 use stella_aho_corasick_core as aho_core;
@@ -369,6 +370,36 @@ pub struct EngineStats {
   pub fuzzy_slots: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineKind {
+  Literal,
+  SplitLiteral,
+  Regex,
+  Fuzzy,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BuildStats {
+  pub slot: usize,
+  pub engine: EngineKind,
+  pub pattern_count: usize,
+  pub first_pattern: Option<u32>,
+  pub last_pattern: Option<u32>,
+  pub elapsed_us: u64,
+  pub aho_artifact_count: usize,
+  pub aho_artifact_bytes: usize,
+  pub regex_artifact_count: usize,
+  pub regex_artifact_bytes: usize,
+  pub regex_lazy: bool,
+  pub regex_prefilter: bool,
+  pub regex_prefilter_regex: bool,
+}
+
+pub struct TextSearchBuildResult {
+  pub search: TextSearch,
+  pub stats: Vec<BuildStats>,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PreparedTextSearchArtifacts {
   pub aho_automata: Vec<PreparedAhoArtifact>,
@@ -590,7 +621,33 @@ enum RegexBuildMode<'a> {
   },
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ArtifactMetrics {
+  count: usize,
+  bytes: usize,
+}
+
 impl RegexBuildMode<'_> {
+  const fn position(&self) -> usize {
+    match self {
+      Self::Build => 0,
+      Self::Capture(artifacts) => artifacts.len(),
+      Self::Load { index, .. } => *index,
+    }
+  }
+
+  fn artifact_metrics_since(&self, start: usize) -> ArtifactMetrics {
+    match self {
+      Self::Build => ArtifactMetrics::default(),
+      Self::Capture(artifacts) => artifacts
+        .get(start..)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+      Self::Load { artifacts, index } => artifacts
+        .get(start..*index)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+    }
+  }
+
   fn next_prepared_regex(&mut self) -> Result<&[u8]> {
     let Self::Load { artifacts, index } = self else {
       return Err(Error::BuildRegex(String::from(
@@ -620,6 +677,26 @@ impl RegexBuildMode<'_> {
 }
 
 impl AhoBuildMode<'_> {
+  const fn position(&self) -> usize {
+    match self {
+      Self::Build => 0,
+      Self::Capture(automata) => automata.len(),
+      Self::Load { index, .. } => *index,
+    }
+  }
+
+  fn artifact_metrics_since(&self, start: usize) -> ArtifactMetrics {
+    match self {
+      Self::Build => ArtifactMetrics::default(),
+      Self::Capture(automata) => automata
+        .get(start..)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+      Self::Load { automata, index } => automata
+        .get(start..*index)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+    }
+  }
+
   fn prepared_aho_count(&self) -> Result<usize> {
     let Self::Load { automata, .. } = self else {
       return Err(Error::BuildLiteral(String::from(
@@ -665,6 +742,136 @@ impl AhoBuildMode<'_> {
   }
 }
 
+trait PreparedArtifactBytes {
+  fn byte_len(&self) -> usize;
+}
+
+impl PreparedArtifactBytes for PreparedAhoArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+impl PreparedArtifactBytes for PreparedRegexArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+fn artifact_metrics(
+  artifacts: &[impl PreparedArtifactBytes],
+) -> ArtifactMetrics {
+  ArtifactMetrics {
+    count: artifacts.len(),
+    bytes: artifacts
+      .iter()
+      .map(PreparedArtifactBytes::byte_len)
+      .fold(0usize, usize::saturating_add),
+  }
+}
+
+fn push_timed_engine(
+  engines: &mut Vec<EngineSlot>,
+  stats: Option<&mut Vec<BuildStats>>,
+  pattern_count: usize,
+  pattern_bounds: PatternBounds,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+  build: impl FnOnce(
+    &mut AhoBuildMode<'_>,
+    &mut RegexBuildMode<'_>,
+  ) -> Result<EngineSlot>,
+) -> Result<()> {
+  let slot = engines.len();
+  let aho_start = aho_mode.position();
+  let regex_start = regex_mode.position();
+  let start = stats.as_ref().map(|_| Instant::now());
+  let engine = build(aho_mode, regex_mode)?;
+  if let (Some(stats), Some(start)) = (stats, start) {
+    stats.push(build_stats_for_engine(
+      slot,
+      &engine,
+      pattern_count,
+      pattern_bounds,
+      elapsed_us(start),
+      aho_mode.artifact_metrics_since(aho_start),
+      regex_mode.artifact_metrics_since(regex_start),
+    ));
+  }
+  engines.push(engine);
+  Ok(())
+}
+
+const fn build_stats_for_engine(
+  slot: usize,
+  engine: &EngineSlot,
+  pattern_count: usize,
+  pattern_bounds: PatternBounds,
+  elapsed_us: u64,
+  aho_metrics: ArtifactMetrics,
+  regex_metrics: ArtifactMetrics,
+) -> BuildStats {
+  BuildStats {
+    slot,
+    engine: engine_kind(engine),
+    pattern_count,
+    first_pattern: pattern_bounds.first,
+    last_pattern: pattern_bounds.last,
+    elapsed_us,
+    aho_artifact_count: aho_metrics.count,
+    aho_artifact_bytes: aho_metrics.bytes,
+    regex_artifact_count: regex_metrics.count,
+    regex_artifact_bytes: regex_metrics.bytes,
+    regex_lazy: engine_regex_lazy(engine),
+    regex_prefilter: engine_regex_prefilter(engine),
+    regex_prefilter_regex: engine_regex_prefilter_regex(engine),
+  }
+}
+
+const fn engine_kind(engine: &EngineSlot) -> EngineKind {
+  match engine {
+    EngineSlot::Literal(_) => EngineKind::Literal,
+    EngineSlot::SplitLiteral(_) => EngineKind::SplitLiteral,
+    EngineSlot::Regex(_) => EngineKind::Regex,
+    EngineSlot::Fuzzy(_) => EngineKind::Fuzzy,
+  }
+}
+
+const fn engine_regex_lazy(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      engine: RegexEngine::Lazy { .. },
+      ..
+    })
+  )
+}
+
+const fn engine_regex_prefilter(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      prefilter: Some(_),
+      ..
+    })
+  )
+}
+
+const fn engine_regex_prefilter_regex(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      prefilter_regex: Some(_),
+      ..
+    })
+  )
+}
+
+fn elapsed_us(start: Instant) -> u64 {
+  let micros = start.elapsed().as_micros();
+  u64::try_from(micros).unwrap_or(u64::MAX)
+}
+
 impl TextSearch {
   pub fn new(
     patterns: impl IntoIterator<Item = PatternEntry>,
@@ -673,6 +880,20 @@ impl TextSearch {
     let mut aho_mode = AhoBuildMode::Build;
     let mut regex_mode = RegexBuildMode::Build;
     Self::build_with_modes(patterns, options, &mut aho_mode, &mut regex_mode)
+  }
+
+  pub fn new_with_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Build;
+    let mut regex_mode = RegexBuildMode::Build;
+    Self::build_with_modes_stats(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )
   }
 
   pub fn prepare_artifacts(
@@ -719,6 +940,30 @@ impl TextSearch {
     Ok(search)
   }
 
+  pub fn with_prepared_artifacts_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Load {
+      automata: &artifacts.aho_automata,
+      index: 0,
+    };
+    let mut regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
+    let result = Self::build_with_modes_stats(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )?;
+    aho_mode.finish()?;
+    regex_mode.finish()?;
+    Ok(result)
+  }
+
   pub fn with_prepared_all_literal_artifacts(
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
@@ -736,6 +981,43 @@ impl TextSearch {
     aho_mode.finish()?;
     regex_mode.finish()?;
     Ok(search)
+  }
+
+  pub fn with_prepared_all_literal_artifacts_build_stats(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Load {
+      automata: &artifacts.aho_automata,
+      index: 0,
+    };
+    let regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
+    let start = Instant::now();
+    let search =
+      Self::build_all_literal_from_aho_artifacts(options, &mut aho_mode)?;
+    let stats = search
+      .engines
+      .first()
+      .map(|engine| {
+        let artifact_metrics = aho_mode.artifact_metrics_since(0);
+        build_stats_for_engine(
+          0,
+          engine,
+          search.pattern_count,
+          identity_pattern_bounds(search.pattern_count),
+          elapsed_us(start),
+          artifact_metrics,
+          ArtifactMetrics::default(),
+        )
+      })
+      .into_iter()
+      .collect();
+    aho_mode.finish()?;
+    regex_mode.finish()?;
+    Ok(TextSearchBuildResult { search, stats })
   }
 
   fn build_all_literal_from_aho_artifacts(
@@ -794,100 +1076,110 @@ impl TextSearch {
     aho_mode: &mut AhoBuildMode<'_>,
     regex_mode: &mut RegexBuildMode<'_>,
   ) -> Result<Self> {
+    Ok(
+      Self::build_with_modes_inner(
+        patterns, options, aho_mode, regex_mode, None,
+      )?
+      .search,
+    )
+  }
+
+  fn build_with_modes_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    aho_mode: &mut AhoBuildMode<'_>,
+    regex_mode: &mut RegexBuildMode<'_>,
+  ) -> Result<TextSearchBuildResult> {
+    let mut stats = Vec::new();
+    Self::build_with_modes_inner(
+      patterns,
+      options,
+      aho_mode,
+      regex_mode,
+      Some(&mut stats),
+    )
+  }
+
+  fn build_with_modes_inner(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    aho_mode: &mut AhoBuildMode<'_>,
+    regex_mode: &mut RegexBuildMode<'_>,
+    mut stats: Option<&mut Vec<BuildStats>>,
+  ) -> Result<TextSearchBuildResult> {
     let patterns = patterns.into_iter().collect::<Vec<_>>();
-    let pattern_count = patterns.len();
+    let total_pattern_count = patterns.len();
     let mut engines = Vec::new();
 
     if options.all_literal
       && all_auto_patterns(&patterns)
       && !patterns.is_empty()
     {
-      engines.push(build_identity_literal_engine(patterns, options, aho_mode)?);
-      return Ok(Self {
-        engines,
-        pattern_count,
-        overlap_strategy: options.overlap_strategy,
+      push_timed_engine(
+        &mut engines,
+        stats.as_deref_mut(),
+        total_pattern_count,
+        identity_pattern_bounds(total_pattern_count),
+        aho_mode,
+        regex_mode,
+        |aho_mode, _| {
+          build_identity_literal_engine(patterns, options, aho_mode)
+        },
+      )?;
+      return Ok(TextSearchBuildResult {
+        search: Self {
+          engines,
+          pattern_count: total_pattern_count,
+          overlap_strategy: options.overlap_strategy,
+        },
+        stats: stats.map_or_else(Vec::new, std::mem::take),
       });
     }
 
-    let classified = classify_pattern_entries(patterns, options.all_literal)?;
-    let mut fuzzy = Vec::new();
-    let mut literals = Vec::new();
-    let mut shared_regex = Vec::new();
-    let mut isolated_regex = Vec::new();
+    let parts = partition_classified_patterns(
+      classify_pattern_entries(patterns, options.all_literal)?,
+      options,
+    );
+    push_fuzzy_engines(
+      &mut engines,
+      &mut stats,
+      parts.fuzzy,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_literal_engines(
+      &mut engines,
+      &mut stats,
+      parts.literals,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_shared_regex_engines(
+      &mut engines,
+      &mut stats,
+      parts.shared_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_isolated_regex_engines(
+      &mut engines,
+      &mut stats,
+      parts.isolated_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
 
-    for pattern in classified {
-      if pattern.fuzzy_distance.is_some() {
-        fuzzy.push(pattern);
-      } else if pattern.is_literal {
-        literals.push(pattern);
-      } else if pattern
-        .regex_options
-        .as_ref()
-        .is_some_and(|regex_options| regex_options.lazy)
-        || pattern.alternation_count > options.max_alternations
-      {
-        isolated_regex.push(pattern);
-      } else {
-        shared_regex.push(pattern);
-      }
-    }
-
-    if !fuzzy.is_empty() {
-      engines.push(EngineSlot::Fuzzy(build_fuzzy_engine(fuzzy, options)?));
-    }
-
-    for (literal_options, group) in group_literals(literals, options) {
-      engines.push(EngineSlot::Literal(build_literal_engine(
-        group,
-        literal_options,
-        options.overlap_strategy,
-        aho_mode,
-      )?));
-    }
-
-    if options.overlap_strategy == OverlapStrategy::All {
-      for pattern in shared_regex {
-        let regex_options =
-          Some(pattern.regex_options.clone().unwrap_or_default());
-        engines.push(EngineSlot::Regex(build_regex_engine(
-          vec![pattern],
-          options,
-          regex_options,
-          aho_mode,
-          regex_mode,
-        )?));
-      }
-    } else {
-      for chunk in
-        chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-      {
-        engines.push(EngineSlot::Regex(build_regex_engine(
-          chunk, options, None, aho_mode, regex_mode,
-        )?));
-      }
-    }
-
-    for pattern in isolated_regex {
-      // Mirror the TS layer: isolated regexes carry their own prefilter
-      // options. Passing `Some(..)` (even when the pattern has no explicit
-      // options) marks this as the isolated path, which suppresses the
-      // shared-path leading-literal prefilter inference.
-      let lazy_options =
-        Some(pattern.regex_options.clone().unwrap_or_default());
-      engines.push(EngineSlot::Regex(build_regex_engine(
-        vec![pattern],
-        options,
-        lazy_options,
-        aho_mode,
-        regex_mode,
-      )?));
-    }
-
-    Ok(Self {
-      engines,
-      pattern_count,
-      overlap_strategy: options.overlap_strategy,
+    Ok(TextSearchBuildResult {
+      search: Self {
+        engines,
+        pattern_count: total_pattern_count,
+        overlap_strategy: options.overlap_strategy,
+      },
+      stats: stats.map_or_else(Vec::new, std::mem::take),
     })
   }
 
@@ -1063,6 +1355,227 @@ impl TextSearch {
     result.push_str(str_span(haystack, last_byte, haystack.len())?);
     Ok(result)
   }
+}
+
+struct ClassifiedParts {
+  fuzzy: Vec<ClassifiedPattern>,
+  literals: Vec<ClassifiedPattern>,
+  shared_regex: Vec<ClassifiedPattern>,
+  isolated_regex: Vec<ClassifiedPattern>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct PatternBounds {
+  first: Option<u32>,
+  last: Option<u32>,
+}
+
+fn pattern_bounds(patterns: &[ClassifiedPattern]) -> PatternBounds {
+  PatternBounds {
+    first: patterns.first().map(|pattern| pattern.original_index),
+    last: patterns.last().map(|pattern| pattern.original_index),
+  }
+}
+
+fn identity_pattern_bounds(pattern_count: usize) -> PatternBounds {
+  let last = pattern_count
+    .checked_sub(1)
+    .and_then(|index| u32::try_from(index).ok());
+  PatternBounds {
+    first: last.map(|_| 0),
+    last,
+  }
+}
+
+fn partition_classified_patterns(
+  classified: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+) -> ClassifiedParts {
+  let mut fuzzy = Vec::new();
+  let mut literals = Vec::new();
+  let mut shared_regex = Vec::new();
+  let mut isolated_regex = Vec::new();
+
+  for pattern in classified {
+    if pattern.fuzzy_distance.is_some() {
+      fuzzy.push(pattern);
+    } else if pattern.is_literal {
+      literals.push(pattern);
+    } else if pattern
+      .regex_options
+      .as_ref()
+      .is_some_and(|regex_options| regex_options.lazy)
+      || pattern.alternation_count > options.max_alternations
+    {
+      isolated_regex.push(pattern);
+    } else {
+      shared_regex.push(pattern);
+    }
+  }
+
+  ClassifiedParts {
+    fuzzy,
+    literals,
+    shared_regex,
+    isolated_regex,
+  }
+}
+
+fn push_fuzzy_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  fuzzy: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  if fuzzy.is_empty() {
+    return Ok(());
+  }
+  let fuzzy_pattern_count = fuzzy.len();
+  push_timed_engine(
+    engines,
+    stats.as_deref_mut(),
+    fuzzy_pattern_count,
+    pattern_bounds(&fuzzy),
+    aho_mode,
+    regex_mode,
+    |_, _| Ok(EngineSlot::Fuzzy(build_fuzzy_engine(fuzzy, options)?)),
+  )
+}
+
+fn push_literal_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  literals: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for (literal_options, group) in group_literals(literals, options) {
+    let literal_pattern_count = group.len();
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      literal_pattern_count,
+      pattern_bounds(&group),
+      aho_mode,
+      regex_mode,
+      |aho_mode, _| {
+        Ok(EngineSlot::Literal(build_literal_engine(
+          group,
+          literal_options,
+          options.overlap_strategy,
+          aho_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_shared_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  shared_regex: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  if options.overlap_strategy == OverlapStrategy::All {
+    return push_overlap_all_regex_engines(
+      engines,
+      stats,
+      shared_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    );
+  }
+
+  for chunk in
+    chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
+  {
+    let regex_pattern_count = chunk.len();
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      regex_pattern_count,
+      pattern_bounds(&chunk),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          chunk, options, None, aho_mode, regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_overlap_all_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  patterns: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for pattern in patterns {
+    let regex_options = Some(pattern.regex_options.clone().unwrap_or_default());
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      1,
+      pattern_bounds(std::slice::from_ref(&pattern)),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          regex_options,
+          aho_mode,
+          regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_isolated_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  isolated_regex: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for pattern in isolated_regex {
+    // Mirrors the TS lazyOptions path: `Some(..)` marks isolated regexes and
+    // suppresses shared leading-literal inference.
+    let lazy_options = Some(pattern.regex_options.clone().unwrap_or_default());
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      1,
+      pattern_bounds(std::slice::from_ref(&pattern)),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          lazy_options,
+          aho_mode,
+          regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
 }
 
 fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {

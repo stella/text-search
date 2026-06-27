@@ -5,9 +5,9 @@
 )]
 
 use stella_text_search_core::{
-  Error, FuzzyDistance, FuzzyPattern, LiteralPattern, OverlapStrategy,
-  PatternEntry, PreparedTextSearchArtifacts, RegexPattern, TextSearch,
-  TextSearchOptions, classify_patterns, count_alternations,
+  EngineKind, Error, FuzzyDistance, FuzzyPattern, LiteralPattern,
+  OverlapStrategy, PatternEntry, PreparedTextSearchArtifacts, RegexPattern,
+  TextSearch, TextSearchOptions, classify_patterns, count_alternations,
 };
 
 #[test]
@@ -149,6 +149,43 @@ fn prepared_artifacts_match_direct_search() {
     prepared.which_match(haystack).unwrap(),
     direct.which_match(haystack).unwrap()
   );
+}
+
+#[test]
+fn prepared_build_stats_report_internal_regex_slots() {
+  let patterns = vec![
+    PatternEntry::Regex(RegexPattern::new(r"\b[A-Z]{2}\d{4}\b")),
+    PatternEntry::Regex(RegexPattern::new(r"\b[A-Z]{3}\d{3}\b")),
+  ];
+  let artifacts = TextSearch::prepare_artifacts(
+    patterns.clone(),
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  let result = TextSearch::with_prepared_artifacts_build_stats(
+    patterns,
+    TextSearchOptions::default(),
+    &artifacts,
+  )
+  .unwrap();
+  let regex_stats = result
+    .stats
+    .iter()
+    .filter(|stat| stat.engine == EngineKind::Regex)
+    .collect::<Vec<_>>();
+
+  assert!(!regex_stats.is_empty());
+  assert_eq!(
+    regex_stats
+      .iter()
+      .map(|stat| stat.pattern_count)
+      .sum::<usize>(),
+    2
+  );
+  assert!(regex_stats.iter().any(|stat| {
+    stat.regex_artifact_count > 0 && stat.regex_artifact_bytes > 0
+  }));
 }
 
 #[test]
