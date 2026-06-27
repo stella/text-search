@@ -100,7 +100,7 @@ dependencies = [
 [[package]]
 name = "stella-regex-set-core"
 version = "1.0.5"
-source = "git+https://github.com/stella/regex-set?rev=f72e369995ccaefbe36b313469f70486b7a9dd7c#f72e369995ccaefbe36b313469f70486b7a9dd7c"
+source = "git+https://github.com/stella/regex-set?rev=9304628dbbfa5cdf13e729cc2548536cb214cc56#9304628dbbfa5cdf13e729cc2548536cb214cc56"
 dependencies = [
  "fancy-regex",
  "regex",
