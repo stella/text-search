@@ -10,6 +10,10 @@ use stella_text_search_core::{
   TextSearch, TextSearchOptions, classify_patterns, count_alternations,
 };
 
+const SPLIT_LITERAL_FIXTURE_CHUNK_SIZE: usize = 100_000;
+const SPLIT_LITERAL_FIXTURE_SIZE: usize = SPLIT_LITERAL_FIXTURE_CHUNK_SIZE + 1;
+const SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN: u32 = 100_000;
+
 #[test]
 fn routes_literal_regex_and_fuzzy_patterns() {
   let search = TextSearch::new(
@@ -516,11 +520,12 @@ fn prepared_regex_artifacts_roundtrip_bytes() {
 
 #[test]
 fn prepared_all_literal_artifacts_load_without_patterns() {
-  let mut patterns = (0..20_001)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
   let options = TextSearchOptions {
     all_literal: true,
     whole_words: true,
@@ -545,7 +550,7 @@ fn prepared_all_literal_artifacts_load_without_patterns() {
 
 #[test]
 fn prepared_all_literal_artifacts_preserve_exact_split_threshold() {
-  let mut patterns = (0..20_000)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_CHUNK_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
@@ -828,11 +833,12 @@ fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
 
 #[test]
 fn all_literal_identity_sets_split_and_select_globally() {
-  let mut patterns = (0..20_001)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
 
   let search = TextSearch::new(
     patterns,
@@ -855,17 +861,21 @@ fn all_literal_identity_sets_split_and_select_globally() {
       .iter()
       .map(|found| (found.pattern, found.text.as_str()))
       .collect::<Vec<_>>(),
-    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
   );
 }
 
 #[test]
 fn long_split_literal_search_preserves_global_overlap_order() {
-  let mut patterns = (0..20_001)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
 
   let search = TextSearch::new(
     patterns,
@@ -887,7 +897,10 @@ fn long_split_literal_search_preserves_global_overlap_order() {
       .iter()
       .map(|found| (found.pattern, found.text.as_str()))
       .collect::<Vec<_>>(),
-    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
   );
 }
 
@@ -924,11 +937,13 @@ fn find_stats_report_regex_slots_and_split_literal_subslots() {
     6
   );
 
-  let mut literal_patterns = (0..20_001)
+  let mut literal_patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *literal_patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *literal_patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *literal_patterns
+    .get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE)
+    .unwrap() = PatternEntry::from("alpha beta");
   let literal_search = TextSearch::new(
     literal_patterns,
     TextSearchOptions {
@@ -950,7 +965,10 @@ fn find_stats_report_regex_slots_and_split_literal_subslots() {
       .iter()
       .map(|found| (found.pattern, found.text.as_str()))
       .collect::<Vec<_>>(),
-    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
   );
   assert_eq!(
     literal_result
@@ -959,7 +977,7 @@ fn find_stats_report_regex_slots_and_split_literal_subslots() {
       .filter(|stat| stat.engine == EngineKind::SplitLiteral)
       .map(|stat| stat.pattern_count)
       .sum::<usize>(),
-    20_001
+    SPLIT_LITERAL_FIXTURE_SIZE
   );
   assert!(
     literal_result
