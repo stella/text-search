@@ -235,6 +235,7 @@ pub struct RegexPattern {
   /// Optional byte radius around literal prefilter hits for lazy single-pattern
   /// scans. Keeps broad cue words from forcing a full-haystack regex pass.
   pub prefilter_window_bytes: Option<usize>,
+  pub prepared_artifact_policy: PreparedArtifactPolicy,
 }
 
 impl RegexPattern {
@@ -248,6 +249,7 @@ impl RegexPattern {
       prefilter_case_insensitive: None,
       prefilter_regex: None,
       prefilter_window_bytes: None,
+      prepared_artifact_policy: PreparedArtifactPolicy::Inherit,
     }
   }
 }
@@ -310,6 +312,33 @@ pub enum OverlapStrategy {
   All,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RegexArtifactPolicy {
+  #[default]
+  Include,
+  Omit,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PreparedArtifactPolicy {
+  #[default]
+  Inherit,
+  Include,
+  Omit,
+}
+
+impl PreparedArtifactPolicy {
+  const fn should_capture(self, default_policy: RegexArtifactPolicy) -> bool {
+    match self {
+      Self::Inherit => {
+        matches!(default_policy, RegexArtifactPolicy::Include)
+      }
+      Self::Include => true,
+      Self::Omit => false,
+    }
+  }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextSearchOptions {
@@ -317,6 +346,7 @@ pub struct TextSearchOptions {
   pub whole_words: bool,
   pub max_alternations: u32,
   pub regex_chunk_size: Option<usize>,
+  pub regex_artifact_policy: RegexArtifactPolicy,
   pub fuzzy_metric: FuzzyMetric,
   pub normalize_diacritics: bool,
   pub case_insensitive: bool,
@@ -331,6 +361,7 @@ impl Default for TextSearchOptions {
       whole_words: false,
       max_alternations: 50,
       regex_chunk_size: None,
+      regex_artifact_policy: RegexArtifactPolicy::Include,
       fuzzy_metric: FuzzyMetric::Levenshtein,
       normalize_diacritics: false,
       case_insensitive: false,
@@ -569,6 +600,7 @@ pub struct RegexOptions {
   pub prefilter_case_insensitive: Option<bool>,
   pub prefilter_regex: Option<String>,
   pub prefilter_window_bytes: Option<usize>,
+  pub prepared_artifact_policy: PreparedArtifactPolicy,
 }
 
 pub struct TextSearch {
@@ -1436,11 +1468,11 @@ fn partition_classified_patterns(
       fuzzy.push(pattern);
     } else if pattern.is_literal {
       literals.push(pattern);
-    } else if pattern
-      .regex_options
-      .as_ref()
-      .is_some_and(|regex_options| regex_options.lazy)
-      || pattern.alternation_count > options.max_alternations
+    } else if pattern.regex_options.as_ref().is_some_and(|regex_options| {
+      regex_options.lazy
+        || regex_options.prepared_artifact_policy
+          != PreparedArtifactPolicy::Inherit
+    }) || pattern.alternation_count > options.max_alternations
     {
       isolated_regex.push(pattern);
     } else {
@@ -1682,6 +1714,7 @@ fn classify_pattern_entries(
           prefilter_case_insensitive,
           prefilter_regex,
           prefilter_window_bytes,
+          prepared_artifact_policy,
         } = regex_pattern;
         let alternation_count = count_alternations(&source);
         let regex_complexity =
@@ -1700,6 +1733,7 @@ fn classify_pattern_entries(
             prefilter_case_insensitive,
             prefilter_regex,
             prefilter_window_bytes,
+            prepared_artifact_policy,
           }),
           regex_complexity,
         }
@@ -2174,8 +2208,15 @@ fn build_regex_engine(
         .map(|source| build_prefilter_regex(source, regex_mode))
         .transpose()?
         .map(Box::new);
-      let prepared =
-        capture_or_load_lazy_regex(&values, engine_options, regex_mode)?;
+      let capture_prepared = lazy_options
+        .prepared_artifact_policy
+        .should_capture(options.regex_artifact_policy);
+      let prepared = capture_or_load_lazy_regex(
+        &values,
+        engine_options,
+        regex_mode,
+        capture_prepared,
+      )?;
       let engine = RegexEngine::Lazy {
         patterns: values,
         options: engine_options,
@@ -2185,10 +2226,15 @@ fn build_regex_engine(
       (engine, prefilter, prefilter_regex)
     }
     _ => {
+      let capture_prepared = should_capture_eager_regex_artifact(
+        lazy_options.as_ref(),
+        options.regex_artifact_policy,
+      );
       let engine = RegexEngine::Eager(Box::new(build_regex_set(
         values,
         engine_options,
         regex_mode,
+        capture_prepared,
       )?));
       (engine, inferred_prefilter, None)
     }
@@ -2203,6 +2249,20 @@ fn build_regex_engine(
     index_map,
     name_map,
   })
+}
+
+fn should_capture_eager_regex_artifact(
+  regex_options: Option<&RegexOptions>,
+  default_policy: RegexArtifactPolicy,
+) -> bool {
+  regex_options.map_or(
+    matches!(default_policy, RegexArtifactPolicy::Include),
+    |options| {
+      options
+        .prepared_artifact_policy
+        .should_capture(default_policy)
+    },
+  )
 }
 
 fn regex_slot_engine(slot: &RegexSlot) -> Result<&regex_core::RegexSet> {
@@ -2243,10 +2303,16 @@ fn build_regex_set(
   patterns: Vec<String>,
   options: regex_core::Options,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<regex_core::RegexSet> {
   match regex_mode {
     RegexBuildMode::Build => regex_core::RegexSet::new(patterns, options),
     RegexBuildMode::Capture(artifacts) => {
+      if !capture_prepared {
+        artifacts.push(PreparedRegexArtifact { bytes: Vec::new() });
+        return regex_core::RegexSet::new(patterns, options)
+          .map_err(|error| Error::BuildRegex(error.to_string()));
+      }
       let bytes = regex_core::RegexSet::prepare(patterns.clone(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
       let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes);
@@ -2255,6 +2321,10 @@ fn build_regex_set(
     }
     RegexBuildMode::Load { .. } => {
       let bytes = regex_mode.next_prepared_regex()?;
+      if bytes.is_empty() {
+        return regex_core::RegexSet::new(patterns, options)
+          .map_err(|error| Error::BuildRegex(error.to_string()));
+      }
       regex_core::RegexSet::with_prepared(patterns, options, bytes)
     }
   }
@@ -2265,10 +2335,15 @@ fn capture_or_load_lazy_regex(
   patterns: &[String],
   options: regex_core::Options,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<Option<Vec<u8>>> {
   match regex_mode {
     RegexBuildMode::Build => Ok(None),
     RegexBuildMode::Capture(artifacts) => {
+      if !capture_prepared {
+        artifacts.push(PreparedRegexArtifact { bytes: Vec::new() });
+        return Ok(None);
+      }
       let bytes = regex_core::RegexSet::prepare(patterns.to_vec(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
       artifacts.push(PreparedRegexArtifact {
@@ -2277,7 +2352,11 @@ fn capture_or_load_lazy_regex(
       Ok(Some(bytes))
     }
     RegexBuildMode::Load { .. } => {
-      Ok(Some(regex_mode.next_prepared_regex()?.to_vec()))
+      let bytes = regex_mode.next_prepared_regex()?;
+      if bytes.is_empty() {
+        return Ok(None);
+      }
+      Ok(Some(bytes.to_vec()))
     }
   }
 }
@@ -2609,6 +2688,7 @@ fn build_prefilter_regex(
       unicode_boundaries: true,
     },
     regex_mode,
+    true,
   )
 }
 
