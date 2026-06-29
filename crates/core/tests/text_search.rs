@@ -4,11 +4,16 @@
   clippy::unwrap_used
 )]
 
+use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
-  Error, FuzzyDistance, FuzzyPattern, LiteralPattern, OverlapStrategy,
-  PatternEntry, PreparedTextSearchArtifacts, RegexPattern, TextSearch,
-  TextSearchOptions, classify_patterns, count_alternations,
+  EngineKind, Error, FuzzyDistance, FuzzyPattern, LiteralPattern,
+  OverlapStrategy, PatternEntry, PreparedTextSearchArtifacts, RegexPattern,
+  TextSearch, TextSearchOptions, classify_patterns, count_alternations,
 };
+
+const SPLIT_LITERAL_FIXTURE_CHUNK_SIZE: usize = 100_000;
+const SPLIT_LITERAL_FIXTURE_SIZE: usize = SPLIT_LITERAL_FIXTURE_CHUNK_SIZE + 1;
+const SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN: u32 = 100_000;
 
 #[test]
 fn routes_literal_regex_and_fuzzy_patterns() {
@@ -152,6 +157,71 @@ fn prepared_artifacts_match_direct_search() {
 }
 
 #[test]
+fn prepared_build_stats_report_internal_regex_slots() {
+  let patterns = vec![
+    PatternEntry::Regex(RegexPattern::new(r"\b[A-Z]{2}\d{4}\b")),
+    PatternEntry::Regex(RegexPattern::new(r"\b[A-Z]{3}\d{3}\b")),
+  ];
+  let artifacts = TextSearch::prepare_artifacts(
+    patterns.clone(),
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  let result = TextSearch::with_prepared_artifacts_build_stats(
+    patterns,
+    TextSearchOptions::default(),
+    &artifacts,
+  )
+  .unwrap();
+  let regex_stats = result
+    .stats
+    .iter()
+    .filter(|stat| stat.engine == EngineKind::Regex)
+    .collect::<Vec<_>>();
+
+  assert!(!regex_stats.is_empty());
+  assert_eq!(
+    regex_stats
+      .iter()
+      .map(|stat| stat.pattern_count)
+      .sum::<usize>(),
+    2
+  );
+  assert!(regex_stats.iter().any(|stat| {
+    stat.regex_artifact_count > 0 && stat.regex_artifact_bytes > 0
+  }));
+}
+
+#[test]
+fn long_multi_slot_regex_search_preserves_match_order() {
+  let mut patterns = Vec::new();
+  for index in 0..6 {
+    let mut pattern = RegexPattern::new(format!(r"TOKEN{index}-\d+"));
+    pattern.lazy = true;
+    patterns.push(PatternEntry::Regex(pattern));
+  }
+  let search = TextSearch::new(patterns, TextSearchOptions::default()).unwrap();
+  assert_eq!(search.engine_stats().regex_slots, 6);
+
+  let haystack = format!(
+    "{} TOKEN3-42 {} TOKEN0-9 {} TOKEN5-77",
+    "x".repeat(33_000),
+    "y".repeat(128),
+    "z".repeat(128),
+  );
+
+  let matches = search.find_iter(&haystack).unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(3, "TOKEN3-42"), (0, "TOKEN0-9"), (5, "TOKEN5-77")]
+  );
+}
+
+#[test]
 fn prepared_artifacts_capture_regex_sets() {
   let mut account = RegexPattern::new(r"ACC-\d{3}");
   account.name = Some(String::from("account"));
@@ -232,6 +302,31 @@ fn prepared_artifacts_capture_lazy_regex_sets() {
     direct.find_iter("token-42").unwrap()
   );
   assert!(!prepared.is_match("token").unwrap());
+}
+
+#[test]
+fn small_lazy_prefilters_stay_inline_in_prepared_artifacts() {
+  let mut regex = RegexPattern::new(
+    r"(?i)\boddíl[^\S\n]+[A-Z][^\S\n]*,[^\S\n]*vložka[^\S\n]+\d{1,6}\b",
+  );
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("oddíl"));
+  regex.prefilter_any.push(String::from("vložka"));
+  regex.prefilter_case_insensitive = Some(true);
+  let patterns = vec![PatternEntry::Regex(regex)];
+  let options = TextSearchOptions::default();
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+
+  assert_eq!(artifacts.aho_automata.len(), 0);
+  assert_eq!(artifacts.regex_sets.len(), 1);
+
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert!(prepared.is_match("ODDÍL C, VLOŽKA 334648").unwrap());
+  assert!(!prepared.is_match("plain contract text").unwrap());
 }
 
 #[test]
@@ -426,11 +521,12 @@ fn prepared_regex_artifacts_roundtrip_bytes() {
 
 #[test]
 fn prepared_all_literal_artifacts_load_without_patterns() {
-  let mut patterns = (0..20_001)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
   let options = TextSearchOptions {
     all_literal: true,
     whole_words: true,
@@ -455,7 +551,7 @@ fn prepared_all_literal_artifacts_load_without_patterns() {
 
 #[test]
 fn prepared_all_literal_artifacts_preserve_exact_split_threshold() {
-  let mut patterns = (0..20_000)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_CHUNK_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
@@ -683,6 +779,29 @@ fn warm_lazy_regex_initializes_without_prefilter_hit() {
 }
 
 #[test]
+fn warm_lazy_regex_initializes_prepared_lazy_slots() {
+  let mut patterns = Vec::new();
+  for index in 0..8 {
+    let mut regex = RegexPattern::new(format!("token{index}\\s+\\d+"));
+    regex.lazy = true;
+    patterns.push(PatternEntry::Regex(regex));
+  }
+  let options = TextSearchOptions::default();
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let search =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert_eq!(search.engine_stats().regex_slots, 8);
+  search.warm_lazy_regex().unwrap();
+
+  let matches = search.find_iter("before token6 42 after").unwrap();
+
+  assert_eq!(matches.len(), 1);
+  assert_eq!(matches.first().map(|match_| match_.pattern), Some(6));
+}
+
+#[test]
 fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
   // A non-lazy regex carrying `prefilter_any` shares a chunked slot with other
   // regexes. The prefilter must not be promoted to a slot-wide gate, otherwise
@@ -715,11 +834,12 @@ fn non_lazy_prefilter_does_not_gate_sibling_patterns_in_shared_slot() {
 
 #[test]
 fn all_literal_identity_sets_split_and_select_globally() {
-  let mut patterns = (0..20_001)
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
     .collect::<Vec<_>>();
   *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
-  *patterns.get_mut(20_000).unwrap() = PatternEntry::from("alpha beta");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
 
   let search = TextSearch::new(
     patterns,
@@ -742,7 +862,129 @@ fn all_literal_identity_sets_split_and_select_globally() {
       .iter()
       .map(|found| (found.pattern, found.text.as_str()))
       .collect::<Vec<_>>(),
-    vec![(0, "ALPHA"), (20_000, "ALPHA beta")]
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
+  );
+}
+
+#[test]
+fn long_split_literal_search_preserves_global_overlap_order() {
+  let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
+    .map(|index| PatternEntry::from(format!("term-{index}")))
+    .collect::<Vec<_>>();
+  *patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
+  *patterns.get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE).unwrap() =
+    PatternEntry::from("alpha beta");
+
+  let search = TextSearch::new(
+    patterns,
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      case_insensitive: true,
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  assert_eq!(search.engine_stats().split_literal_engines, 2);
+
+  let haystack = format!("{} ALPHA beta", "x ".repeat(17_000));
+  let matches = search.find_iter(&haystack).unwrap();
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
+  );
+}
+
+#[test]
+fn find_stats_report_regex_slots_and_split_literal_subslots() {
+  let regex_search = TextSearch::new(
+    (0..6).map(|index| {
+      let mut pattern = RegexPattern::new(format!(r"TOKEN{index}-\d+"));
+      pattern.lazy = true;
+      PatternEntry::Regex(pattern)
+    }),
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let regex_result = regex_search
+    .find_iter_with_stats(&format!("{} TOKEN3-42", "x".repeat(33_000)))
+    .unwrap();
+
+  assert_eq!(
+    regex_result
+      .matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![(3, "TOKEN3-42")]
+  );
+  assert_eq!(
+    regex_result
+      .stats
+      .iter()
+      .filter(|stat| stat.engine == EngineKind::Regex)
+      .map(|stat| stat.pattern_count)
+      .sum::<usize>(),
+    6
+  );
+
+  let mut literal_patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
+    .map(|index| PatternEntry::from(format!("term-{index}")))
+    .collect::<Vec<_>>();
+  *literal_patterns.get_mut(0).unwrap() = PatternEntry::from("alpha");
+  *literal_patterns
+    .get_mut(SPLIT_LITERAL_FIXTURE_CHUNK_SIZE)
+    .unwrap() = PatternEntry::from("alpha beta");
+  let literal_search = TextSearch::new(
+    literal_patterns,
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      case_insensitive: true,
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  let literal_result = literal_search
+    .find_iter_with_stats(&format!("{} ALPHA beta", "x ".repeat(17_000)))
+    .unwrap();
+
+  assert_eq!(
+    literal_result
+      .matches
+      .iter()
+      .map(|found| (found.pattern, found.text.as_str()))
+      .collect::<Vec<_>>(),
+    vec![
+      (0, "ALPHA"),
+      (SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN, "ALPHA beta")
+    ]
+  );
+  assert_eq!(
+    literal_result
+      .stats
+      .iter()
+      .filter(|stat| stat.engine == EngineKind::SplitLiteral)
+      .map(|stat| stat.pattern_count)
+      .sum::<usize>(),
+    SPLIT_LITERAL_FIXTURE_SIZE
+  );
+  assert!(
+    literal_result
+      .stats
+      .iter()
+      .any(|stat| stat.subslot == Some(1))
   );
 }
 
@@ -913,6 +1155,235 @@ fn lazy_regex_prefilter_regex_gates_engine_build() {
 
   assert!(!search.is_match("no digits here").unwrap());
   assert!(search.is_match("year 123").is_err());
+}
+
+#[test]
+fn inline_prefilter_matches_ascii_needles_in_unicode_haystacks() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("token"));
+  regex.prefilter_case_insensitive = Some(true);
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.is_match("případ TOKEN").is_err());
+}
+
+#[test]
+fn inline_prefilter_matches_unicode_case_folds() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("straße"));
+  regex.prefilter_case_insensitive = Some(true);
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.is_match("STRASSE").is_err());
+}
+
+#[test]
+fn lazy_regex_prefilter_window_matches_unbounded_results() {
+  let haystack = format!(
+    "{} alpha token 42 {} beta token 77 {}",
+    "noise ".repeat(4_000),
+    "noise ".repeat(2_000),
+    "noise ".repeat(1_000)
+  );
+
+  let mut bounded =
+    RegexPattern::new(r"(?<!\w)(?:alpha|beta)\s+token\s+\d{2}(?!\w)");
+  bounded.lazy = true;
+  bounded.prefilter_any.push(String::from("token"));
+  bounded.prefilter_window_bytes = Some(32);
+
+  let mut unbounded = bounded.clone();
+  unbounded.prefilter_window_bytes = None;
+
+  let bounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(bounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let unbounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(unbounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert_eq!(
+    bounded_search.find_iter(&haystack).unwrap(),
+    unbounded_search.find_iter(&haystack).unwrap()
+  );
+}
+
+#[test]
+fn lazy_regex_prefilter_window_keeps_contextual_matches_near_cue() {
+  let haystack = format!(
+    "2024-01-01 {} Invoice date 2026-06-29 paid",
+    "noise ".repeat(20)
+  );
+  let mut regex = RegexPattern::new(r"\b\d{4}-\d{2}-\d{2}\b");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("Invoice"));
+  regex.prefilter_window_bytes = Some(32);
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let matches = search.find_iter(&haystack).unwrap();
+
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["2026-06-29"]
+  );
+}
+
+#[test]
+fn lazy_regex_prefilter_window_keeps_exact_internal_edge_matches() {
+  let mut regex = RegexPattern::new("foo");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("foo"));
+  regex.prefilter_window_bytes = Some(0);
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let matches = search.find_iter("xfoo").unwrap();
+
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["foo"]
+  );
+}
+
+#[test]
+fn lazy_regex_prefilter_window_verifies_internal_edge_matches() {
+  let mut regex = RegexPattern::new(r"(?<!\w)foo");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("foo"));
+  regex.prefilter_window_bytes = Some(0);
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.find_iter("xfoo").unwrap().is_empty());
+  assert!(!search.is_match("xfoo").unwrap());
+}
+
+#[test]
+fn lazy_regex_prefilter_window_keeps_lookbehind_context() {
+  let mut bounded = RegexPattern::new(r"(?<=x)foo");
+  bounded.lazy = true;
+  bounded.prefilter_any.push(String::from("foo"));
+  bounded.prefilter_window_bytes = Some(0);
+
+  let mut unbounded = bounded.clone();
+  unbounded.prefilter_window_bytes = None;
+
+  let bounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(bounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let unbounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(unbounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert_eq!(
+    bounded_search.find_iter("xfoo").unwrap(),
+    unbounded_search.find_iter("xfoo").unwrap()
+  );
+  assert!(bounded_search.is_match("xfoo").unwrap());
+}
+
+#[test]
+fn lazy_regex_prefilter_window_uses_overlapping_cue_hits() {
+  let mut bounded = RegexPattern::new("a");
+  bounded.lazy = true;
+  bounded.prefilter_any.push(String::from("aa"));
+  bounded.prefilter_window_bytes = Some(0);
+
+  let mut unbounded = bounded.clone();
+  unbounded.prefilter_window_bytes = None;
+
+  let bounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(bounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let unbounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(unbounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert_eq!(
+    bounded_search.find_iter("aaa").unwrap(),
+    unbounded_search.find_iter("aaa").unwrap()
+  );
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(48))]
+
+  #[test]
+  fn windowed_lazy_regex_matches_unbounded_for_generated_contexts(
+    prefix in "[a-z ]{0,64}",
+    middle in "[a-z ]{0,64}",
+    suffix in "[a-z ]{0,64}",
+    first in 0u16..1000,
+    second in 0u16..1000,
+  ) {
+    let haystack = format!(
+      "{prefix} alpha token {first} {middle} beta token {second} {suffix}"
+    );
+
+    let mut bounded =
+      RegexPattern::new(r"(?<!\w)(?:alpha|beta)\s+token\s+\d{1,3}(?!\w)");
+    bounded.lazy = true;
+    bounded.prefilter_any.push(String::from("token"));
+    bounded.prefilter_window_bytes = Some(32);
+
+    let mut unbounded = bounded.clone();
+    unbounded.prefilter_window_bytes = None;
+
+    let bounded_search = TextSearch::new(
+      vec![PatternEntry::Regex(bounded)],
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+    let unbounded_search = TextSearch::new(
+      vec![PatternEntry::Regex(unbounded)],
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+
+    proptest::prop_assert_eq!(
+      bounded_search.find_iter(&haystack).unwrap(),
+      unbounded_search.find_iter(&haystack).unwrap()
+    );
+  }
 }
 
 #[test]

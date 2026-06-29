@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
+use std::time::Instant;
 use std::{error, fmt};
 
 use stella_aho_corasick_core as aho_core;
@@ -11,12 +12,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 const AUTO_REGEX_CHUNK_MAX_SIZE: usize = 16;
 const AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET: u32 = 6;
 const AUTO_REGEX_ISOLATE_COMPLEXITY: u32 = 7;
-const SPLIT_IDENTITY_AC_CHUNK_SIZE: usize = 20_000;
+const SPLIT_IDENTITY_AC_CHUNK_SIZE: usize = 100_000;
 const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 6;
+const PREPARED_ARTIFACTS_VERSION: u32 = 7;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
@@ -30,6 +31,13 @@ const PREPARED_LITERAL_UNICODE_BOUNDARIES: u8 = 1 << 2;
 const PREPARED_LITERAL_FLAGS_MASK: u8 = PREPARED_LITERAL_CASE_INSENSITIVE
   | PREPARED_LITERAL_WHOLE_WORDS
   | PREPARED_LITERAL_UNICODE_BOUNDARIES;
+const PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS: usize = 4;
+const PARALLEL_FIND_MIN_ENGINES: usize = 4;
+const PARALLEL_FIND_MIN_BYTES: usize = 32 * 1024;
+const PARALLEL_FIND_MAX_WORKERS: usize = 4;
+const PARALLEL_SPLIT_LITERAL_MIN_ENGINES: usize = 2;
+const INLINE_LITERAL_PREFILTER_MAX_PATTERNS: usize = 4;
+const INLINE_LITERAL_PREFILTER_MAX_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -224,6 +232,9 @@ pub struct RegexPattern {
   /// regex engine is skipped unless this pattern also matches. Lazy patterns
   /// only, matching the TS layer.
   pub prefilter_regex: Option<String>,
+  /// Optional byte radius around literal prefilter hits for lazy single-pattern
+  /// scans. Keeps broad cue words from forcing a full-haystack regex pass.
+  pub prefilter_window_bytes: Option<usize>,
 }
 
 impl RegexPattern {
@@ -236,6 +247,7 @@ impl RegexPattern {
       prefilter_any: Vec::new(),
       prefilter_case_insensitive: None,
       prefilter_regex: None,
+      prefilter_window_bytes: None,
     }
   }
 }
@@ -366,6 +378,53 @@ pub struct EngineStats {
   pub split_literal_engines: usize,
   pub regex_slots: usize,
   pub fuzzy_slots: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineKind {
+  Literal,
+  SplitLiteral,
+  Regex,
+  Fuzzy,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BuildStats {
+  pub slot: usize,
+  pub engine: EngineKind,
+  pub pattern_count: usize,
+  pub first_pattern: Option<u32>,
+  pub last_pattern: Option<u32>,
+  pub elapsed_us: u64,
+  pub aho_artifact_count: usize,
+  pub aho_artifact_bytes: usize,
+  pub regex_artifact_count: usize,
+  pub regex_artifact_bytes: usize,
+  pub regex_lazy: bool,
+  pub regex_prefilter: bool,
+  pub regex_prefilter_regex: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FindStats {
+  pub slot: usize,
+  pub subslot: Option<usize>,
+  pub engine: EngineKind,
+  pub pattern_count: usize,
+  pub first_pattern: Option<u32>,
+  pub last_pattern: Option<u32>,
+  pub match_count: usize,
+  pub elapsed_us: u64,
+}
+
+pub struct TextSearchBuildResult {
+  pub search: TextSearch,
+  pub stats: Vec<BuildStats>,
+}
+
+pub struct TextSearchFindResult {
+  pub matches: Vec<Match>,
+  pub stats: Vec<FindStats>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -509,6 +568,7 @@ pub struct RegexOptions {
   pub prefilter_any: Vec<String>,
   pub prefilter_case_insensitive: Option<bool>,
   pub prefilter_regex: Option<String>,
+  pub prefilter_window_bytes: Option<usize>,
 }
 
 pub struct TextSearch {
@@ -546,6 +606,8 @@ struct RegexSlot {
   engine: RegexEngine,
   prefilter: Option<LiteralPrefilter>,
   prefilter_regex: Option<Box<regex_core::RegexSet>>,
+  prefilter_window_bytes: Option<usize>,
+  prefilter_window_needs_full_context: bool,
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
 }
@@ -567,7 +629,13 @@ struct FuzzySlot {
 }
 
 enum LiteralPrefilter {
-  Single { needle: String },
+  Single {
+    needle: String,
+  },
+  Inline {
+    needles: Vec<String>,
+    case_insensitive: bool,
+  },
   Many(Box<aho_core::AhoCorasick>),
 }
 
@@ -589,7 +657,33 @@ enum RegexBuildMode<'a> {
   },
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ArtifactMetrics {
+  count: usize,
+  bytes: usize,
+}
+
 impl RegexBuildMode<'_> {
+  const fn position(&self) -> usize {
+    match self {
+      Self::Build => 0,
+      Self::Capture(artifacts) => artifacts.len(),
+      Self::Load { index, .. } => *index,
+    }
+  }
+
+  fn artifact_metrics_since(&self, start: usize) -> ArtifactMetrics {
+    match self {
+      Self::Build => ArtifactMetrics::default(),
+      Self::Capture(artifacts) => artifacts
+        .get(start..)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+      Self::Load { artifacts, index } => artifacts
+        .get(start..*index)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+    }
+  }
+
   fn next_prepared_regex(&mut self) -> Result<&[u8]> {
     let Self::Load { artifacts, index } = self else {
       return Err(Error::BuildRegex(String::from(
@@ -619,6 +713,26 @@ impl RegexBuildMode<'_> {
 }
 
 impl AhoBuildMode<'_> {
+  const fn position(&self) -> usize {
+    match self {
+      Self::Build => 0,
+      Self::Capture(automata) => automata.len(),
+      Self::Load { index, .. } => *index,
+    }
+  }
+
+  fn artifact_metrics_since(&self, start: usize) -> ArtifactMetrics {
+    match self {
+      Self::Build => ArtifactMetrics::default(),
+      Self::Capture(automata) => automata
+        .get(start..)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+      Self::Load { automata, index } => automata
+        .get(start..*index)
+        .map_or_else(ArtifactMetrics::default, artifact_metrics),
+    }
+  }
+
   fn prepared_aho_count(&self) -> Result<usize> {
     let Self::Load { automata, .. } = self else {
       return Err(Error::BuildLiteral(String::from(
@@ -664,6 +778,136 @@ impl AhoBuildMode<'_> {
   }
 }
 
+trait PreparedArtifactBytes {
+  fn byte_len(&self) -> usize;
+}
+
+impl PreparedArtifactBytes for PreparedAhoArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+impl PreparedArtifactBytes for PreparedRegexArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+fn artifact_metrics(
+  artifacts: &[impl PreparedArtifactBytes],
+) -> ArtifactMetrics {
+  ArtifactMetrics {
+    count: artifacts.len(),
+    bytes: artifacts
+      .iter()
+      .map(PreparedArtifactBytes::byte_len)
+      .fold(0usize, usize::saturating_add),
+  }
+}
+
+fn push_timed_engine(
+  engines: &mut Vec<EngineSlot>,
+  stats: Option<&mut Vec<BuildStats>>,
+  pattern_count: usize,
+  pattern_bounds: PatternBounds,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+  build: impl FnOnce(
+    &mut AhoBuildMode<'_>,
+    &mut RegexBuildMode<'_>,
+  ) -> Result<EngineSlot>,
+) -> Result<()> {
+  let slot = engines.len();
+  let aho_start = aho_mode.position();
+  let regex_start = regex_mode.position();
+  let start = stats.as_ref().map(|_| Instant::now());
+  let engine = build(aho_mode, regex_mode)?;
+  if let (Some(stats), Some(start)) = (stats, start) {
+    stats.push(build_stats_for_engine(
+      slot,
+      &engine,
+      pattern_count,
+      pattern_bounds,
+      elapsed_us(start),
+      aho_mode.artifact_metrics_since(aho_start),
+      regex_mode.artifact_metrics_since(regex_start),
+    ));
+  }
+  engines.push(engine);
+  Ok(())
+}
+
+const fn build_stats_for_engine(
+  slot: usize,
+  engine: &EngineSlot,
+  pattern_count: usize,
+  pattern_bounds: PatternBounds,
+  elapsed_us: u64,
+  aho_metrics: ArtifactMetrics,
+  regex_metrics: ArtifactMetrics,
+) -> BuildStats {
+  BuildStats {
+    slot,
+    engine: engine_kind(engine),
+    pattern_count,
+    first_pattern: pattern_bounds.first,
+    last_pattern: pattern_bounds.last,
+    elapsed_us,
+    aho_artifact_count: aho_metrics.count,
+    aho_artifact_bytes: aho_metrics.bytes,
+    regex_artifact_count: regex_metrics.count,
+    regex_artifact_bytes: regex_metrics.bytes,
+    regex_lazy: engine_regex_lazy(engine),
+    regex_prefilter: engine_regex_prefilter(engine),
+    regex_prefilter_regex: engine_regex_prefilter_regex(engine),
+  }
+}
+
+const fn engine_kind(engine: &EngineSlot) -> EngineKind {
+  match engine {
+    EngineSlot::Literal(_) => EngineKind::Literal,
+    EngineSlot::SplitLiteral(_) => EngineKind::SplitLiteral,
+    EngineSlot::Regex(_) => EngineKind::Regex,
+    EngineSlot::Fuzzy(_) => EngineKind::Fuzzy,
+  }
+}
+
+const fn engine_regex_lazy(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      engine: RegexEngine::Lazy { .. },
+      ..
+    })
+  )
+}
+
+const fn engine_regex_prefilter(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      prefilter: Some(_),
+      ..
+    })
+  )
+}
+
+const fn engine_regex_prefilter_regex(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      prefilter_regex: Some(_),
+      ..
+    })
+  )
+}
+
+fn elapsed_us(start: Instant) -> u64 {
+  let micros = start.elapsed().as_micros();
+  u64::try_from(micros).unwrap_or(u64::MAX)
+}
+
 impl TextSearch {
   pub fn new(
     patterns: impl IntoIterator<Item = PatternEntry>,
@@ -672,6 +916,20 @@ impl TextSearch {
     let mut aho_mode = AhoBuildMode::Build;
     let mut regex_mode = RegexBuildMode::Build;
     Self::build_with_modes(patterns, options, &mut aho_mode, &mut regex_mode)
+  }
+
+  pub fn new_with_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Build;
+    let mut regex_mode = RegexBuildMode::Build;
+    Self::build_with_modes_stats(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )
   }
 
   pub fn prepare_artifacts(
@@ -718,6 +976,30 @@ impl TextSearch {
     Ok(search)
   }
 
+  pub fn with_prepared_artifacts_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Load {
+      automata: &artifacts.aho_automata,
+      index: 0,
+    };
+    let mut regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
+    let result = Self::build_with_modes_stats(
+      patterns,
+      options,
+      &mut aho_mode,
+      &mut regex_mode,
+    )?;
+    aho_mode.finish()?;
+    regex_mode.finish()?;
+    Ok(result)
+  }
+
   pub fn with_prepared_all_literal_artifacts(
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
@@ -735,6 +1017,43 @@ impl TextSearch {
     aho_mode.finish()?;
     regex_mode.finish()?;
     Ok(search)
+  }
+
+  pub fn with_prepared_all_literal_artifacts_build_stats(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let mut aho_mode = AhoBuildMode::Load {
+      automata: &artifacts.aho_automata,
+      index: 0,
+    };
+    let regex_mode = RegexBuildMode::Load {
+      artifacts: &artifacts.regex_sets,
+      index: 0,
+    };
+    let start = Instant::now();
+    let search =
+      Self::build_all_literal_from_aho_artifacts(options, &mut aho_mode)?;
+    let stats = search
+      .engines
+      .first()
+      .map(|engine| {
+        let artifact_metrics = aho_mode.artifact_metrics_since(0);
+        build_stats_for_engine(
+          0,
+          engine,
+          search.pattern_count,
+          identity_pattern_bounds(search.pattern_count),
+          elapsed_us(start),
+          artifact_metrics,
+          ArtifactMetrics::default(),
+        )
+      })
+      .into_iter()
+      .collect();
+    aho_mode.finish()?;
+    regex_mode.finish()?;
+    Ok(TextSearchBuildResult { search, stats })
   }
 
   fn build_all_literal_from_aho_artifacts(
@@ -793,100 +1112,110 @@ impl TextSearch {
     aho_mode: &mut AhoBuildMode<'_>,
     regex_mode: &mut RegexBuildMode<'_>,
   ) -> Result<Self> {
+    Ok(
+      Self::build_with_modes_inner(
+        patterns, options, aho_mode, regex_mode, None,
+      )?
+      .search,
+    )
+  }
+
+  fn build_with_modes_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    aho_mode: &mut AhoBuildMode<'_>,
+    regex_mode: &mut RegexBuildMode<'_>,
+  ) -> Result<TextSearchBuildResult> {
+    let mut stats = Vec::new();
+    Self::build_with_modes_inner(
+      patterns,
+      options,
+      aho_mode,
+      regex_mode,
+      Some(&mut stats),
+    )
+  }
+
+  fn build_with_modes_inner(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    aho_mode: &mut AhoBuildMode<'_>,
+    regex_mode: &mut RegexBuildMode<'_>,
+    mut stats: Option<&mut Vec<BuildStats>>,
+  ) -> Result<TextSearchBuildResult> {
     let patterns = patterns.into_iter().collect::<Vec<_>>();
-    let pattern_count = patterns.len();
+    let total_pattern_count = patterns.len();
     let mut engines = Vec::new();
 
     if options.all_literal
       && all_auto_patterns(&patterns)
       && !patterns.is_empty()
     {
-      engines.push(build_identity_literal_engine(patterns, options, aho_mode)?);
-      return Ok(Self {
-        engines,
-        pattern_count,
-        overlap_strategy: options.overlap_strategy,
+      push_timed_engine(
+        &mut engines,
+        stats.as_deref_mut(),
+        total_pattern_count,
+        identity_pattern_bounds(total_pattern_count),
+        aho_mode,
+        regex_mode,
+        |aho_mode, _| {
+          build_identity_literal_engine(patterns, options, aho_mode)
+        },
+      )?;
+      return Ok(TextSearchBuildResult {
+        search: Self {
+          engines,
+          pattern_count: total_pattern_count,
+          overlap_strategy: options.overlap_strategy,
+        },
+        stats: stats.map_or_else(Vec::new, std::mem::take),
       });
     }
 
-    let classified = classify_pattern_entries(patterns, options.all_literal)?;
-    let mut fuzzy = Vec::new();
-    let mut literals = Vec::new();
-    let mut shared_regex = Vec::new();
-    let mut isolated_regex = Vec::new();
+    let parts = partition_classified_patterns(
+      classify_pattern_entries(patterns, options.all_literal)?,
+      options,
+    );
+    push_fuzzy_engines(
+      &mut engines,
+      &mut stats,
+      parts.fuzzy,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_literal_engines(
+      &mut engines,
+      &mut stats,
+      parts.literals,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_shared_regex_engines(
+      &mut engines,
+      &mut stats,
+      parts.shared_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
+    push_isolated_regex_engines(
+      &mut engines,
+      &mut stats,
+      parts.isolated_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    )?;
 
-    for pattern in classified {
-      if pattern.fuzzy_distance.is_some() {
-        fuzzy.push(pattern);
-      } else if pattern.is_literal {
-        literals.push(pattern);
-      } else if pattern
-        .regex_options
-        .as_ref()
-        .is_some_and(|regex_options| regex_options.lazy)
-        || pattern.alternation_count > options.max_alternations
-      {
-        isolated_regex.push(pattern);
-      } else {
-        shared_regex.push(pattern);
-      }
-    }
-
-    if !fuzzy.is_empty() {
-      engines.push(EngineSlot::Fuzzy(build_fuzzy_engine(fuzzy, options)?));
-    }
-
-    for (literal_options, group) in group_literals(literals, options) {
-      engines.push(EngineSlot::Literal(build_literal_engine(
-        group,
-        literal_options,
-        options.overlap_strategy,
-        aho_mode,
-      )?));
-    }
-
-    if options.overlap_strategy == OverlapStrategy::All {
-      for pattern in shared_regex {
-        let regex_options =
-          Some(pattern.regex_options.clone().unwrap_or_default());
-        engines.push(EngineSlot::Regex(build_regex_engine(
-          vec![pattern],
-          options,
-          regex_options,
-          aho_mode,
-          regex_mode,
-        )?));
-      }
-    } else {
-      for chunk in
-        chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-      {
-        engines.push(EngineSlot::Regex(build_regex_engine(
-          chunk, options, None, aho_mode, regex_mode,
-        )?));
-      }
-    }
-
-    for pattern in isolated_regex {
-      // Mirror the TS layer: isolated regexes carry their own prefilter
-      // options. Passing `Some(..)` (even when the pattern has no explicit
-      // options) marks this as the isolated path, which suppresses the
-      // shared-path leading-literal prefilter inference.
-      let lazy_options =
-        Some(pattern.regex_options.clone().unwrap_or_default());
-      engines.push(EngineSlot::Regex(build_regex_engine(
-        vec![pattern],
-        options,
-        lazy_options,
-        aho_mode,
-        regex_mode,
-      )?));
-    }
-
-    Ok(Self {
-      engines,
-      pattern_count,
-      overlap_strategy: options.overlap_strategy,
+    Ok(TextSearchBuildResult {
+      search: Self {
+        engines,
+        pattern_count: total_pattern_count,
+        overlap_strategy: options.overlap_strategy,
+      },
+      stats: stats.map_or_else(Vec::new, std::mem::take),
     })
   }
 
@@ -927,10 +1256,36 @@ impl TextSearch {
   }
 
   pub fn warm_lazy_regex(&self) -> Result<()> {
-    for engine in &self.engines {
-      warm_engine_lazy_regex(engine)?;
+    let lazy_engines = self
+      .engines
+      .iter()
+      .filter(|engine| engine_has_uninitialized_lazy_regex(engine))
+      .collect::<Vec<_>>();
+    let lazy_count = lazy_engines.len();
+    if lazy_count < PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS {
+      return warm_engine_refs_lazy_regex(&lazy_engines);
     }
-    Ok(())
+
+    let workers = std::thread::available_parallelism()
+      .map_or(1, usize::from)
+      .min(lazy_count);
+    if workers <= 1 {
+      return warm_engine_refs_lazy_regex(&lazy_engines);
+    }
+
+    let chunk_size = lazy_count.div_ceil(workers);
+    std::thread::scope(|scope| {
+      let mut handles = Vec::with_capacity(workers);
+      for chunk in lazy_engines.chunks(chunk_size) {
+        handles.push(scope.spawn(move || warm_engine_refs_lazy_regex(chunk)));
+      }
+      for handle in handles {
+        handle.join().map_err(|_| {
+          Error::BuildRegex(String::from("Lazy regex warm-up panicked"))
+        })??;
+      }
+      Ok(())
+    })
   }
 
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
@@ -943,20 +1298,18 @@ impl TextSearch {
   }
 
   pub fn find_iter(&self, haystack: &str) -> Result<Vec<Match>> {
-    let mut matches = Vec::new();
-    for engine in &self.engines {
-      matches.extend(engine_find_iter(engine, haystack)?);
-    }
+    let mut matches = find_iter_engines(&self.engines, haystack)?;
+    finalize_find_matches(&mut matches, self.overlap_strategy);
+    Ok(matches)
+  }
 
-    if matches.len() <= 1 {
-      return Ok(matches);
-    }
-    if self.overlap_strategy == OverlapStrategy::All {
-      matches.sort_by_key(|found| found.start);
-      return Ok(matches);
-    }
-
-    Ok(merge_and_select(matches))
+  pub fn find_iter_with_stats(
+    &self,
+    haystack: &str,
+  ) -> Result<TextSearchFindResult> {
+    let mut result = find_iter_engines_with_stats(&self.engines, haystack)?;
+    finalize_find_matches(&mut result.matches, self.overlap_strategy);
+    Ok(result)
   }
 
   /// Like [`find_iter`](Self::find_iter) but reports UTF-16 code-unit offsets.
@@ -1039,11 +1392,249 @@ impl TextSearch {
   }
 }
 
+struct ClassifiedParts {
+  fuzzy: Vec<ClassifiedPattern>,
+  literals: Vec<ClassifiedPattern>,
+  shared_regex: Vec<ClassifiedPattern>,
+  isolated_regex: Vec<ClassifiedPattern>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct PatternBounds {
+  first: Option<u32>,
+  last: Option<u32>,
+}
+
+fn pattern_bounds(patterns: &[ClassifiedPattern]) -> PatternBounds {
+  PatternBounds {
+    first: patterns.first().map(|pattern| pattern.original_index),
+    last: patterns.last().map(|pattern| pattern.original_index),
+  }
+}
+
+fn identity_pattern_bounds(pattern_count: usize) -> PatternBounds {
+  let last = pattern_count
+    .checked_sub(1)
+    .and_then(|index| u32::try_from(index).ok());
+  PatternBounds {
+    first: last.map(|_| 0),
+    last,
+  }
+}
+
+fn partition_classified_patterns(
+  classified: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+) -> ClassifiedParts {
+  let mut fuzzy = Vec::new();
+  let mut literals = Vec::new();
+  let mut shared_regex = Vec::new();
+  let mut isolated_regex = Vec::new();
+
+  for pattern in classified {
+    if pattern.fuzzy_distance.is_some() {
+      fuzzy.push(pattern);
+    } else if pattern.is_literal {
+      literals.push(pattern);
+    } else if pattern
+      .regex_options
+      .as_ref()
+      .is_some_and(|regex_options| regex_options.lazy)
+      || pattern.alternation_count > options.max_alternations
+    {
+      isolated_regex.push(pattern);
+    } else {
+      shared_regex.push(pattern);
+    }
+  }
+
+  ClassifiedParts {
+    fuzzy,
+    literals,
+    shared_regex,
+    isolated_regex,
+  }
+}
+
+fn push_fuzzy_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  fuzzy: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  if fuzzy.is_empty() {
+    return Ok(());
+  }
+  let fuzzy_pattern_count = fuzzy.len();
+  push_timed_engine(
+    engines,
+    stats.as_deref_mut(),
+    fuzzy_pattern_count,
+    pattern_bounds(&fuzzy),
+    aho_mode,
+    regex_mode,
+    |_, _| Ok(EngineSlot::Fuzzy(build_fuzzy_engine(fuzzy, options)?)),
+  )
+}
+
+fn push_literal_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  literals: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for (literal_options, group) in group_literals(literals, options) {
+    let literal_pattern_count = group.len();
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      literal_pattern_count,
+      pattern_bounds(&group),
+      aho_mode,
+      regex_mode,
+      |aho_mode, _| {
+        Ok(EngineSlot::Literal(build_literal_engine(
+          group,
+          literal_options,
+          options.overlap_strategy,
+          aho_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_shared_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  shared_regex: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  if options.overlap_strategy == OverlapStrategy::All {
+    return push_overlap_all_regex_engines(
+      engines,
+      stats,
+      shared_regex,
+      options,
+      aho_mode,
+      regex_mode,
+    );
+  }
+
+  for chunk in
+    chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
+  {
+    let regex_pattern_count = chunk.len();
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      regex_pattern_count,
+      pattern_bounds(&chunk),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          chunk, options, None, aho_mode, regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_overlap_all_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  patterns: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for pattern in patterns {
+    let regex_options = Some(pattern.regex_options.clone().unwrap_or_default());
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      1,
+      pattern_bounds(std::slice::from_ref(&pattern)),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          regex_options,
+          aho_mode,
+          regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
+fn push_isolated_regex_engines(
+  engines: &mut Vec<EngineSlot>,
+  stats: &mut Option<&mut Vec<BuildStats>>,
+  isolated_regex: Vec<ClassifiedPattern>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+  regex_mode: &mut RegexBuildMode<'_>,
+) -> Result<()> {
+  for pattern in isolated_regex {
+    // Mirrors the TS lazyOptions path: `Some(..)` marks isolated regexes and
+    // suppresses shared leading-literal inference.
+    let lazy_options = Some(pattern.regex_options.clone().unwrap_or_default());
+    push_timed_engine(
+      engines,
+      stats.as_deref_mut(),
+      1,
+      pattern_bounds(std::slice::from_ref(&pattern)),
+      aho_mode,
+      regex_mode,
+      |aho_mode, regex_mode| {
+        Ok(EngineSlot::Regex(build_regex_engine(
+          vec![pattern],
+          options,
+          lazy_options,
+          aho_mode,
+          regex_mode,
+        )?))
+      },
+    )?;
+  }
+  Ok(())
+}
+
 fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
   if let EngineSlot::Regex(slot) = engine {
     _ = regex_slot_engine(slot)?;
   }
   Ok(())
+}
+
+fn warm_engine_refs_lazy_regex(engines: &[&EngineSlot]) -> Result<()> {
+  for engine in engines {
+    warm_engine_lazy_regex(engine)?;
+  }
+  Ok(())
+}
+
+fn engine_has_uninitialized_lazy_regex(engine: &EngineSlot) -> bool {
+  matches!(
+    engine,
+    EngineSlot::Regex(RegexSlot {
+      engine: RegexEngine::Lazy { cell, .. },
+      ..
+    }) if cell.get().is_none()
+  )
 }
 
 pub fn classify_patterns(
@@ -1090,6 +1681,7 @@ fn classify_pattern_entries(
           prefilter_any,
           prefilter_case_insensitive,
           prefilter_regex,
+          prefilter_window_bytes,
         } = regex_pattern;
         let alternation_count = count_alternations(&source);
         let regex_complexity =
@@ -1107,6 +1699,7 @@ fn classify_pattern_entries(
             prefilter_any,
             prefilter_case_insensitive,
             prefilter_regex,
+            prefilter_window_bytes,
           }),
           regex_complexity,
         }
@@ -1530,6 +2123,7 @@ fn build_regex_engine(
           &[prefilter.literal],
           prefilter.case_insensitive || options.case_insensitive,
           aho_mode,
+          false,
         )
       })
       .transpose()?
@@ -1550,9 +2144,19 @@ fn build_regex_engine(
     whole_words: options.whole_words,
     unicode_boundaries: options.unicode_boundaries,
   };
+  let prefilter_window_bytes =
+    lazy_options.as_ref().and_then(|regex_options| {
+      regex_options
+        .lazy
+        .then_some(regex_options.prefilter_window_bytes)
+        .flatten()
+    });
+  let prefilter_window_needs_full_context = prefilter_window_bytes.is_some()
+    && values.iter().any(|pattern| has_lookaround(pattern));
 
   let (engine, prefilter, prefilter_regex) = match lazy_options {
     Some(lazy_options) if lazy_options.lazy => {
+      let windowed = lazy_options.prefilter_window_bytes.is_some();
       let prefilter = if lazy_options.prefilter_any.is_empty() {
         None
       } else {
@@ -1562,6 +2166,7 @@ fn build_regex_engine(
             .prefilter_case_insensitive
             .unwrap_or(options.case_insensitive),
           aho_mode,
+          windowed,
         )?)
       };
       let prefilter_regex = lazy_options
@@ -1593,6 +2198,8 @@ fn build_regex_engine(
     engine,
     prefilter,
     prefilter_regex,
+    prefilter_window_bytes,
+    prefilter_window_needs_full_context,
     index_map,
     name_map,
   })
@@ -1861,6 +2468,7 @@ fn build_literal_prefilter(
   literals: &[String],
   case_insensitive: bool,
   aho_mode: &mut AhoBuildMode<'_>,
+  force_engine: bool,
 ) -> Result<LiteralPrefilter> {
   let mut unique = Vec::<String>::new();
   for literal in literals {
@@ -1874,9 +2482,16 @@ fn build_literal_prefilter(
   // `s` yet is already lowercase). Route case-insensitive prefilters through
   // Aho-Corasick, which folds identically to the search engines; reserve the
   // single-literal fast path for the case-sensitive exact-substring check.
-  if unique.len() == 1 && !case_insensitive {
+  if unique.len() == 1 && !case_insensitive && !force_engine {
     let needle = unique.pop().unwrap_or_default();
     return Ok(LiteralPrefilter::Single { needle });
+  }
+
+  if should_inline_literal_prefilter(&unique) && !force_engine {
+    return Ok(LiteralPrefilter::Inline {
+      needles: unique,
+      case_insensitive,
+    });
   }
 
   build_aho(
@@ -1891,6 +2506,92 @@ fn build_literal_prefilter(
   )
   .map(Box::new)
   .map(LiteralPrefilter::Many)
+}
+
+fn should_inline_literal_prefilter(literals: &[String]) -> bool {
+  if literals.is_empty()
+    || literals.len() > INLINE_LITERAL_PREFILTER_MAX_PATTERNS
+  {
+    return false;
+  }
+  let byte_len = literals
+    .iter()
+    .map(String::len)
+    .try_fold(0usize, usize::checked_add);
+  byte_len.is_some_and(|len| len <= INLINE_LITERAL_PREFILTER_MAX_BYTES)
+}
+
+fn inline_literal_prefilter_matches(
+  haystack: &str,
+  needle: &str,
+  case_insensitive: bool,
+) -> bool {
+  if haystack.contains(needle) {
+    return true;
+  }
+  if !case_insensitive {
+    return false;
+  }
+  if needle.is_ascii() {
+    if contains_ignore_ascii_case(haystack.as_bytes(), needle.as_bytes()) {
+      return true;
+    }
+    if haystack.is_ascii() {
+      return false;
+    }
+  }
+  contains_unicode_case_insensitive(haystack, needle)
+}
+
+fn contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
+  if needle.is_empty() {
+    return true;
+  }
+  haystack
+    .windows(needle.len())
+    .any(|candidate| candidate.eq_ignore_ascii_case(needle))
+}
+
+fn contains_unicode_case_insensitive(haystack: &str, needle: &str) -> bool {
+  if needle.is_empty() {
+    return true;
+  }
+
+  let needle_lower = needle
+    .chars()
+    .flat_map(char::to_lowercase)
+    .collect::<Vec<_>>();
+  if contains_case_folded_chars(haystack, &needle_lower, char::to_lowercase) {
+    return true;
+  }
+
+  let needle_upper = needle
+    .chars()
+    .flat_map(char::to_uppercase)
+    .collect::<Vec<_>>();
+  if needle_upper == needle_lower {
+    return false;
+  }
+  contains_case_folded_chars(haystack, &needle_upper, char::to_uppercase)
+}
+
+fn contains_case_folded_chars<I>(
+  haystack: &str,
+  needle: &[char],
+  fold: impl Fn(char) -> I + Copy,
+) -> bool
+where
+  I: Iterator<Item = char>,
+{
+  haystack.char_indices().any(|(start, _)| {
+    let Some(rest) = haystack.get(start..) else {
+      return false;
+    };
+    let mut folded = rest.chars().flat_map(fold);
+    needle
+      .iter()
+      .all(|needle_char| folded.next() == Some(*needle_char))
+  })
 }
 
 /// Builds a secondary regex prefilter gate.
@@ -2196,12 +2897,7 @@ fn engine_is_match(engine: &EngineSlot, haystack: &str) -> Result<bool> {
       }
       Ok(false)
     }
-    EngineSlot::Regex(slot) => {
-      if !regex_prefilter_matches(slot, haystack)? {
-        return Ok(false);
-      }
-      Ok(regex_slot_engine(slot)?.is_match(haystack))
-    }
+    EngineSlot::Regex(slot) => regex_slot_is_match(slot, haystack),
     EngineSlot::Fuzzy(slot) => slot
       .engine
       .is_match(haystack)
@@ -2231,15 +2927,11 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
     }
     EngineSlot::SplitLiteral(slot) => split_literal_find_iter(slot, haystack),
     EngineSlot::Regex(slot) => {
-      if !regex_prefilter_matches(slot, haystack)? {
-        return Ok(Vec::new());
-      }
+      let packed = regex_slot_find_iter_packed_bytes(slot, haystack)?;
       extend_triple_matches(
         SearchEngine::Regex,
         haystack,
-        &regex_slot_engine(slot)?
-          .find_iter_packed_bytes(haystack)
-          .map_err(|error| Error::BuildRegex(error.to_string()))?,
+        &packed,
         &Remap::Mapped {
           index_map: &slot.index_map,
           name_map: &slot.name_map,
@@ -2259,30 +2951,654 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
   }
 }
 
+fn engine_find_iter_with_stats(
+  engine: &EngineSlot,
+  haystack: &str,
+  slot: usize,
+) -> Result<TextSearchFindResult> {
+  if let EngineSlot::SplitLiteral(split) = engine {
+    return split_literal_find_iter_with_stats(split, haystack, slot);
+  }
+
+  let start = Instant::now();
+  let matches = engine_find_iter(engine, haystack)?;
+  let stats = vec![find_stats_for_engine(
+    slot,
+    None,
+    engine_kind(engine),
+    engine_pattern_count(engine),
+    engine_pattern_bounds(engine),
+    matches.len(),
+    start,
+  )];
+  Ok(TextSearchFindResult { matches, stats })
+}
+
+fn find_iter_engines(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  if should_parallel_find(engines, haystack) {
+    return find_iter_engines_parallel(engines, haystack);
+  }
+
+  find_iter_engines_sequential(engines, haystack)
+}
+
+fn find_iter_engines_with_stats(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<TextSearchFindResult> {
+  if should_parallel_find(engines, haystack) {
+    return find_iter_engines_parallel_with_stats(engines, haystack);
+  }
+
+  find_iter_engines_sequential_with_stats(engines, haystack, 0)
+}
+
+fn find_iter_engines_sequential(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let mut matches = Vec::new();
+  for engine in engines {
+    matches.extend(engine_find_iter(engine, haystack)?);
+  }
+  Ok(matches)
+}
+
+fn find_iter_engines_sequential_with_stats(
+  engines: &[EngineSlot],
+  haystack: &str,
+  slot_offset: usize,
+) -> Result<TextSearchFindResult> {
+  let mut matches = Vec::new();
+  let mut stats = Vec::new();
+  for (index, engine) in engines.iter().enumerate() {
+    let result = engine_find_iter_with_stats(
+      engine,
+      haystack,
+      slot_offset.saturating_add(index),
+    )?;
+    matches.extend(result.matches);
+    stats.extend(result.stats);
+  }
+  Ok(TextSearchFindResult { matches, stats })
+}
+
+fn find_iter_engines_parallel(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let workers = parallel_find_workers(engines.len());
+  if workers <= 1 {
+    return find_iter_engines_sequential(engines, haystack);
+  }
+
+  let chunk_size = engines.len().div_ceil(workers);
+  std::thread::scope(|scope| {
+    let mut handles = Vec::new();
+    for chunk in engines.chunks(chunk_size) {
+      handles.push(
+        scope.spawn(move || find_iter_engines_sequential(chunk, haystack)),
+      );
+    }
+
+    let mut matches = Vec::new();
+    for handle in handles {
+      let chunk_matches = handle.join().map_err(|_| {
+        Error::BuildRegex(String::from("Parallel search panicked"))
+      })??;
+      matches.extend(chunk_matches);
+    }
+    Ok(matches)
+  })
+}
+
+fn find_iter_engines_parallel_with_stats(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<TextSearchFindResult> {
+  let workers = parallel_find_workers(engines.len());
+  if workers <= 1 {
+    return find_iter_engines_sequential_with_stats(engines, haystack, 0);
+  }
+
+  let chunk_size = engines.len().div_ceil(workers);
+  std::thread::scope(|scope| {
+    let mut handles = Vec::new();
+    for (chunk_index, chunk) in engines.chunks(chunk_size).enumerate() {
+      let slot_offset = chunk_index.saturating_mul(chunk_size);
+      handles.push(scope.spawn(move || {
+        find_iter_engines_sequential_with_stats(chunk, haystack, slot_offset)
+      }));
+    }
+
+    let mut matches = Vec::new();
+    let mut stats = Vec::new();
+    for handle in handles {
+      let result = handle.join().map_err(|_| {
+        Error::BuildRegex(String::from("Parallel search panicked"))
+      })??;
+      matches.extend(result.matches);
+      stats.extend(result.stats);
+    }
+    Ok(TextSearchFindResult { matches, stats })
+  })
+}
+
+const fn should_parallel_find(engines: &[EngineSlot], haystack: &str) -> bool {
+  haystack.len() >= PARALLEL_FIND_MIN_BYTES
+    && engines.len() >= PARALLEL_FIND_MIN_ENGINES
+}
+
+fn parallel_find_workers(engine_count: usize) -> usize {
+  std::thread::available_parallelism()
+    .map_or(1, std::num::NonZeroUsize::get)
+    .min(PARALLEL_FIND_MAX_WORKERS)
+    .min(engine_count)
+}
+
 fn split_literal_find_iter(
   slot: &SplitLiteralSlot,
   haystack: &str,
 ) -> Result<Vec<Match>> {
-  let mut matches = Vec::new();
-  for engine in &slot.engines {
-    let packed = engine
-      .engine
-      .find_overlapping_iter_packed_bytes(haystack)
-      .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-    matches.extend(extend_triple_matches(
-      SearchEngine::Literal,
-      haystack,
-      &packed,
-      &Remap::Offset {
-        pattern_offset: engine.pattern_offset,
-      },
-    )?);
-  }
+  let matches = if should_parallel_split_literal_find(&slot.engines, haystack) {
+    split_literal_find_iter_parallel(&slot.engines, haystack)?
+  } else {
+    split_literal_find_iter_sequential(&slot.engines, haystack)?
+  };
+
   if slot.overlap_strategy == OverlapStrategy::All {
     return Ok(matches);
   }
 
   Ok(select_leftmost_longest_matches(matches))
+}
+
+fn split_literal_find_iter_with_stats(
+  slot: &SplitLiteralSlot,
+  haystack: &str,
+  slot_index: usize,
+) -> Result<TextSearchFindResult> {
+  let mut result =
+    if should_parallel_split_literal_find(&slot.engines, haystack) {
+      split_literal_find_iter_parallel_with_stats(
+        &slot.engines,
+        haystack,
+        slot_index,
+      )?
+    } else {
+      split_literal_find_iter_sequential_with_stats(
+        &slot.engines,
+        haystack,
+        slot_index,
+        0,
+      )?
+    };
+
+  if slot.overlap_strategy != OverlapStrategy::All {
+    result.matches = select_leftmost_longest_matches(result.matches);
+  }
+  Ok(result)
+}
+
+fn split_literal_find_iter_sequential(
+  engines: &[SplitLiteralEngine],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let mut matches = Vec::new();
+  for engine in engines {
+    matches.extend(split_literal_engine_find_iter(engine, haystack)?);
+  }
+  Ok(matches)
+}
+
+fn split_literal_find_iter_sequential_with_stats(
+  engines: &[SplitLiteralEngine],
+  haystack: &str,
+  slot_index: usize,
+  subslot_offset: usize,
+) -> Result<TextSearchFindResult> {
+  let mut matches = Vec::new();
+  let mut stats = Vec::new();
+  for (index, engine) in engines.iter().enumerate() {
+    let subslot = subslot_offset.saturating_add(index);
+    let start = Instant::now();
+    let engine_matches = split_literal_engine_find_iter(engine, haystack)?;
+    stats.push(find_stats_for_engine(
+      slot_index,
+      Some(subslot),
+      EngineKind::SplitLiteral,
+      split_literal_engine_pattern_count(engine),
+      split_literal_engine_pattern_bounds(engine),
+      engine_matches.len(),
+      start,
+    ));
+    matches.extend(engine_matches);
+  }
+  Ok(TextSearchFindResult { matches, stats })
+}
+
+fn split_literal_find_iter_parallel(
+  engines: &[SplitLiteralEngine],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let workers = parallel_find_workers(engines.len());
+  if workers <= 1 {
+    return split_literal_find_iter_sequential(engines, haystack);
+  }
+
+  let chunk_size = engines.len().div_ceil(workers);
+  std::thread::scope(|scope| {
+    let mut handles = Vec::with_capacity(workers);
+    for chunk in engines.chunks(chunk_size) {
+      handles.push(
+        scope
+          .spawn(move || split_literal_find_iter_sequential(chunk, haystack)),
+      );
+    }
+
+    let mut matches = Vec::new();
+    for handle in handles {
+      let chunk_matches = handle.join().map_err(|_| {
+        Error::BuildLiteral(String::from(
+          "Parallel split literal search panicked",
+        ))
+      })??;
+      matches.extend(chunk_matches);
+    }
+    Ok(matches)
+  })
+}
+
+fn split_literal_find_iter_parallel_with_stats(
+  engines: &[SplitLiteralEngine],
+  haystack: &str,
+  slot_index: usize,
+) -> Result<TextSearchFindResult> {
+  let workers = parallel_find_workers(engines.len());
+  if workers <= 1 {
+    return split_literal_find_iter_sequential_with_stats(
+      engines, haystack, slot_index, 0,
+    );
+  }
+
+  let chunk_size = engines.len().div_ceil(workers);
+  std::thread::scope(|scope| {
+    let mut handles = Vec::with_capacity(workers);
+    for (chunk_index, chunk) in engines.chunks(chunk_size).enumerate() {
+      let subslot_offset = chunk_index.saturating_mul(chunk_size);
+      handles.push(scope.spawn(move || {
+        split_literal_find_iter_sequential_with_stats(
+          chunk,
+          haystack,
+          slot_index,
+          subslot_offset,
+        )
+      }));
+    }
+
+    let mut matches = Vec::new();
+    let mut stats = Vec::new();
+    for handle in handles {
+      let result = handle.join().map_err(|_| {
+        Error::BuildLiteral(String::from(
+          "Parallel split literal search panicked",
+        ))
+      })??;
+      matches.extend(result.matches);
+      stats.extend(result.stats);
+    }
+    Ok(TextSearchFindResult { matches, stats })
+  })
+}
+
+fn split_literal_engine_find_iter(
+  engine: &SplitLiteralEngine,
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let packed = engine
+    .engine
+    .find_overlapping_iter_packed_bytes(haystack)
+    .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+  extend_triple_matches(
+    SearchEngine::Literal,
+    haystack,
+    &packed,
+    &Remap::Offset {
+      pattern_offset: engine.pattern_offset,
+    },
+  )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ByteWindow {
+  start: usize,
+  end: usize,
+}
+
+fn regex_slot_is_match(slot: &RegexSlot, haystack: &str) -> Result<bool> {
+  if !regex_prefilter_matches(slot, haystack)? {
+    return Ok(false);
+  }
+  if slot.prefilter_window_bytes.is_some() {
+    return Ok(!regex_slot_find_iter_packed_bytes(slot, haystack)?.is_empty());
+  }
+  Ok(regex_slot_engine(slot)?.is_match(haystack))
+}
+
+fn regex_slot_find_iter_packed_bytes(
+  slot: &RegexSlot,
+  haystack: &str,
+) -> Result<Vec<u32>> {
+  if !regex_prefilter_matches(slot, haystack)? {
+    return Ok(Vec::new());
+  }
+  let engine = regex_slot_engine(slot)?;
+  let Some(radius) = slot.prefilter_window_bytes else {
+    return engine
+      .find_iter_packed_bytes(haystack)
+      .map_err(|error| Error::BuildRegex(error.to_string()));
+  };
+  regex_slot_find_iter_packed_windowed(slot, engine, haystack, radius)
+}
+
+fn regex_slot_find_iter_packed_windowed(
+  slot: &RegexSlot,
+  engine: &regex_core::RegexSet,
+  haystack: &str,
+  radius: usize,
+) -> Result<Vec<u32>> {
+  let Some(prefilter) = &slot.prefilter else {
+    return engine
+      .find_iter_packed_bytes(haystack)
+      .map_err(|error| Error::BuildRegex(error.to_string()));
+  };
+  let hits = literal_prefilter_hit_ranges(prefilter, haystack)?;
+  if hits.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let windows = merged_prefilter_windows(haystack, &hits, radius);
+  if slot.prefilter_window_needs_full_context {
+    return regex_slot_find_iter_packed_windowed_full_context(
+      engine, haystack, &windows,
+    );
+  }
+
+  let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
+  let mut needs_full_context = false;
+  for window in &windows {
+    let slice = str_span(haystack, window.start, window.end)?;
+    let local = engine
+      .find_iter_packed_bytes(slice)
+      .map_err(|error| Error::BuildRegex(error.to_string()))?;
+    let chunks = local.chunks_exact(MATCH_FIELDS);
+    if !chunks.remainder().is_empty() {
+      return Err(Error::InvalidPackedSearchResult {
+        engine: SearchEngine::Regex,
+        len: local.len(),
+      });
+    }
+    for chunk in chunks {
+      let [pattern, local_start, local_end] = chunk else {
+        return Err(Error::InvalidPackedSearchResult {
+          engine: SearchEngine::Regex,
+          len: local.len(),
+        });
+      };
+      let start = window.start.saturating_add(byte_index(*local_start));
+      let end = window.start.saturating_add(byte_index(*local_end));
+      if touches_internal_window_edge(*window, haystack.len(), start, end) {
+        needs_full_context = true;
+        continue;
+      }
+      triples.push([
+        *pattern,
+        match_offset(start, end)?,
+        match_offset(end, start)?,
+      ]);
+    }
+  }
+  if needs_full_context {
+    return regex_slot_find_iter_packed_windowed_full_context(
+      engine, haystack, &windows,
+    );
+  }
+  Ok(pack_regex_triples(triples))
+}
+
+fn regex_slot_find_iter_packed_windowed_full_context(
+  engine: &regex_core::RegexSet,
+  haystack: &str,
+  windows: &[ByteWindow],
+) -> Result<Vec<u32>> {
+  let packed = engine
+    .find_iter_packed_bytes(haystack)
+    .map_err(|error| Error::BuildRegex(error.to_string()))?;
+  let chunks = packed.chunks_exact(MATCH_FIELDS);
+  if !chunks.remainder().is_empty() {
+    return Err(Error::InvalidPackedSearchResult {
+      engine: SearchEngine::Regex,
+      len: packed.len(),
+    });
+  }
+  let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
+  for chunk in chunks {
+    let [pattern, start, end] = chunk else {
+      return Err(Error::InvalidPackedSearchResult {
+        engine: SearchEngine::Regex,
+        len: packed.len(),
+      });
+    };
+    let start = byte_index(*start);
+    let end = byte_index(*end);
+    if !match_is_inside_prefilter_window(start, end, windows) {
+      continue;
+    }
+    triples.push([
+      *pattern,
+      match_offset(start, end)?,
+      match_offset(end, start)?,
+    ]);
+  }
+  Ok(pack_regex_triples(triples))
+}
+
+fn pack_regex_triples(mut triples: Vec<[u32; MATCH_FIELDS]>) -> Vec<u32> {
+  triples.sort_unstable();
+  triples.dedup();
+  let packed_capacity = triples.len().checked_mul(MATCH_FIELDS).unwrap_or(0);
+  let mut packed = Vec::with_capacity(packed_capacity);
+  for [pattern, start, end] in triples {
+    packed.push(pattern);
+    packed.push(start);
+    packed.push(end);
+  }
+  packed
+}
+
+const fn touches_internal_window_edge(
+  window: ByteWindow,
+  haystack_len: usize,
+  start: usize,
+  end: usize,
+) -> bool {
+  (start == window.start && window.start > 0)
+    || (end == window.end && window.end < haystack_len)
+}
+
+fn match_is_inside_prefilter_window(
+  start: usize,
+  end: usize,
+  windows: &[ByteWindow],
+) -> bool {
+  windows
+    .iter()
+    .any(|window| window.start <= start && end <= window.end)
+}
+
+fn match_offset(value: usize, peer: usize) -> Result<u32> {
+  u32::try_from(value).map_err(|_| Error::InvalidUtf8Span {
+    start: value,
+    end: peer,
+  })
+}
+
+fn merged_prefilter_windows(
+  haystack: &str,
+  hits: &[(usize, usize)],
+  radius: usize,
+) -> Vec<ByteWindow> {
+  let mut windows = Vec::with_capacity(hits.len());
+  for (hit_start, hit_end) in hits {
+    let start = floor_char_boundary(haystack, hit_start.saturating_sub(radius));
+    let end = ceil_char_boundary(
+      haystack,
+      hit_end.saturating_add(radius).min(haystack.len()),
+    );
+    let Some(last) = windows.last_mut() else {
+      windows.push(ByteWindow { start, end });
+      continue;
+    };
+    if start <= last.end {
+      last.end = last.end.max(end);
+    } else {
+      windows.push(ByteWindow { start, end });
+    }
+  }
+  windows
+}
+
+fn floor_char_boundary(haystack: &str, mut index: usize) -> usize {
+  index = index.min(haystack.len());
+  while index > 0 && !haystack.is_char_boundary(index) {
+    index = index.saturating_sub(1);
+  }
+  index
+}
+
+fn ceil_char_boundary(haystack: &str, mut index: usize) -> usize {
+  index = index.min(haystack.len());
+  while index < haystack.len() && !haystack.is_char_boundary(index) {
+    index = index.saturating_add(1);
+  }
+  index
+}
+
+const fn should_parallel_split_literal_find(
+  engines: &[SplitLiteralEngine],
+  haystack: &str,
+) -> bool {
+  haystack.len() >= PARALLEL_FIND_MIN_BYTES
+    && engines.len() >= PARALLEL_SPLIT_LITERAL_MIN_ENGINES
+}
+
+fn finalize_find_matches(
+  matches: &mut Vec<Match>,
+  overlap_strategy: OverlapStrategy,
+) {
+  if matches.len() <= 1 {
+    return;
+  }
+  if overlap_strategy == OverlapStrategy::All {
+    matches.sort_by_key(|found| found.start);
+    return;
+  }
+
+  *matches = merge_and_select(std::mem::take(matches));
+}
+
+fn find_stats_for_engine(
+  slot: usize,
+  subslot: Option<usize>,
+  engine: EngineKind,
+  pattern_count: usize,
+  pattern_bounds: PatternBounds,
+  match_count: usize,
+  start: Instant,
+) -> FindStats {
+  FindStats {
+    slot,
+    subslot,
+    engine,
+    pattern_count,
+    first_pattern: pattern_bounds.first,
+    last_pattern: pattern_bounds.last,
+    match_count,
+    elapsed_us: elapsed_us(start),
+  }
+}
+
+fn engine_pattern_count(engine: &EngineSlot) -> usize {
+  match engine {
+    EngineSlot::Literal(slot) => literal_slot_pattern_count(slot),
+    EngineSlot::SplitLiteral(slot) => slot
+      .engines
+      .iter()
+      .map(split_literal_engine_pattern_count)
+      .fold(0usize, usize::saturating_add),
+    EngineSlot::Regex(slot) => slot.index_map.len(),
+    EngineSlot::Fuzzy(slot) => slot.index_map.len(),
+  }
+}
+
+fn engine_pattern_bounds(engine: &EngineSlot) -> PatternBounds {
+  match engine {
+    EngineSlot::Literal(slot) => literal_slot_pattern_bounds(slot),
+    EngineSlot::SplitLiteral(slot) => {
+      let count = engine_pattern_count(engine);
+      let first = slot.engines.first().map(|split| split.pattern_offset);
+      let last = count
+        .checked_sub(1)
+        .and_then(|index| u32::try_from(index).ok())
+        .and_then(|index| first.and_then(|first| first.checked_add(index)));
+      PatternBounds { first, last }
+    }
+    EngineSlot::Regex(slot) => pattern_bounds_from_index_map(&slot.index_map),
+    EngineSlot::Fuzzy(slot) => pattern_bounds_from_index_map(&slot.index_map),
+  }
+}
+
+fn literal_slot_pattern_count(slot: &LiteralSlot) -> usize {
+  if slot.identity_map {
+    return aho_pattern_count(&slot.engine);
+  }
+  slot.index_map.len()
+}
+
+fn literal_slot_pattern_bounds(slot: &LiteralSlot) -> PatternBounds {
+  if slot.identity_map {
+    return identity_pattern_bounds(literal_slot_pattern_count(slot));
+  }
+  pattern_bounds_from_index_map(&slot.index_map)
+}
+
+fn split_literal_engine_pattern_count(engine: &SplitLiteralEngine) -> usize {
+  aho_pattern_count(&engine.engine)
+}
+
+fn split_literal_engine_pattern_bounds(
+  engine: &SplitLiteralEngine,
+) -> PatternBounds {
+  let first = Some(engine.pattern_offset);
+  let last = split_literal_engine_pattern_count(engine)
+    .checked_sub(1)
+    .and_then(|index| u32::try_from(index).ok())
+    .and_then(|index| engine.pattern_offset.checked_add(index));
+  PatternBounds { first, last }
+}
+
+const fn pattern_bounds_from_index_map(index_map: &[u32]) -> PatternBounds {
+  PatternBounds {
+    first: index_map.first().copied(),
+    last: index_map.last().copied(),
+  }
+}
+
+fn aho_pattern_count(engine: &aho_core::AhoCorasick) -> usize {
+  usize::try_from(engine.pattern_count()).map_or(usize::MAX, |count| count)
 }
 
 #[derive(Clone, Copy)]
@@ -2413,16 +3729,10 @@ fn remap_pattern(
 }
 
 fn regex_prefilter_matches(slot: &RegexSlot, haystack: &str) -> Result<bool> {
-  if let Some(prefilter) = &slot.prefilter {
-    let literal_matches = match prefilter {
-      LiteralPrefilter::Single { needle } => haystack.contains(needle),
-      LiteralPrefilter::Many(engine) => engine
-        .is_match(haystack)
-        .map_err(|error| Error::BuildLiteral(error.to_string()))?,
-    };
-    if !literal_matches {
-      return Ok(false);
-    }
+  if let Some(prefilter) = &slot.prefilter
+    && !literal_prefilter_matches(prefilter, haystack)?
+  {
+    return Ok(false);
   }
   if let Some(prefilter_regex) = &slot.prefilter_regex
     && !prefilter_regex.is_match(haystack)
@@ -2430,6 +3740,86 @@ fn regex_prefilter_matches(slot: &RegexSlot, haystack: &str) -> Result<bool> {
     return Ok(false);
   }
   Ok(true)
+}
+
+fn literal_prefilter_matches(
+  prefilter: &LiteralPrefilter,
+  haystack: &str,
+) -> Result<bool> {
+  match prefilter {
+    LiteralPrefilter::Single { needle } => Ok(haystack.contains(needle)),
+    LiteralPrefilter::Inline {
+      needles,
+      case_insensitive,
+    } => Ok(needles.iter().any(|needle| {
+      inline_literal_prefilter_matches(haystack, needle, *case_insensitive)
+    })),
+    LiteralPrefilter::Many(engine) => engine
+      .is_match(haystack)
+      .map_err(|error| Error::BuildLiteral(error.to_string())),
+  }
+}
+
+fn literal_prefilter_hit_ranges(
+  prefilter: &LiteralPrefilter,
+  haystack: &str,
+) -> Result<Vec<(usize, usize)>> {
+  match prefilter {
+    LiteralPrefilter::Single { needle } => {
+      Ok(overlapping_literal_hit_ranges(haystack, needle))
+    }
+    LiteralPrefilter::Inline { .. } => {
+      if literal_prefilter_matches(prefilter, haystack)? {
+        Ok(vec![(0, haystack.len())])
+      } else {
+        Ok(Vec::new())
+      }
+    }
+    LiteralPrefilter::Many(engine) => {
+      let packed = engine
+        .find_overlapping_iter_packed_bytes(haystack)
+        .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+      let chunks = packed.chunks_exact(MATCH_FIELDS);
+      if !chunks.remainder().is_empty() {
+        return Err(Error::InvalidPackedSearchResult {
+          engine: SearchEngine::Literal,
+          len: packed.len(),
+        });
+      }
+      let mut ranges = Vec::with_capacity(chunks.len());
+      for chunk in chunks {
+        let [_pattern, start, end] = chunk else {
+          return Err(Error::InvalidPackedSearchResult {
+            engine: SearchEngine::Literal,
+            len: packed.len(),
+          });
+        };
+        ranges.push((byte_index(*start), byte_index(*end)));
+      }
+      Ok(ranges)
+    }
+  }
+}
+
+fn overlapping_literal_hit_ranges(
+  haystack: &str,
+  needle: &str,
+) -> Vec<(usize, usize)> {
+  if needle.is_empty() {
+    return vec![(0, haystack.len())];
+  }
+
+  let mut ranges = Vec::new();
+  let mut offset = 0;
+  while let Some(rest) = haystack.get(offset..) {
+    let Some(relative_start) = rest.find(needle) else {
+      break;
+    };
+    let start = offset.saturating_add(relative_start);
+    ranges.push((start, start.saturating_add(needle.len())));
+    offset = ceil_char_boundary(haystack, start.saturating_add(1));
+  }
+  ranges
 }
 
 fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
