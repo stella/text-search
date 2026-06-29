@@ -607,6 +607,7 @@ struct RegexSlot {
   prefilter: Option<LiteralPrefilter>,
   prefilter_regex: Option<Box<regex_core::RegexSet>>,
   prefilter_window_bytes: Option<usize>,
+  prefilter_window_needs_full_context: bool,
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
 }
@@ -2150,6 +2151,8 @@ fn build_regex_engine(
         .then_some(regex_options.prefilter_window_bytes)
         .flatten()
     });
+  let prefilter_window_needs_full_context = prefilter_window_bytes.is_some()
+    && values.iter().any(|pattern| has_lookaround(pattern));
 
   let (engine, prefilter, prefilter_regex) = match lazy_options {
     Some(lazy_options) if lazy_options.lazy => {
@@ -2196,6 +2199,7 @@ fn build_regex_engine(
     prefilter,
     prefilter_regex,
     prefilter_window_bytes,
+    prefilter_window_needs_full_context,
     index_map,
     name_map,
   })
@@ -3317,6 +3321,12 @@ fn regex_slot_find_iter_packed_windowed(
   }
 
   let windows = merged_prefilter_windows(haystack, &hits, radius);
+  if slot.prefilter_window_needs_full_context {
+    return regex_slot_find_iter_packed_windowed_full_context(
+      engine, haystack, &windows,
+    );
+  }
+
   let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
   let mut needs_full_context = false;
   for window in &windows {
