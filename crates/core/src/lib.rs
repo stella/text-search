@@ -1255,27 +1255,28 @@ impl TextSearch {
   }
 
   pub fn warm_lazy_regex(&self) -> Result<()> {
-    let lazy_count = self
+    let lazy_engines = self
       .engines
       .iter()
       .filter(|engine| engine_has_uninitialized_lazy_regex(engine))
-      .count();
+      .collect::<Vec<_>>();
+    let lazy_count = lazy_engines.len();
     if lazy_count < PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS {
-      return warm_engines_lazy_regex(&self.engines);
+      return warm_engine_refs_lazy_regex(&lazy_engines);
     }
 
     let workers = std::thread::available_parallelism()
       .map_or(1, usize::from)
       .min(lazy_count);
     if workers <= 1 {
-      return warm_engines_lazy_regex(&self.engines);
+      return warm_engine_refs_lazy_regex(&lazy_engines);
     }
 
-    let chunk_size = self.engines.len().div_ceil(workers);
+    let chunk_size = lazy_count.div_ceil(workers);
     std::thread::scope(|scope| {
       let mut handles = Vec::with_capacity(workers);
-      for chunk in self.engines.chunks(chunk_size) {
-        handles.push(scope.spawn(move || warm_engines_lazy_regex(chunk)));
+      for chunk in lazy_engines.chunks(chunk_size) {
+        handles.push(scope.spawn(move || warm_engine_refs_lazy_regex(chunk)));
       }
       for handle in handles {
         handle.join().map_err(|_| {
@@ -1618,7 +1619,7 @@ fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
   Ok(())
 }
 
-fn warm_engines_lazy_regex(engines: &[EngineSlot]) -> Result<()> {
+fn warm_engine_refs_lazy_regex(engines: &[&EngineSlot]) -> Result<()> {
   for engine in engines {
     warm_engine_lazy_regex(engine)?;
   }
@@ -2527,8 +2528,13 @@ fn inline_literal_prefilter_matches(
   if !case_insensitive {
     return false;
   }
-  if haystack.is_ascii() && needle.is_ascii() {
-    return contains_ignore_ascii_case(haystack.as_bytes(), needle.as_bytes());
+  if needle.is_ascii() {
+    if contains_ignore_ascii_case(haystack.as_bytes(), needle.as_bytes()) {
+      return true;
+    }
+    if haystack.is_ascii() {
+      return false;
+    }
   }
   contains_unicode_case_insensitive(haystack, needle)
 }
@@ -2543,17 +2549,45 @@ fn contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn contains_unicode_case_insensitive(haystack: &str, needle: &str) -> bool {
-  let needle_lower = needle.to_lowercase();
-  let haystack_lower = haystack.to_lowercase();
-  if haystack_lower.contains(&needle_lower) {
+  if needle.is_empty() {
     return true;
   }
 
-  let needle_upper = needle.to_uppercase();
+  let needle_lower = needle
+    .chars()
+    .flat_map(char::to_lowercase)
+    .collect::<Vec<_>>();
+  if contains_case_folded_chars(haystack, &needle_lower, char::to_lowercase) {
+    return true;
+  }
+
+  let needle_upper = needle
+    .chars()
+    .flat_map(char::to_uppercase)
+    .collect::<Vec<_>>();
   if needle_upper == needle_lower {
     return false;
   }
-  haystack.to_uppercase().contains(&needle_upper)
+  contains_case_folded_chars(haystack, &needle_upper, char::to_uppercase)
+}
+
+fn contains_case_folded_chars<I>(
+  haystack: &str,
+  needle: &[char],
+  fold: impl Fn(char) -> I + Copy,
+) -> bool
+where
+  I: Iterator<Item = char>,
+{
+  haystack.char_indices().any(|(start, _)| {
+    let Some(rest) = haystack.get(start..) else {
+      return false;
+    };
+    let mut folded = rest.chars().flat_map(fold);
+    needle
+      .iter()
+      .all(|needle_char| folded.next() == Some(*needle_char))
+  })
 }
 
 /// Builds a secondary regex prefilter gate.
@@ -3284,7 +3318,8 @@ fn regex_slot_find_iter_packed_windowed(
 
   let windows = merged_prefilter_windows(haystack, &hits, radius);
   let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
-  for window in windows {
+  let mut needs_full_context = false;
+  for window in &windows {
     let slice = str_span(haystack, window.start, window.end)?;
     let local = engine
       .find_iter_packed_bytes(slice)
@@ -3305,10 +3340,8 @@ fn regex_slot_find_iter_packed_windowed(
       };
       let start = window.start.saturating_add(byte_index(*local_start));
       let end = window.start.saturating_add(byte_index(*local_end));
-      if touches_internal_window_edge(window, haystack.len(), start, end) {
-        continue;
-      }
-      if !match_contains_prefilter_hit(start, end, &hits) {
+      if touches_internal_window_edge(*window, haystack.len(), start, end) {
+        needs_full_context = true;
         continue;
       }
       triples.push([
@@ -3318,6 +3351,52 @@ fn regex_slot_find_iter_packed_windowed(
       ]);
     }
   }
+  if needs_full_context {
+    return regex_slot_find_iter_packed_windowed_full_context(
+      engine, haystack, &windows,
+    );
+  }
+  Ok(pack_regex_triples(triples))
+}
+
+fn regex_slot_find_iter_packed_windowed_full_context(
+  engine: &regex_core::RegexSet,
+  haystack: &str,
+  windows: &[ByteWindow],
+) -> Result<Vec<u32>> {
+  let packed = engine
+    .find_iter_packed_bytes(haystack)
+    .map_err(|error| Error::BuildRegex(error.to_string()))?;
+  let chunks = packed.chunks_exact(MATCH_FIELDS);
+  if !chunks.remainder().is_empty() {
+    return Err(Error::InvalidPackedSearchResult {
+      engine: SearchEngine::Regex,
+      len: packed.len(),
+    });
+  }
+  let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
+  for chunk in chunks {
+    let [pattern, start, end] = chunk else {
+      return Err(Error::InvalidPackedSearchResult {
+        engine: SearchEngine::Regex,
+        len: packed.len(),
+      });
+    };
+    let start = byte_index(*start);
+    let end = byte_index(*end);
+    if !match_is_inside_prefilter_window(start, end, windows) {
+      continue;
+    }
+    triples.push([
+      *pattern,
+      match_offset(start, end)?,
+      match_offset(end, start)?,
+    ]);
+  }
+  Ok(pack_regex_triples(triples))
+}
+
+fn pack_regex_triples(mut triples: Vec<[u32; MATCH_FIELDS]>) -> Vec<u32> {
   triples.sort_unstable();
   triples.dedup();
   let packed_capacity = triples.len().checked_mul(MATCH_FIELDS).unwrap_or(0);
@@ -3327,7 +3406,7 @@ fn regex_slot_find_iter_packed_windowed(
     packed.push(start);
     packed.push(end);
   }
-  Ok(packed)
+  packed
 }
 
 const fn touches_internal_window_edge(
@@ -3340,14 +3419,14 @@ const fn touches_internal_window_edge(
     || (end == window.end && window.end < haystack_len)
 }
 
-fn match_contains_prefilter_hit(
+fn match_is_inside_prefilter_window(
   start: usize,
   end: usize,
-  hits: &[(usize, usize)],
+  windows: &[ByteWindow],
 ) -> bool {
-  hits
+  windows
     .iter()
-    .any(|(hit_start, hit_end)| start <= *hit_start && *hit_end <= end)
+    .any(|window| window.start <= start && end <= window.end)
 }
 
 fn match_offset(value: usize, peer: usize) -> Result<u32> {

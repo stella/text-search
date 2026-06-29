@@ -4,6 +4,7 @@
   clippy::unwrap_used
 )]
 
+use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
   EngineKind, Error, FuzzyDistance, FuzzyPattern, LiteralPattern,
   OverlapStrategy, PatternEntry, PreparedTextSearchArtifacts, RegexPattern,
@@ -1157,6 +1158,36 @@ fn lazy_regex_prefilter_regex_gates_engine_build() {
 }
 
 #[test]
+fn inline_prefilter_matches_ascii_needles_in_unicode_haystacks() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("token"));
+  regex.prefilter_case_insensitive = Some(true);
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.is_match("případ TOKEN").is_err());
+}
+
+#[test]
+fn inline_prefilter_matches_unicode_case_folds() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("straße"));
+  regex.prefilter_case_insensitive = Some(true);
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert!(search.is_match("STRASSE").is_err());
+}
+
+#[test]
 fn lazy_regex_prefilter_window_matches_unbounded_results() {
   let haystack = format!(
     "{} alpha token 42 {} beta token 77 {}",
@@ -1192,7 +1223,57 @@ fn lazy_regex_prefilter_window_matches_unbounded_results() {
 }
 
 #[test]
-fn lazy_regex_prefilter_window_rejects_internal_edge_matches() {
+fn lazy_regex_prefilter_window_keeps_contextual_matches_near_cue() {
+  let haystack = format!(
+    "2024-01-01 {} Invoice date 2026-06-29 paid",
+    "noise ".repeat(20)
+  );
+  let mut regex = RegexPattern::new(r"\b\d{4}-\d{2}-\d{2}\b");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("Invoice"));
+  regex.prefilter_window_bytes = Some(32);
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let matches = search.find_iter(&haystack).unwrap();
+
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["2026-06-29"]
+  );
+}
+
+#[test]
+fn lazy_regex_prefilter_window_keeps_exact_internal_edge_matches() {
+  let mut regex = RegexPattern::new("foo");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("foo"));
+  regex.prefilter_window_bytes = Some(0);
+
+  let search = TextSearch::new(
+    vec![PatternEntry::Regex(regex)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let matches = search.find_iter("xfoo").unwrap();
+
+  assert_eq!(
+    matches
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["foo"]
+  );
+}
+
+#[test]
+fn lazy_regex_prefilter_window_verifies_internal_edge_matches() {
   let mut regex = RegexPattern::new(r"(?<!\w)foo");
   regex.lazy = true;
   regex.prefilter_any.push(String::from("foo"));
@@ -1206,6 +1287,48 @@ fn lazy_regex_prefilter_window_rejects_internal_edge_matches() {
 
   assert!(search.find_iter("xfoo").unwrap().is_empty());
   assert!(!search.is_match("xfoo").unwrap());
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(48))]
+
+  #[test]
+  fn windowed_lazy_regex_matches_unbounded_for_generated_contexts(
+    prefix in "[a-z ]{0,64}",
+    middle in "[a-z ]{0,64}",
+    suffix in "[a-z ]{0,64}",
+    first in 0u16..1000,
+    second in 0u16..1000,
+  ) {
+    let haystack = format!(
+      "{prefix} alpha token {first} {middle} beta token {second} {suffix}"
+    );
+
+    let mut bounded =
+      RegexPattern::new(r"(?<!\w)(?:alpha|beta)\s+token\s+\d{1,3}(?!\w)");
+    bounded.lazy = true;
+    bounded.prefilter_any.push(String::from("token"));
+    bounded.prefilter_window_bytes = Some(32);
+
+    let mut unbounded = bounded.clone();
+    unbounded.prefilter_window_bytes = None;
+
+    let bounded_search = TextSearch::new(
+      vec![PatternEntry::Regex(bounded)],
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+    let unbounded_search = TextSearch::new(
+      vec![PatternEntry::Regex(unbounded)],
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+
+    proptest::prop_assert_eq!(
+      bounded_search.find_iter(&haystack).unwrap(),
+      unbounded_search.find_iter(&haystack).unwrap()
+    );
+  }
 }
 
 #[test]
