@@ -1289,6 +1289,33 @@ fn lazy_regex_prefilter_window_verifies_internal_edge_matches() {
   assert!(!search.is_match("xfoo").unwrap());
 }
 
+#[test]
+fn lazy_regex_prefilter_window_uses_overlapping_cue_hits() {
+  let mut bounded = RegexPattern::new("a");
+  bounded.lazy = true;
+  bounded.prefilter_any.push(String::from("aa"));
+  bounded.prefilter_window_bytes = Some(0);
+
+  let mut unbounded = bounded.clone();
+  unbounded.prefilter_window_bytes = None;
+
+  let bounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(bounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let unbounded_search = TextSearch::new(
+    vec![PatternEntry::Regex(unbounded)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  assert_eq!(
+    bounded_search.find_iter("aaa").unwrap(),
+    unbounded_search.find_iter("aaa").unwrap()
+  );
+}
+
 proptest::proptest! {
   #![proptest_config(ProptestConfig::with_cases(48))]
 

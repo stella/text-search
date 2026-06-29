@@ -3755,12 +3755,9 @@ fn literal_prefilter_hit_ranges(
   haystack: &str,
 ) -> Result<Vec<(usize, usize)>> {
   match prefilter {
-    LiteralPrefilter::Single { needle } => Ok(
-      haystack
-        .match_indices(needle)
-        .map(|(start, matched)| (start, start.saturating_add(matched.len())))
-        .collect(),
-    ),
+    LiteralPrefilter::Single { needle } => {
+      Ok(overlapping_literal_hit_ranges(haystack, needle))
+    }
     LiteralPrefilter::Inline { .. } => {
       if literal_prefilter_matches(prefilter, haystack)? {
         Ok(vec![(0, haystack.len())])
@@ -3770,7 +3767,7 @@ fn literal_prefilter_hit_ranges(
     }
     LiteralPrefilter::Many(engine) => {
       let packed = engine
-        .find_iter_packed_bytes(haystack)
+        .find_overlapping_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?;
       let chunks = packed.chunks_exact(MATCH_FIELDS);
       if !chunks.remainder().is_empty() {
@@ -3792,6 +3789,27 @@ fn literal_prefilter_hit_ranges(
       Ok(ranges)
     }
   }
+}
+
+fn overlapping_literal_hit_ranges(
+  haystack: &str,
+  needle: &str,
+) -> Vec<(usize, usize)> {
+  if needle.is_empty() {
+    return vec![(0, haystack.len())];
+  }
+
+  let mut ranges = Vec::new();
+  let mut offset = 0;
+  while let Some(rest) = haystack.get(offset..) {
+    let Some(relative_start) = rest.find(needle) else {
+      break;
+    };
+    let start = offset.saturating_add(relative_start);
+    ranges.push((start, start.saturating_add(needle.len())));
+    offset = ceil_char_boundary(haystack, start.saturating_add(1));
+  }
+  ranges
 }
 
 fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
