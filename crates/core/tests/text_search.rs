@@ -551,6 +551,37 @@ fn prepared_lazy_regex_artifacts_can_be_omitted() {
 }
 
 #[test]
+fn prepared_lazy_prefilter_regex_artifacts_can_be_omitted() {
+  let mut regex = RegexPattern::new(r"\bTicket-\d{4}\b");
+  regex.lazy = true;
+  regex.prefilter_any = vec![String::from("Ticket-")];
+  regex.prefilter_regex = Some(String::from(r"\d{4}"));
+  regex.prepared_artifact_policy = PreparedArtifactPolicy::Omit;
+  let patterns = vec![PatternEntry::Regex(regex)];
+  let options = TextSearchOptions::default();
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert_eq!(artifacts.regex_sets.len(), 2);
+  assert!(
+    artifacts
+      .regex_sets
+      .iter()
+      .all(|artifact| artifact.bytes.is_empty())
+  );
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+
+  assert_eq!(
+    prepared.find_iter("Ticket-1234").unwrap(),
+    direct.find_iter("Ticket-1234").unwrap()
+  );
+  assert!(prepared.find_iter("Ticket-abcd").unwrap().is_empty());
+}
+
+#[test]
 fn prepared_lazy_regex_artifacts_can_be_omitted_by_default() {
   let mut regex = RegexPattern::new(r"\bCase-\d{4}\b");
   regex.lazy = true;
@@ -601,6 +632,31 @@ fn prepared_lazy_regex_artifacts_can_override_global_omit() {
   let prepared =
     TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
   assert_eq!(prepared.which_match("Claim-1234").unwrap(), vec![0]);
+}
+
+#[test]
+fn prepared_eager_regex_artifacts_can_override_global_omit() {
+  let mut regex = RegexPattern::new(r"\bReceipt-\d{4}\b");
+  regex.prepared_artifact_policy = PreparedArtifactPolicy::Include;
+  let patterns = vec![PatternEntry::Regex(regex)];
+  let options = TextSearchOptions {
+    regex_artifact_policy: RegexArtifactPolicy::Omit,
+    ..TextSearchOptions::default()
+  };
+
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  assert_eq!(artifacts.regex_sets.len(), 1);
+  assert!(
+    artifacts
+      .regex_sets
+      .first()
+      .is_some_and(|artifact| !artifact.bytes.is_empty())
+  );
+
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+  assert_eq!(prepared.which_match("Receipt-1234").unwrap(), vec![0]);
 }
 
 #[test]
