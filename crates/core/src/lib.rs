@@ -2336,6 +2336,9 @@ fn build_regex_engine(
   let (engine, prefilter, prefilter_regex) = match lazy_options {
     Some(lazy_options) if lazy_options.lazy => {
       let windowed = lazy_options.prefilter_window_bytes.is_some();
+      let capture_prepared = lazy_options
+        .prepared_artifact_policy
+        .should_capture(options.regex_artifact_policy);
       let prefilter = if lazy_options.prefilter_any.is_empty() {
         None
       } else {
@@ -2350,12 +2353,11 @@ fn build_regex_engine(
       };
       let prefilter_regex = lazy_options
         .prefilter_regex
-        .map(|source| build_prefilter_regex(source, regex_mode))
+        .map(|source| {
+          build_prefilter_regex(source, regex_mode, capture_prepared)
+        })
         .transpose()?
         .map(Box::new);
-      let capture_prepared = lazy_options
-        .prepared_artifact_policy
-        .should_capture(options.regex_artifact_policy);
       let prepared = capture_or_load_lazy_regex(
         &values,
         engine_options,
@@ -2451,29 +2453,36 @@ fn build_regex_set(
   capture_prepared: bool,
 ) -> Result<regex_core::RegexSet> {
   match regex_mode {
-    RegexBuildMode::Build => regex_core::RegexSet::new(patterns, options),
+    RegexBuildMode::Build => build_source_regex_set(patterns, options),
     RegexBuildMode::Capture(artifacts) => {
       if !capture_prepared {
         artifacts.push(PreparedRegexArtifact { bytes: Vec::new() });
-        return regex_core::RegexSet::new(patterns, options)
-          .map_err(|error| Error::BuildRegex(error.to_string()));
+        return build_source_regex_set(patterns, options);
       }
       let bytes = regex_core::RegexSet::prepare(patterns.clone(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
-      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes);
+      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes)
+        .map_err(|error| Error::BuildRegex(error.to_string()))?;
       artifacts.push(PreparedRegexArtifact { bytes });
-      set
+      Ok(set)
     }
     RegexBuildMode::Load { .. } => {
       let bytes = regex_mode.next_prepared_regex()?;
       if bytes.is_empty() {
-        return regex_core::RegexSet::new(patterns, options)
-          .map_err(|error| Error::BuildRegex(error.to_string()));
+        return build_source_regex_set(patterns, options);
       }
       regex_core::RegexSet::with_prepared(patterns, options, bytes)
+        .map_err(|error| Error::BuildRegex(error.to_string()))
     }
   }
-  .map_err(|error| Error::BuildRegex(error.to_string()))
+}
+
+fn build_source_regex_set(
+  patterns: Vec<String>,
+  options: regex_core::Options,
+) -> Result<regex_core::RegexSet> {
+  regex_core::RegexSet::new(patterns, options)
+    .map_err(|error| Error::BuildRegex(error.to_string()))
 }
 
 fn capture_or_load_lazy_regex(
@@ -2825,6 +2834,7 @@ where
 fn build_prefilter_regex(
   source: String,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<regex_core::RegexSet> {
   build_regex_set(
     vec![source],
@@ -2833,7 +2843,7 @@ fn build_prefilter_regex(
       unicode_boundaries: true,
     },
     regex_mode,
-    true,
+    capture_prepared,
   )
 }
 
