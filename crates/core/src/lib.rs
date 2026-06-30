@@ -464,6 +464,12 @@ pub struct PreparedTextSearchArtifacts {
   pub regex_sets: Vec<PreparedRegexArtifact>,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PreparedTextSearchArtifactsView<'a> {
+  pub aho_automata: Vec<PreparedAhoArtifactView<'a>>,
+  pub regex_sets: Vec<PreparedRegexArtifactView<'a>>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
@@ -472,9 +478,22 @@ pub struct PreparedAhoArtifact {
   pub bytes: Vec<u8>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreparedAhoArtifactView<'a> {
+  pub fingerprint: u64,
+  pub options: LiteralOptions,
+  pub identity: bool,
+  pub bytes: &'a [u8],
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedRegexArtifact {
   pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreparedRegexArtifactView<'a> {
+  pub bytes: &'a [u8],
 }
 
 impl PreparedTextSearchArtifacts {
@@ -511,6 +530,28 @@ impl PreparedTextSearchArtifacts {
   }
 
   pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    Ok(PreparedTextSearchArtifactsView::from_bytes(bytes)?.into_owned())
+  }
+
+  #[must_use]
+  pub fn as_view(&self) -> PreparedTextSearchArtifactsView<'_> {
+    PreparedTextSearchArtifactsView {
+      aho_automata: self
+        .aho_automata
+        .iter()
+        .map(PreparedAhoArtifactView::from)
+        .collect(),
+      regex_sets: self
+        .regex_sets
+        .iter()
+        .map(PreparedRegexArtifactView::from)
+        .collect(),
+    }
+  }
+}
+
+impl<'a> PreparedTextSearchArtifactsView<'a> {
+  pub fn from_bytes(bytes: &'a [u8]) -> Result<Self> {
     let mut reader = PreparedArtifactReader::new(bytes);
     let magic = reader.read_bytes(PREPARED_ARTIFACTS_MAGIC.len())?;
     if magic != PREPARED_ARTIFACTS_MAGIC {
@@ -534,8 +575,8 @@ impl PreparedTextSearchArtifacts {
       let fingerprint = reader.read_u64()?;
       let options = literal_options_from_flags(reader.read_u8()?)?;
       let identity = read_identity_flag(reader.read_u8()?)?;
-      let automaton = reader.read_len_prefixed_bytes()?.to_vec();
-      aho_automata.push(PreparedAhoArtifact {
+      let automaton = reader.read_len_prefixed_bytes()?;
+      aho_automata.push(PreparedAhoArtifactView {
         fingerprint,
         options,
         identity,
@@ -555,8 +596,8 @@ impl PreparedTextSearchArtifacts {
     }
     let mut regex_sets = Vec::with_capacity(regex_count);
     for _ in 0..regex_count {
-      regex_sets.push(PreparedRegexArtifact {
-        bytes: reader.read_len_prefixed_bytes()?.to_vec(),
+      regex_sets.push(PreparedRegexArtifactView {
+        bytes: reader.read_len_prefixed_bytes()?,
       });
     }
     reader.finish()?;
@@ -564,6 +605,60 @@ impl PreparedTextSearchArtifacts {
       aho_automata,
       regex_sets,
     })
+  }
+
+  #[must_use]
+  pub fn into_owned(self) -> PreparedTextSearchArtifacts {
+    PreparedTextSearchArtifacts {
+      aho_automata: self
+        .aho_automata
+        .into_iter()
+        .map(PreparedAhoArtifact::from)
+        .collect(),
+      regex_sets: self
+        .regex_sets
+        .into_iter()
+        .map(PreparedRegexArtifact::from)
+        .collect(),
+    }
+  }
+}
+
+impl<'a> From<&'a PreparedAhoArtifact> for PreparedAhoArtifactView<'a> {
+  fn from(artifact: &'a PreparedAhoArtifact) -> Self {
+    Self {
+      fingerprint: artifact.fingerprint,
+      options: artifact.options,
+      identity: artifact.identity,
+      bytes: &artifact.bytes,
+    }
+  }
+}
+
+impl From<PreparedAhoArtifactView<'_>> for PreparedAhoArtifact {
+  fn from(artifact: PreparedAhoArtifactView<'_>) -> Self {
+    Self {
+      fingerprint: artifact.fingerprint,
+      options: artifact.options,
+      identity: artifact.identity,
+      bytes: artifact.bytes.to_vec(),
+    }
+  }
+}
+
+impl<'a> From<&'a PreparedRegexArtifact> for PreparedRegexArtifactView<'a> {
+  fn from(artifact: &'a PreparedRegexArtifact) -> Self {
+    Self {
+      bytes: &artifact.bytes,
+    }
+  }
+}
+
+impl From<PreparedRegexArtifactView<'_>> for PreparedRegexArtifact {
+  fn from(artifact: PreparedRegexArtifactView<'_>) -> Self {
+    Self {
+      bytes: artifact.bytes.to_vec(),
+    }
   }
 }
 
@@ -675,7 +770,7 @@ enum AhoBuildMode<'a> {
   Build,
   Capture(&'a mut Vec<PreparedAhoArtifact>),
   Load {
-    automata: &'a [PreparedAhoArtifact],
+    automata: &'a [PreparedAhoArtifactView<'a>],
     index: usize,
   },
 }
@@ -684,7 +779,7 @@ enum RegexBuildMode<'a> {
   Build,
   Capture(&'a mut Vec<PreparedRegexArtifact>),
   Load {
-    artifacts: &'a [PreparedRegexArtifact],
+    artifacts: &'a [PreparedRegexArtifactView<'a>],
     index: usize,
   },
 }
@@ -727,7 +822,7 @@ impl RegexBuildMode<'_> {
       return Err(Error::PreparedRegexArtifactMissing { index: current });
     };
     *index = current.saturating_add(1);
-    Ok(&artifact.bytes)
+    Ok(artifact.bytes)
   }
 
   const fn finish(&self) -> Result<()> {
@@ -792,7 +887,7 @@ impl AhoBuildMode<'_> {
       artifact.options,
       artifact.identity,
       artifact.fingerprint,
-      &artifact.bytes,
+      artifact.bytes,
     ))
   }
 
@@ -820,7 +915,19 @@ impl PreparedArtifactBytes for PreparedAhoArtifact {
   }
 }
 
+impl PreparedArtifactBytes for PreparedAhoArtifactView<'_> {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
 impl PreparedArtifactBytes for PreparedRegexArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+impl PreparedArtifactBytes for PreparedRegexArtifactView<'_> {
   fn byte_len(&self) -> usize {
     self.bytes.len()
   }
@@ -989,6 +1096,15 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<Self> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_artifacts_view(patterns, options, &artifacts)
+  }
+
+  pub fn with_prepared_artifacts_view(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<Self> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -1013,6 +1129,17 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<TextSearchBuildResult> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_artifacts_view_build_stats(
+      patterns, options, &artifacts,
+    )
+  }
+
+  pub fn with_prepared_artifacts_view_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<TextSearchBuildResult> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -1036,6 +1163,14 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<Self> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_all_literal_artifacts_view(options, &artifacts)
+  }
+
+  pub fn with_prepared_all_literal_artifacts_view(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<Self> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -1054,6 +1189,16 @@ impl TextSearch {
   pub fn with_prepared_all_literal_artifacts_build_stats(
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_all_literal_artifacts_view_build_stats(
+      options, &artifacts,
+    )
+  }
+
+  pub fn with_prepared_all_literal_artifacts_view_build_stats(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
   ) -> Result<TextSearchBuildResult> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
