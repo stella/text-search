@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8
+
+### Patch Changes
+
+- [#88](https://github.com/stella/text-search/pull/88) [`de6319c`](https://github.com/stella/text-search/commit/de6319c6677dbec826731bed9d6c4f8c35f2f405) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Reduce eager regex engine fragmentation and balance parallel work while preserving match selection.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
