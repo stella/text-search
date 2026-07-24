@@ -716,6 +716,144 @@ fn prepared_eager_regex_artifacts_can_be_omitted_by_default() {
 }
 
 #[test]
+fn eager_artifact_policies_bound_runtime_topology() {
+  let patterns = (0..32)
+    .map(|index| {
+      let mut regex = RegexPattern::new(format!(r"TOKEN{index}-\d{{2}}"));
+      regex.prepared_artifact_policy = if index % 2 == 0 {
+        PreparedArtifactPolicy::Include
+      } else {
+        PreparedArtifactPolicy::Omit
+      };
+      PatternEntry::Regex(regex)
+    })
+    .collect::<Vec<_>>();
+  let options = TextSearchOptions {
+    regex_chunk_size: Some(32),
+    ..TextSearchOptions::default()
+  };
+
+  let direct = TextSearch::new(patterns.clone(), options).unwrap();
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let prepared =
+    TextSearch::with_prepared_artifacts(patterns, options, &artifacts).unwrap();
+  let haystack = "TOKEN3-42 TOKEN18-77";
+
+  assert_eq!(direct.engine_stats().regex_slots, 1);
+  assert_eq!(prepared.engine_stats().regex_slots, 2);
+  assert_eq!(artifacts.regex_sets.len(), 2);
+  assert_eq!(
+    artifacts
+      .regex_sets
+      .iter()
+      .filter(|artifact| artifact.bytes.is_empty())
+      .count(),
+    1
+  );
+  assert_eq!(
+    prepared.find_iter(haystack).unwrap(),
+    direct.find_iter(haystack).unwrap()
+  );
+}
+
+#[test]
+fn mixed_artifact_groups_preserve_equal_span_pattern_priority() {
+  let patterns = [
+    PreparedArtifactPolicy::Omit,
+    PreparedArtifactPolicy::Include,
+  ]
+  .into_iter()
+  .enumerate()
+  .map(|(index, policy)| {
+    let mut regex = RegexPattern::new(if index == 0 { r"A{2}" } else { r"A+" });
+    regex.prepared_artifact_policy = policy;
+    PatternEntry::Regex(regex)
+  })
+  .collect::<Vec<_>>();
+  let options = TextSearchOptions::default();
+  let reference_options = TextSearchOptions {
+    regex_chunk_size: Some(1),
+    ..options
+  };
+  let artifacts =
+    TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+  let grouped =
+    TextSearch::with_prepared_artifacts(patterns.clone(), options, &artifacts)
+      .unwrap();
+  let reference = TextSearch::new(patterns, reference_options).unwrap();
+
+  assert_eq!(
+    grouped.find_iter("AA").unwrap(),
+    reference.find_iter("AA").unwrap()
+  );
+  assert_eq!(
+    grouped
+      .replace_all("AA", &["first".into(), "second".into()])
+      .unwrap(),
+    "first"
+  );
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(64))]
+
+  #[test]
+  fn mixed_artifact_grouping_matches_single_pattern_reference(
+    tokens in proptest::collection::vec(0_u8..8, 0..128),
+    overlap_all in proptest::bool::ANY,
+  ) {
+    let patterns = (0..8)
+      .map(|index| {
+        let mut regex = RegexPattern::new(format!(r"T{index}\d?"));
+        regex.prepared_artifact_policy = if index % 2 == 0 {
+          PreparedArtifactPolicy::Include
+        } else {
+          PreparedArtifactPolicy::Omit
+        };
+        PatternEntry::Regex(regex)
+      })
+      .collect::<Vec<_>>();
+    let haystack = tokens
+      .iter()
+      .map(|token| format!("T{}{}", token % 8, token % 10))
+      .collect::<Vec<_>>()
+      .join(" ");
+    let overlap_strategy = if overlap_all {
+      OverlapStrategy::All
+    } else {
+      OverlapStrategy::Longest
+    };
+    let options = TextSearchOptions {
+      overlap_strategy,
+      ..TextSearchOptions::default()
+    };
+    let reference_options = TextSearchOptions {
+      overlap_strategy,
+      regex_chunk_size: Some(1),
+      ..TextSearchOptions::default()
+    };
+    let artifacts =
+      TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
+    let grouped = TextSearch::with_prepared_artifacts(
+      patterns.clone(),
+      options,
+      &artifacts,
+    ).unwrap();
+    let reference = TextSearch::new(patterns, reference_options).unwrap();
+
+    proptest::prop_assert_eq!(
+      grouped.find_iter(&haystack).unwrap(),
+      reference.find_iter(&haystack).unwrap(),
+    );
+    proptest::prop_assert_eq!(
+      grouped.which_match(&haystack).unwrap(),
+      reference.which_match(&haystack).unwrap(),
+    );
+  }
+}
+
+#[test]
 fn prepared_all_literal_artifacts_load_without_patterns() {
   let mut patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)
     .map(|index| PatternEntry::from(format!("term-{index}")))
@@ -1132,6 +1270,13 @@ fn find_stats_report_regex_slots_and_split_literal_subslots() {
       .map(|stat| stat.pattern_count)
       .sum::<usize>(),
     6
+  );
+  assert!(
+    regex_result
+      .stats
+      .windows(2)
+      .all(|pair| pair.first().map(|stat| stat.slot)
+        <= pair.get(1).map(|stat| stat.slot))
   );
 
   let mut literal_patterns = (0..SPLIT_LITERAL_FIXTURE_SIZE)

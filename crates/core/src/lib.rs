@@ -731,6 +731,7 @@ struct SplitLiteralEngine {
 
 struct RegexSlot {
   engine: RegexEngine,
+  work_weight: u64,
   prefilter: Option<LiteralPrefilter>,
   prefilter_regex: Option<Box<regex_core::RegexSet>>,
   prefilter_window_bytes: Option<usize>,
@@ -782,6 +783,12 @@ enum RegexBuildMode<'a> {
     artifacts: &'a [PreparedRegexArtifactView<'a>],
     index: usize,
   },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegexArtifactMode {
+  Capture,
+  Omit,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1613,11 +1620,11 @@ fn partition_classified_patterns(
       fuzzy.push(pattern);
     } else if pattern.is_literal {
       literals.push(pattern);
-    } else if pattern.regex_options.as_ref().is_some_and(|regex_options| {
-      regex_options.lazy
-        || regex_options.prepared_artifact_policy
-          != PreparedArtifactPolicy::Inherit
-    }) || pattern.alternation_count > options.max_alternations
+    } else if pattern
+      .regex_options
+      .as_ref()
+      .is_some_and(|regex_options| regex_options.lazy)
+      || pattern.alternation_count > options.max_alternations
     {
       isolated_regex.push(pattern);
     } else {
@@ -1705,25 +1712,69 @@ fn push_shared_regex_engines(
     );
   }
 
-  for chunk in
-    chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-  {
-    let regex_pattern_count = chunk.len();
-    push_timed_engine(
-      engines,
-      stats.as_deref_mut(),
-      regex_pattern_count,
-      pattern_bounds(&chunk),
-      aho_mode,
-      regex_mode,
-      |aho_mode, regex_mode| {
-        Ok(EngineSlot::Regex(build_regex_engine(
-          chunk, options, None, aho_mode, regex_mode,
-        )?))
-      },
-    )?;
+  for (artifact_mode, group) in shared_regex_artifact_groups(
+    shared_regex,
+    options.regex_artifact_policy,
+    regex_mode,
+  ) {
+    for chunk in chunk_shared_regex_patterns(group, options.regex_chunk_size) {
+      let regex_pattern_count = chunk.len();
+      push_timed_engine(
+        engines,
+        stats.as_deref_mut(),
+        regex_pattern_count,
+        pattern_bounds(&chunk),
+        aho_mode,
+        regex_mode,
+        |aho_mode, regex_mode| {
+          Ok(EngineSlot::Regex(build_regex_engine(
+            chunk,
+            options,
+            None,
+            artifact_mode,
+            aho_mode,
+            regex_mode,
+          )?))
+        },
+      )?;
+    }
   }
   Ok(())
+}
+
+fn shared_regex_artifact_groups(
+  patterns: Vec<ClassifiedPattern>,
+  default_policy: RegexArtifactPolicy,
+  regex_mode: &RegexBuildMode<'_>,
+) -> Vec<(RegexArtifactMode, Vec<ClassifiedPattern>)> {
+  if matches!(regex_mode, RegexBuildMode::Build) {
+    return vec![(RegexArtifactMode::Omit, patterns)];
+  }
+
+  let mut captured = Vec::new();
+  let mut omitted = Vec::new();
+  for pattern in patterns {
+    let policy = pattern
+      .regex_options
+      .as_ref()
+      .map_or(PreparedArtifactPolicy::Inherit, |options| {
+        options.prepared_artifact_policy
+      });
+    if policy.should_capture(default_policy) {
+      captured.push(pattern);
+    } else {
+      omitted.push(pattern);
+    }
+  }
+
+  let mut groups = Vec::with_capacity(2);
+  if !captured.is_empty() {
+    groups.push((RegexArtifactMode::Capture, captured));
+  }
+  if !omitted.is_empty() {
+    groups.push((RegexArtifactMode::Omit, omitted));
+  }
+  groups
 }
 
 fn push_overlap_all_regex_engines(
@@ -1748,6 +1799,7 @@ fn push_overlap_all_regex_engines(
           vec![pattern],
           options,
           regex_options,
+          RegexArtifactMode::Omit,
           aho_mode,
           regex_mode,
         )?))
@@ -1781,6 +1833,7 @@ fn push_isolated_regex_engines(
           vec![pattern],
           options,
           lazy_options,
+          RegexArtifactMode::Omit,
           aho_mode,
           regex_mode,
         )?))
@@ -2286,29 +2339,73 @@ fn build_literal_engine(
 /// so a prefilter can never gate an unrelated pattern sharing the slot. The
 /// leading-literal prefilter is inferred only on the shared path for
 /// single-pattern chunks.
+fn regex_work_weight(patterns: &[ClassifiedPattern]) -> u64 {
+  patterns.iter().fold(0_u64, |weight, pattern| {
+    let complexity = u64::from(pattern.regex_complexity).saturating_add(1);
+    let source_weight = u64::try_from(pattern.pattern.len())
+      .unwrap_or(u64::MAX)
+      .div_ceil(64);
+    weight.saturating_add(
+      complexity
+        .saturating_mul(complexity)
+        .saturating_add(source_weight),
+    )
+  })
+}
+
+fn eager_regex_artifact_capture(
+  regex_options: Option<&RegexOptions>,
+  shared_mode: RegexArtifactMode,
+  default_policy: RegexArtifactPolicy,
+) -> bool {
+  regex_options.map_or(
+    matches!(shared_mode, RegexArtifactMode::Capture),
+    |options| {
+      options
+        .prepared_artifact_policy
+        .should_capture(default_policy)
+    },
+  )
+}
+
+fn build_inferred_regex_prefilter(
+  patterns: &[ClassifiedPattern],
+  lazy_options: Option<&RegexOptions>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+) -> Result<Option<LiteralPrefilter>> {
+  if lazy_options.is_some() || patterns.len() != 1 {
+    return Ok(None);
+  }
+  patterns
+    .first()
+    .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
+    .map(|prefilter| {
+      build_literal_prefilter(
+        &[prefilter.literal],
+        prefilter.case_insensitive || options.case_insensitive,
+        aho_mode,
+        false,
+      )
+    })
+    .transpose()
+}
+
 fn build_regex_engine(
   patterns: Vec<ClassifiedPattern>,
   options: TextSearchOptions,
   lazy_options: Option<RegexOptions>,
+  shared_artifact_mode: RegexArtifactMode,
   aho_mode: &mut AhoBuildMode<'_>,
   regex_mode: &mut RegexBuildMode<'_>,
 ) -> Result<RegexSlot> {
-  let inferred_prefilter = if lazy_options.is_none() && patterns.len() == 1 {
-    patterns
-      .first()
-      .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
-      .map(|prefilter| {
-        build_literal_prefilter(
-          &[prefilter.literal],
-          prefilter.case_insensitive || options.case_insensitive,
-          aho_mode,
-          false,
-        )
-      })
-      .transpose()?
-  } else {
-    None
-  };
+  let work_weight = regex_work_weight(&patterns);
+  let inferred_prefilter = build_inferred_regex_prefilter(
+    &patterns,
+    lazy_options.as_ref(),
+    options,
+    aho_mode,
+  )?;
 
   let mut values = Vec::with_capacity(patterns.len());
   let mut index_map = Vec::with_capacity(patterns.len());
@@ -2373,8 +2470,9 @@ fn build_regex_engine(
       (engine, prefilter, prefilter_regex)
     }
     _ => {
-      let capture_prepared = should_capture_eager_regex_artifact(
+      let capture_prepared = eager_regex_artifact_capture(
         lazy_options.as_ref(),
+        shared_artifact_mode,
         options.regex_artifact_policy,
       );
       let engine = RegexEngine::Eager(Box::new(build_regex_set(
@@ -2389,6 +2487,7 @@ fn build_regex_engine(
 
   Ok(RegexSlot {
     engine,
+    work_weight,
     prefilter,
     prefilter_regex,
     prefilter_window_bytes,
@@ -2396,20 +2495,6 @@ fn build_regex_engine(
     index_map,
     name_map,
   })
-}
-
-fn should_capture_eager_regex_artifact(
-  regex_options: Option<&RegexOptions>,
-  default_policy: RegexArtifactPolicy,
-) -> bool {
-  regex_options.map_or(
-    matches!(default_policy, RegexArtifactPolicy::Include),
-    |options| {
-      options
-        .prepared_artifact_policy
-        .should_capture(default_policy)
-    },
-  )
 }
 
 fn regex_slot_engine(slot: &RegexSlot) -> Result<&regex_core::RegexSet> {
@@ -3270,22 +3355,38 @@ fn find_iter_engines_parallel(
     return find_iter_engines_sequential(engines, haystack);
   }
 
-  let chunk_size = engines.len().div_ceil(workers);
+  let assignments = weighted_engine_assignments(engines, workers);
   std::thread::scope(|scope| {
-    let mut handles = Vec::new();
-    for chunk in engines.chunks(chunk_size) {
-      handles.push(
-        scope.spawn(move || find_iter_engines_sequential(chunk, haystack)),
-      );
+    let mut handles = Vec::with_capacity(assignments.len());
+    for assignment in &assignments {
+      handles.push(scope.spawn(move || {
+        let mut completed = Vec::with_capacity(assignment.len());
+        for index in assignment {
+          let Some(engine) = engines.get(*index) else {
+            return Err(Error::PatternIndexNotAddressable {
+              pattern: u32::MAX,
+            });
+          };
+          completed.push((*index, engine_find_iter(engine, haystack)?));
+        }
+        Ok(completed)
+      }));
     }
 
-    let mut matches = Vec::new();
+    let mut by_engine = std::iter::repeat_with(|| None)
+      .take(engines.len())
+      .collect::<Vec<_>>();
     for handle in handles {
-      let chunk_matches = handle.join().map_err(|_| {
+      let completed = handle.join().map_err(|_| {
         Error::BuildRegex(String::from("Parallel search panicked"))
       })??;
-      matches.extend(chunk_matches);
+      for (index, matches) in completed {
+        if let Some(slot) = by_engine.get_mut(index) {
+          *slot = Some(matches);
+        }
+      }
     }
+    let matches = by_engine.into_iter().flatten().flatten().collect();
     Ok(matches)
   })
 }
@@ -3299,27 +3400,123 @@ fn find_iter_engines_parallel_with_stats(
     return find_iter_engines_sequential_with_stats(engines, haystack, 0);
   }
 
-  let chunk_size = engines.len().div_ceil(workers);
+  let assignments = weighted_engine_assignments(engines, workers);
   std::thread::scope(|scope| {
-    let mut handles = Vec::new();
-    for (chunk_index, chunk) in engines.chunks(chunk_size).enumerate() {
-      let slot_offset = chunk_index.saturating_mul(chunk_size);
+    let mut handles = Vec::with_capacity(assignments.len());
+    for assignment in &assignments {
       handles.push(scope.spawn(move || {
-        find_iter_engines_sequential_with_stats(chunk, haystack, slot_offset)
+        let mut completed = Vec::with_capacity(assignment.len());
+        for index in assignment {
+          let Some(engine) = engines.get(*index) else {
+            return Err(Error::PatternIndexNotAddressable {
+              pattern: u32::MAX,
+            });
+          };
+          completed.push((
+            *index,
+            engine_find_iter_with_stats(engine, haystack, *index)?,
+          ));
+        }
+        Ok(completed)
       }));
     }
 
-    let mut matches = Vec::new();
-    let mut stats = Vec::new();
+    let mut by_engine = std::iter::repeat_with(|| None)
+      .take(engines.len())
+      .collect::<Vec<_>>();
     for handle in handles {
-      let result = handle.join().map_err(|_| {
+      let completed = handle.join().map_err(|_| {
         Error::BuildRegex(String::from("Parallel search panicked"))
       })??;
+      for (index, result) in completed {
+        if let Some(slot) = by_engine.get_mut(index) {
+          *slot = Some(result);
+        }
+      }
+    }
+    let mut matches = Vec::new();
+    let mut stats = Vec::new();
+    for result in by_engine.into_iter().flatten() {
       matches.extend(result.matches);
       stats.extend(result.stats);
     }
     Ok(TextSearchFindResult { matches, stats })
   })
+}
+
+fn weighted_engine_assignments(
+  engines: &[EngineSlot],
+  workers: usize,
+) -> Vec<Vec<usize>> {
+  let weights = engines.iter().map(engine_work_weight).collect::<Vec<_>>();
+  weighted_assignments_for_weights(&weights, workers)
+}
+
+fn weighted_assignments_for_weights(
+  weights: &[u64],
+  workers: usize,
+) -> Vec<Vec<usize>> {
+  use std::cmp::Reverse;
+  use std::collections::BinaryHeap;
+
+  let workers = workers.max(1).min(weights.len().max(1));
+  let mut jobs = weights
+    .iter()
+    .enumerate()
+    .map(|(index, weight)| (index, *weight))
+    .collect::<Vec<_>>();
+  jobs.sort_by(|left, right| {
+    right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0))
+  });
+
+  let mut assignments = vec![Vec::new(); workers];
+  let mut loads = (0..workers)
+    .map(|worker| Reverse((0_u64, worker)))
+    .collect::<BinaryHeap<_>>();
+  for (index, weight) in jobs {
+    let Reverse((load, worker)) = loads.pop().unwrap_or(Reverse((0, 0)));
+    if let Some(assignment) = assignments.get_mut(worker) {
+      assignment.push(index);
+    }
+    loads.push(Reverse((load.saturating_add(weight), worker)));
+  }
+  assignments
+}
+
+fn engine_work_weight(engine: &EngineSlot) -> u64 {
+  match engine {
+    EngineSlot::Regex(slot) => slot.work_weight.max(1),
+    EngineSlot::SplitLiteral(slot) => {
+      u64::try_from(slot.engines.len()).unwrap_or(u64::MAX).max(1)
+    }
+    EngineSlot::Literal(_) | EngineSlot::Fuzzy(_) => 1,
+  }
+}
+
+#[cfg(test)]
+mod scheduler_tests {
+  use super::weighted_assignments_for_weights;
+
+  #[test]
+  fn weighted_scheduler_balances_adjacent_expensive_jobs() {
+    let weights = [1_u64, 1, 1, 1, 100, 100, 100, 100];
+    let assignments = weighted_assignments_for_weights(&weights, 4);
+    let mut visits = vec![0_u8; weights.len()];
+    let loads = assignments
+      .iter()
+      .map(|assignment| {
+        assignment.iter().fold(0_u64, |load, index| {
+          if let Some(visit) = visits.get_mut(*index) {
+            *visit = visit.saturating_add(1);
+          }
+          load.saturating_add(weights.get(*index).copied().unwrap_or_default())
+        })
+      })
+      .collect::<Vec<_>>();
+
+    assert!(visits.iter().all(|visits| *visits == 1));
+    assert_eq!(loads.iter().copied().max(), Some(101));
+  }
 }
 
 const fn should_parallel_find(engines: &[EngineSlot], haystack: &str) -> bool {
@@ -4062,11 +4259,15 @@ fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
     return matches;
   }
   matches.sort_by(|left, right| {
-    left.start.cmp(&right.start).then_with(|| {
-      let left_len = left.end.saturating_sub(left.start);
-      let right_len = right.end.saturating_sub(right.start);
-      right_len.cmp(&left_len)
-    })
+    left
+      .start
+      .cmp(&right.start)
+      .then_with(|| {
+        let left_len = left.end.saturating_sub(left.start);
+        let right_len = right.end.saturating_sub(right.start);
+        right_len.cmp(&left_len)
+      })
+      .then_with(|| left.pattern.cmp(&right.pattern))
   });
 
   let mut selected = Vec::new();
