@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  NPM_VERSION: "11.11.1"
+
 on:
   push:
     branches: [main]
@@ -76,6 +79,40 @@ jobs:
             echo "::notice::Fork PR without 'run-ci' label — CI skipped."
           fi
 
+  changeset:
+    name: Changeset
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.trust-check.outputs.trusted == 'true'
+    needs: [trust-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: stella/.github/.github/actions/changeset-policy@42bd6a23099a2dc219dd1af9c55f8f0506fcfffd
+        with:
+          release-paths: |
+            src/**
+            crates/core/src/**
+            Cargo.toml
+            crates/core/Cargo.toml
+            package.json
+            wasm/package.json
+            tsdown.config.ts
+          generated-paths: |
+            CHANGELOG.md
+            VERSION
+            Cargo.toml
+            Cargo.lock
+            bun.lock
+            package.json
+            wasm/package.json
+          package-files: package.json
+
   workflow-lint:
     name: Workflow lint
     runs-on: ubuntu-latest
@@ -146,7 +183,7 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: npm install --include=optional
+      - run: npx --yes "npm@${NPM_VERSION}" install --include=optional
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun test
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -191,7 +228,7 @@ jobs:
           node-version: "22"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: npm install --include=optional
+      - run: npx --yes "npm@${NPM_VERSION}" install --include=optional
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
         if: needs.check-changes.outputs.code-changed == 'true'
