@@ -2,7 +2,6 @@ name: Release
 
 env:
   NODE_VERSION: "22"
-  NPM_VERSION: "11.11.1"
   CDXGEN_VERSION: "12.1.5"
 
 on:
@@ -75,8 +74,6 @@ jobs:
         with:
           provenance-version: v0.1.3
 
-      - run: rm -rf node_modules package-lock.json
-      - run: npx --yes "npm@${NPM_VERSION}" install --include=optional
       - run: bun test
       - run: bun run build:js
       - run: bun run test:runtime:bun
