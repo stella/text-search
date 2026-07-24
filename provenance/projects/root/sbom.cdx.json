@@ -68,7 +68,7 @@
   "compositions": [
     {
       "aggregate": "incomplete",
-      "bom-ref": "pkg:npm/@stll/text-search@1.0.7"
+      "bom-ref": "pkg:npm/@stll/text-search@1.0.8"
     }
   ],
   "dependencies": [],
@@ -79,7 +79,7 @@
       }
     ],
     "component": {
-      "bom-ref": "pkg:npm/@stll/text-search@1.0.7",
+      "bom-ref": "pkg:npm/@stll/text-search@1.0.8",
       "description": "Multi-engine text search orchestrator for Node.js and Bun. Routes literals, regex, and fuzzy patterns to the right engine automatically.",
       "externalReferences": [
         {
@@ -101,9 +101,9 @@
         }
       ],
       "name": "text-search",
-      "purl": "pkg:npm/%40stll/text-search@1.0.7",
+      "purl": "pkg:npm/%40stll/text-search@1.0.8",
       "type": "application",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     "lifecycles": [
       {
