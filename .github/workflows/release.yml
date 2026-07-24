@@ -152,6 +152,7 @@ jobs:
       publish-to-npm: >-
         ${{ github.event_name == 'push'
             || (inputs.publish_to_npm && github.ref == 'refs/heads/main') }}
+      update-changelog: false
     permissions:
       contents: write
       id-token: write

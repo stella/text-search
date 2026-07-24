@@ -90,7 +90,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: stella/.github/.github/actions/changeset-policy@42bd6a23099a2dc219dd1af9c55f8f0506fcfffd
+      - uses: stella/.github/.github/actions/changeset-policy@f04837a7311b8efa997e572eb7f7d4a61d9c728b
         with:
           release-paths: |
             src/**
