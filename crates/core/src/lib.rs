@@ -235,6 +235,7 @@ pub struct RegexPattern {
   /// Optional byte radius around literal prefilter hits for lazy single-pattern
   /// scans. Keeps broad cue words from forcing a full-haystack regex pass.
   pub prefilter_window_bytes: Option<usize>,
+  pub prepared_artifact_policy: PreparedArtifactPolicy,
 }
 
 impl RegexPattern {
@@ -248,6 +249,7 @@ impl RegexPattern {
       prefilter_case_insensitive: None,
       prefilter_regex: None,
       prefilter_window_bytes: None,
+      prepared_artifact_policy: PreparedArtifactPolicy::Inherit,
     }
   }
 }
@@ -310,6 +312,33 @@ pub enum OverlapStrategy {
   All,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RegexArtifactPolicy {
+  #[default]
+  Include,
+  Omit,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum PreparedArtifactPolicy {
+  #[default]
+  Inherit,
+  Include,
+  Omit,
+}
+
+impl PreparedArtifactPolicy {
+  const fn should_capture(self, default_policy: RegexArtifactPolicy) -> bool {
+    match self {
+      Self::Inherit => {
+        matches!(default_policy, RegexArtifactPolicy::Include)
+      }
+      Self::Include => true,
+      Self::Omit => false,
+    }
+  }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextSearchOptions {
@@ -317,6 +346,7 @@ pub struct TextSearchOptions {
   pub whole_words: bool,
   pub max_alternations: u32,
   pub regex_chunk_size: Option<usize>,
+  pub regex_artifact_policy: RegexArtifactPolicy,
   pub fuzzy_metric: FuzzyMetric,
   pub normalize_diacritics: bool,
   pub case_insensitive: bool,
@@ -331,6 +361,7 @@ impl Default for TextSearchOptions {
       whole_words: false,
       max_alternations: 50,
       regex_chunk_size: None,
+      regex_artifact_policy: RegexArtifactPolicy::Include,
       fuzzy_metric: FuzzyMetric::Levenshtein,
       normalize_diacritics: false,
       case_insensitive: false,
@@ -433,6 +464,12 @@ pub struct PreparedTextSearchArtifacts {
   pub regex_sets: Vec<PreparedRegexArtifact>,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PreparedTextSearchArtifactsView<'a> {
+  pub aho_automata: Vec<PreparedAhoArtifactView<'a>>,
+  pub regex_sets: Vec<PreparedRegexArtifactView<'a>>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
@@ -441,9 +478,22 @@ pub struct PreparedAhoArtifact {
   pub bytes: Vec<u8>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreparedAhoArtifactView<'a> {
+  pub fingerprint: u64,
+  pub options: LiteralOptions,
+  pub identity: bool,
+  pub bytes: &'a [u8],
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedRegexArtifact {
   pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreparedRegexArtifactView<'a> {
+  pub bytes: &'a [u8],
 }
 
 impl PreparedTextSearchArtifacts {
@@ -480,6 +530,28 @@ impl PreparedTextSearchArtifacts {
   }
 
   pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    Ok(PreparedTextSearchArtifactsView::from_bytes(bytes)?.into_owned())
+  }
+
+  #[must_use]
+  pub fn as_view(&self) -> PreparedTextSearchArtifactsView<'_> {
+    PreparedTextSearchArtifactsView {
+      aho_automata: self
+        .aho_automata
+        .iter()
+        .map(PreparedAhoArtifactView::from)
+        .collect(),
+      regex_sets: self
+        .regex_sets
+        .iter()
+        .map(PreparedRegexArtifactView::from)
+        .collect(),
+    }
+  }
+}
+
+impl<'a> PreparedTextSearchArtifactsView<'a> {
+  pub fn from_bytes(bytes: &'a [u8]) -> Result<Self> {
     let mut reader = PreparedArtifactReader::new(bytes);
     let magic = reader.read_bytes(PREPARED_ARTIFACTS_MAGIC.len())?;
     if magic != PREPARED_ARTIFACTS_MAGIC {
@@ -503,8 +575,8 @@ impl PreparedTextSearchArtifacts {
       let fingerprint = reader.read_u64()?;
       let options = literal_options_from_flags(reader.read_u8()?)?;
       let identity = read_identity_flag(reader.read_u8()?)?;
-      let automaton = reader.read_len_prefixed_bytes()?.to_vec();
-      aho_automata.push(PreparedAhoArtifact {
+      let automaton = reader.read_len_prefixed_bytes()?;
+      aho_automata.push(PreparedAhoArtifactView {
         fingerprint,
         options,
         identity,
@@ -524,8 +596,8 @@ impl PreparedTextSearchArtifacts {
     }
     let mut regex_sets = Vec::with_capacity(regex_count);
     for _ in 0..regex_count {
-      regex_sets.push(PreparedRegexArtifact {
-        bytes: reader.read_len_prefixed_bytes()?.to_vec(),
+      regex_sets.push(PreparedRegexArtifactView {
+        bytes: reader.read_len_prefixed_bytes()?,
       });
     }
     reader.finish()?;
@@ -533,6 +605,60 @@ impl PreparedTextSearchArtifacts {
       aho_automata,
       regex_sets,
     })
+  }
+
+  #[must_use]
+  pub fn into_owned(self) -> PreparedTextSearchArtifacts {
+    PreparedTextSearchArtifacts {
+      aho_automata: self
+        .aho_automata
+        .into_iter()
+        .map(PreparedAhoArtifact::from)
+        .collect(),
+      regex_sets: self
+        .regex_sets
+        .into_iter()
+        .map(PreparedRegexArtifact::from)
+        .collect(),
+    }
+  }
+}
+
+impl<'a> From<&'a PreparedAhoArtifact> for PreparedAhoArtifactView<'a> {
+  fn from(artifact: &'a PreparedAhoArtifact) -> Self {
+    Self {
+      fingerprint: artifact.fingerprint,
+      options: artifact.options,
+      identity: artifact.identity,
+      bytes: &artifact.bytes,
+    }
+  }
+}
+
+impl From<PreparedAhoArtifactView<'_>> for PreparedAhoArtifact {
+  fn from(artifact: PreparedAhoArtifactView<'_>) -> Self {
+    Self {
+      fingerprint: artifact.fingerprint,
+      options: artifact.options,
+      identity: artifact.identity,
+      bytes: artifact.bytes.to_vec(),
+    }
+  }
+}
+
+impl<'a> From<&'a PreparedRegexArtifact> for PreparedRegexArtifactView<'a> {
+  fn from(artifact: &'a PreparedRegexArtifact) -> Self {
+    Self {
+      bytes: &artifact.bytes,
+    }
+  }
+}
+
+impl From<PreparedRegexArtifactView<'_>> for PreparedRegexArtifact {
+  fn from(artifact: PreparedRegexArtifactView<'_>) -> Self {
+    Self {
+      bytes: artifact.bytes.to_vec(),
+    }
   }
 }
 
@@ -569,6 +695,7 @@ pub struct RegexOptions {
   pub prefilter_case_insensitive: Option<bool>,
   pub prefilter_regex: Option<String>,
   pub prefilter_window_bytes: Option<usize>,
+  pub prepared_artifact_policy: PreparedArtifactPolicy,
 }
 
 pub struct TextSearch {
@@ -604,6 +731,7 @@ struct SplitLiteralEngine {
 
 struct RegexSlot {
   engine: RegexEngine,
+  work_weight: u64,
   prefilter: Option<LiteralPrefilter>,
   prefilter_regex: Option<Box<regex_core::RegexSet>>,
   prefilter_window_bytes: Option<usize>,
@@ -643,7 +771,7 @@ enum AhoBuildMode<'a> {
   Build,
   Capture(&'a mut Vec<PreparedAhoArtifact>),
   Load {
-    automata: &'a [PreparedAhoArtifact],
+    automata: &'a [PreparedAhoArtifactView<'a>],
     index: usize,
   },
 }
@@ -652,9 +780,15 @@ enum RegexBuildMode<'a> {
   Build,
   Capture(&'a mut Vec<PreparedRegexArtifact>),
   Load {
-    artifacts: &'a [PreparedRegexArtifact],
+    artifacts: &'a [PreparedRegexArtifactView<'a>],
     index: usize,
   },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegexArtifactMode {
+  Capture,
+  Omit,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -695,7 +829,7 @@ impl RegexBuildMode<'_> {
       return Err(Error::PreparedRegexArtifactMissing { index: current });
     };
     *index = current.saturating_add(1);
-    Ok(&artifact.bytes)
+    Ok(artifact.bytes)
   }
 
   const fn finish(&self) -> Result<()> {
@@ -760,7 +894,7 @@ impl AhoBuildMode<'_> {
       artifact.options,
       artifact.identity,
       artifact.fingerprint,
-      &artifact.bytes,
+      artifact.bytes,
     ))
   }
 
@@ -788,7 +922,19 @@ impl PreparedArtifactBytes for PreparedAhoArtifact {
   }
 }
 
+impl PreparedArtifactBytes for PreparedAhoArtifactView<'_> {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
 impl PreparedArtifactBytes for PreparedRegexArtifact {
+  fn byte_len(&self) -> usize {
+    self.bytes.len()
+  }
+}
+
+impl PreparedArtifactBytes for PreparedRegexArtifactView<'_> {
   fn byte_len(&self) -> usize {
     self.bytes.len()
   }
@@ -957,6 +1103,15 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<Self> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_artifacts_view(patterns, options, &artifacts)
+  }
+
+  pub fn with_prepared_artifacts_view(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<Self> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -981,6 +1136,17 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<TextSearchBuildResult> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_artifacts_view_build_stats(
+      patterns, options, &artifacts,
+    )
+  }
+
+  pub fn with_prepared_artifacts_view_build_stats(
+    patterns: impl IntoIterator<Item = PatternEntry>,
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<TextSearchBuildResult> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -1004,6 +1170,14 @@ impl TextSearch {
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
   ) -> Result<Self> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_all_literal_artifacts_view(options, &artifacts)
+  }
+
+  pub fn with_prepared_all_literal_artifacts_view(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
+  ) -> Result<Self> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
       index: 0,
@@ -1022,6 +1196,16 @@ impl TextSearch {
   pub fn with_prepared_all_literal_artifacts_build_stats(
     options: TextSearchOptions,
     artifacts: &PreparedTextSearchArtifacts,
+  ) -> Result<TextSearchBuildResult> {
+    let artifacts = artifacts.as_view();
+    Self::with_prepared_all_literal_artifacts_view_build_stats(
+      options, &artifacts,
+    )
+  }
+
+  pub fn with_prepared_all_literal_artifacts_view_build_stats(
+    options: TextSearchOptions,
+    artifacts: &PreparedTextSearchArtifactsView<'_>,
   ) -> Result<TextSearchBuildResult> {
     let mut aho_mode = AhoBuildMode::Load {
       automata: &artifacts.aho_automata,
@@ -1528,25 +1712,69 @@ fn push_shared_regex_engines(
     );
   }
 
-  for chunk in
-    chunk_shared_regex_patterns(shared_regex, options.regex_chunk_size)
-  {
-    let regex_pattern_count = chunk.len();
-    push_timed_engine(
-      engines,
-      stats.as_deref_mut(),
-      regex_pattern_count,
-      pattern_bounds(&chunk),
-      aho_mode,
-      regex_mode,
-      |aho_mode, regex_mode| {
-        Ok(EngineSlot::Regex(build_regex_engine(
-          chunk, options, None, aho_mode, regex_mode,
-        )?))
-      },
-    )?;
+  for (artifact_mode, group) in shared_regex_artifact_groups(
+    shared_regex,
+    options.regex_artifact_policy,
+    regex_mode,
+  ) {
+    for chunk in chunk_shared_regex_patterns(group, options.regex_chunk_size) {
+      let regex_pattern_count = chunk.len();
+      push_timed_engine(
+        engines,
+        stats.as_deref_mut(),
+        regex_pattern_count,
+        pattern_bounds(&chunk),
+        aho_mode,
+        regex_mode,
+        |aho_mode, regex_mode| {
+          Ok(EngineSlot::Regex(build_regex_engine(
+            chunk,
+            options,
+            None,
+            artifact_mode,
+            aho_mode,
+            regex_mode,
+          )?))
+        },
+      )?;
+    }
   }
   Ok(())
+}
+
+fn shared_regex_artifact_groups(
+  patterns: Vec<ClassifiedPattern>,
+  default_policy: RegexArtifactPolicy,
+  regex_mode: &RegexBuildMode<'_>,
+) -> Vec<(RegexArtifactMode, Vec<ClassifiedPattern>)> {
+  if matches!(regex_mode, RegexBuildMode::Build) {
+    return vec![(RegexArtifactMode::Omit, patterns)];
+  }
+
+  let mut captured = Vec::new();
+  let mut omitted = Vec::new();
+  for pattern in patterns {
+    let policy = pattern
+      .regex_options
+      .as_ref()
+      .map_or(PreparedArtifactPolicy::Inherit, |options| {
+        options.prepared_artifact_policy
+      });
+    if policy.should_capture(default_policy) {
+      captured.push(pattern);
+    } else {
+      omitted.push(pattern);
+    }
+  }
+
+  let mut groups = Vec::with_capacity(2);
+  if !captured.is_empty() {
+    groups.push((RegexArtifactMode::Capture, captured));
+  }
+  if !omitted.is_empty() {
+    groups.push((RegexArtifactMode::Omit, omitted));
+  }
+  groups
 }
 
 fn push_overlap_all_regex_engines(
@@ -1571,6 +1799,7 @@ fn push_overlap_all_regex_engines(
           vec![pattern],
           options,
           regex_options,
+          RegexArtifactMode::Omit,
           aho_mode,
           regex_mode,
         )?))
@@ -1604,6 +1833,7 @@ fn push_isolated_regex_engines(
           vec![pattern],
           options,
           lazy_options,
+          RegexArtifactMode::Omit,
           aho_mode,
           regex_mode,
         )?))
@@ -1682,6 +1912,7 @@ fn classify_pattern_entries(
           prefilter_case_insensitive,
           prefilter_regex,
           prefilter_window_bytes,
+          prepared_artifact_policy,
         } = regex_pattern;
         let alternation_count = count_alternations(&source);
         let regex_complexity =
@@ -1700,6 +1931,7 @@ fn classify_pattern_entries(
             prefilter_case_insensitive,
             prefilter_regex,
             prefilter_window_bytes,
+            prepared_artifact_policy,
           }),
           regex_complexity,
         }
@@ -2107,29 +2339,73 @@ fn build_literal_engine(
 /// so a prefilter can never gate an unrelated pattern sharing the slot. The
 /// leading-literal prefilter is inferred only on the shared path for
 /// single-pattern chunks.
+fn regex_work_weight(patterns: &[ClassifiedPattern]) -> u64 {
+  patterns.iter().fold(0_u64, |weight, pattern| {
+    let complexity = u64::from(pattern.regex_complexity).saturating_add(1);
+    let source_weight = u64::try_from(pattern.pattern.len())
+      .unwrap_or(u64::MAX)
+      .div_ceil(64);
+    weight.saturating_add(
+      complexity
+        .saturating_mul(complexity)
+        .saturating_add(source_weight),
+    )
+  })
+}
+
+fn eager_regex_artifact_capture(
+  regex_options: Option<&RegexOptions>,
+  shared_mode: RegexArtifactMode,
+  default_policy: RegexArtifactPolicy,
+) -> bool {
+  regex_options.map_or(
+    matches!(shared_mode, RegexArtifactMode::Capture),
+    |options| {
+      options
+        .prepared_artifact_policy
+        .should_capture(default_policy)
+    },
+  )
+}
+
+fn build_inferred_regex_prefilter(
+  patterns: &[ClassifiedPattern],
+  lazy_options: Option<&RegexOptions>,
+  options: TextSearchOptions,
+  aho_mode: &mut AhoBuildMode<'_>,
+) -> Result<Option<LiteralPrefilter>> {
+  if lazy_options.is_some() || patterns.len() != 1 {
+    return Ok(None);
+  }
+  patterns
+    .first()
+    .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
+    .map(|prefilter| {
+      build_literal_prefilter(
+        &[prefilter.literal],
+        prefilter.case_insensitive || options.case_insensitive,
+        aho_mode,
+        false,
+      )
+    })
+    .transpose()
+}
+
 fn build_regex_engine(
   patterns: Vec<ClassifiedPattern>,
   options: TextSearchOptions,
   lazy_options: Option<RegexOptions>,
+  shared_artifact_mode: RegexArtifactMode,
   aho_mode: &mut AhoBuildMode<'_>,
   regex_mode: &mut RegexBuildMode<'_>,
 ) -> Result<RegexSlot> {
-  let inferred_prefilter = if lazy_options.is_none() && patterns.len() == 1 {
-    patterns
-      .first()
-      .and_then(|pattern| infer_leading_literal_prefilter(&pattern.pattern))
-      .map(|prefilter| {
-        build_literal_prefilter(
-          &[prefilter.literal],
-          prefilter.case_insensitive || options.case_insensitive,
-          aho_mode,
-          false,
-        )
-      })
-      .transpose()?
-  } else {
-    None
-  };
+  let work_weight = regex_work_weight(&patterns);
+  let inferred_prefilter = build_inferred_regex_prefilter(
+    &patterns,
+    lazy_options.as_ref(),
+    options,
+    aho_mode,
+  )?;
 
   let mut values = Vec::with_capacity(patterns.len());
   let mut index_map = Vec::with_capacity(patterns.len());
@@ -2157,6 +2433,9 @@ fn build_regex_engine(
   let (engine, prefilter, prefilter_regex) = match lazy_options {
     Some(lazy_options) if lazy_options.lazy => {
       let windowed = lazy_options.prefilter_window_bytes.is_some();
+      let capture_prepared = lazy_options
+        .prepared_artifact_policy
+        .should_capture(options.regex_artifact_policy);
       let prefilter = if lazy_options.prefilter_any.is_empty() {
         None
       } else {
@@ -2171,11 +2450,17 @@ fn build_regex_engine(
       };
       let prefilter_regex = lazy_options
         .prefilter_regex
-        .map(|source| build_prefilter_regex(source, regex_mode))
+        .map(|source| {
+          build_prefilter_regex(source, regex_mode, capture_prepared)
+        })
         .transpose()?
         .map(Box::new);
-      let prepared =
-        capture_or_load_lazy_regex(&values, engine_options, regex_mode)?;
+      let prepared = capture_or_load_lazy_regex(
+        &values,
+        engine_options,
+        regex_mode,
+        capture_prepared,
+      )?;
       let engine = RegexEngine::Lazy {
         patterns: values,
         options: engine_options,
@@ -2185,10 +2470,16 @@ fn build_regex_engine(
       (engine, prefilter, prefilter_regex)
     }
     _ => {
+      let capture_prepared = eager_regex_artifact_capture(
+        lazy_options.as_ref(),
+        shared_artifact_mode,
+        options.regex_artifact_policy,
+      );
       let engine = RegexEngine::Eager(Box::new(build_regex_set(
         values,
         engine_options,
         regex_mode,
+        capture_prepared,
       )?));
       (engine, inferred_prefilter, None)
     }
@@ -2196,6 +2487,7 @@ fn build_regex_engine(
 
   Ok(RegexSlot {
     engine,
+    work_weight,
     prefilter,
     prefilter_regex,
     prefilter_window_bytes,
@@ -2243,32 +2535,54 @@ fn build_regex_set(
   patterns: Vec<String>,
   options: regex_core::Options,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<regex_core::RegexSet> {
   match regex_mode {
-    RegexBuildMode::Build => regex_core::RegexSet::new(patterns, options),
+    RegexBuildMode::Build => build_source_regex_set(patterns, options),
     RegexBuildMode::Capture(artifacts) => {
+      if !capture_prepared {
+        artifacts.push(PreparedRegexArtifact { bytes: Vec::new() });
+        return build_source_regex_set(patterns, options);
+      }
       let bytes = regex_core::RegexSet::prepare(patterns.clone(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
-      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes);
+      let set = regex_core::RegexSet::with_prepared(patterns, options, &bytes)
+        .map_err(|error| Error::BuildRegex(error.to_string()))?;
       artifacts.push(PreparedRegexArtifact { bytes });
-      set
+      Ok(set)
     }
     RegexBuildMode::Load { .. } => {
       let bytes = regex_mode.next_prepared_regex()?;
+      if bytes.is_empty() {
+        return build_source_regex_set(patterns, options);
+      }
       regex_core::RegexSet::with_prepared(patterns, options, bytes)
+        .map_err(|error| Error::BuildRegex(error.to_string()))
     }
   }
-  .map_err(|error| Error::BuildRegex(error.to_string()))
+}
+
+fn build_source_regex_set(
+  patterns: Vec<String>,
+  options: regex_core::Options,
+) -> Result<regex_core::RegexSet> {
+  regex_core::RegexSet::new(patterns, options)
+    .map_err(|error| Error::BuildRegex(error.to_string()))
 }
 
 fn capture_or_load_lazy_regex(
   patterns: &[String],
   options: regex_core::Options,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<Option<Vec<u8>>> {
   match regex_mode {
     RegexBuildMode::Build => Ok(None),
     RegexBuildMode::Capture(artifacts) => {
+      if !capture_prepared {
+        artifacts.push(PreparedRegexArtifact { bytes: Vec::new() });
+        return Ok(None);
+      }
       let bytes = regex_core::RegexSet::prepare(patterns.to_vec(), options)
         .map_err(|error| Error::BuildRegex(error.to_string()))?;
       artifacts.push(PreparedRegexArtifact {
@@ -2277,7 +2591,11 @@ fn capture_or_load_lazy_regex(
       Ok(Some(bytes))
     }
     RegexBuildMode::Load { .. } => {
-      Ok(Some(regex_mode.next_prepared_regex()?.to_vec()))
+      let bytes = regex_mode.next_prepared_regex()?;
+      if bytes.is_empty() {
+        return Ok(None);
+      }
+      Ok(Some(bytes.to_vec()))
     }
   }
 }
@@ -2601,6 +2919,7 @@ where
 fn build_prefilter_regex(
   source: String,
   regex_mode: &mut RegexBuildMode<'_>,
+  capture_prepared: bool,
 ) -> Result<regex_core::RegexSet> {
   build_regex_set(
     vec![source],
@@ -2609,6 +2928,7 @@ fn build_prefilter_regex(
       unicode_boundaries: true,
     },
     regex_mode,
+    capture_prepared,
   )
 }
 
@@ -3035,22 +3355,38 @@ fn find_iter_engines_parallel(
     return find_iter_engines_sequential(engines, haystack);
   }
 
-  let chunk_size = engines.len().div_ceil(workers);
+  let assignments = weighted_engine_assignments(engines, workers);
   std::thread::scope(|scope| {
-    let mut handles = Vec::new();
-    for chunk in engines.chunks(chunk_size) {
-      handles.push(
-        scope.spawn(move || find_iter_engines_sequential(chunk, haystack)),
-      );
+    let mut handles = Vec::with_capacity(assignments.len());
+    for assignment in &assignments {
+      handles.push(scope.spawn(move || {
+        let mut completed = Vec::with_capacity(assignment.len());
+        for index in assignment {
+          let Some(engine) = engines.get(*index) else {
+            return Err(Error::PatternIndexNotAddressable {
+              pattern: u32::MAX,
+            });
+          };
+          completed.push((*index, engine_find_iter(engine, haystack)?));
+        }
+        Ok(completed)
+      }));
     }
 
-    let mut matches = Vec::new();
+    let mut by_engine = std::iter::repeat_with(|| None)
+      .take(engines.len())
+      .collect::<Vec<_>>();
     for handle in handles {
-      let chunk_matches = handle.join().map_err(|_| {
+      let completed = handle.join().map_err(|_| {
         Error::BuildRegex(String::from("Parallel search panicked"))
       })??;
-      matches.extend(chunk_matches);
+      for (index, matches) in completed {
+        if let Some(slot) = by_engine.get_mut(index) {
+          *slot = Some(matches);
+        }
+      }
     }
+    let matches = by_engine.into_iter().flatten().flatten().collect();
     Ok(matches)
   })
 }
@@ -3064,27 +3400,123 @@ fn find_iter_engines_parallel_with_stats(
     return find_iter_engines_sequential_with_stats(engines, haystack, 0);
   }
 
-  let chunk_size = engines.len().div_ceil(workers);
+  let assignments = weighted_engine_assignments(engines, workers);
   std::thread::scope(|scope| {
-    let mut handles = Vec::new();
-    for (chunk_index, chunk) in engines.chunks(chunk_size).enumerate() {
-      let slot_offset = chunk_index.saturating_mul(chunk_size);
+    let mut handles = Vec::with_capacity(assignments.len());
+    for assignment in &assignments {
       handles.push(scope.spawn(move || {
-        find_iter_engines_sequential_with_stats(chunk, haystack, slot_offset)
+        let mut completed = Vec::with_capacity(assignment.len());
+        for index in assignment {
+          let Some(engine) = engines.get(*index) else {
+            return Err(Error::PatternIndexNotAddressable {
+              pattern: u32::MAX,
+            });
+          };
+          completed.push((
+            *index,
+            engine_find_iter_with_stats(engine, haystack, *index)?,
+          ));
+        }
+        Ok(completed)
       }));
     }
 
-    let mut matches = Vec::new();
-    let mut stats = Vec::new();
+    let mut by_engine = std::iter::repeat_with(|| None)
+      .take(engines.len())
+      .collect::<Vec<_>>();
     for handle in handles {
-      let result = handle.join().map_err(|_| {
+      let completed = handle.join().map_err(|_| {
         Error::BuildRegex(String::from("Parallel search panicked"))
       })??;
+      for (index, result) in completed {
+        if let Some(slot) = by_engine.get_mut(index) {
+          *slot = Some(result);
+        }
+      }
+    }
+    let mut matches = Vec::new();
+    let mut stats = Vec::new();
+    for result in by_engine.into_iter().flatten() {
       matches.extend(result.matches);
       stats.extend(result.stats);
     }
     Ok(TextSearchFindResult { matches, stats })
   })
+}
+
+fn weighted_engine_assignments(
+  engines: &[EngineSlot],
+  workers: usize,
+) -> Vec<Vec<usize>> {
+  let weights = engines.iter().map(engine_work_weight).collect::<Vec<_>>();
+  weighted_assignments_for_weights(&weights, workers)
+}
+
+fn weighted_assignments_for_weights(
+  weights: &[u64],
+  workers: usize,
+) -> Vec<Vec<usize>> {
+  use std::cmp::Reverse;
+  use std::collections::BinaryHeap;
+
+  let workers = workers.max(1).min(weights.len().max(1));
+  let mut jobs = weights
+    .iter()
+    .enumerate()
+    .map(|(index, weight)| (index, *weight))
+    .collect::<Vec<_>>();
+  jobs.sort_by(|left, right| {
+    right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0))
+  });
+
+  let mut assignments = vec![Vec::new(); workers];
+  let mut loads = (0..workers)
+    .map(|worker| Reverse((0_u64, worker)))
+    .collect::<BinaryHeap<_>>();
+  for (index, weight) in jobs {
+    let Reverse((load, worker)) = loads.pop().unwrap_or(Reverse((0, 0)));
+    if let Some(assignment) = assignments.get_mut(worker) {
+      assignment.push(index);
+    }
+    loads.push(Reverse((load.saturating_add(weight), worker)));
+  }
+  assignments
+}
+
+fn engine_work_weight(engine: &EngineSlot) -> u64 {
+  match engine {
+    EngineSlot::Regex(slot) => slot.work_weight.max(1),
+    EngineSlot::SplitLiteral(slot) => {
+      u64::try_from(slot.engines.len()).unwrap_or(u64::MAX).max(1)
+    }
+    EngineSlot::Literal(_) | EngineSlot::Fuzzy(_) => 1,
+  }
+}
+
+#[cfg(test)]
+mod scheduler_tests {
+  use super::weighted_assignments_for_weights;
+
+  #[test]
+  fn weighted_scheduler_balances_adjacent_expensive_jobs() {
+    let weights = [1_u64, 1, 1, 1, 100, 100, 100, 100];
+    let assignments = weighted_assignments_for_weights(&weights, 4);
+    let mut visits = vec![0_u8; weights.len()];
+    let loads = assignments
+      .iter()
+      .map(|assignment| {
+        assignment.iter().fold(0_u64, |load, index| {
+          if let Some(visit) = visits.get_mut(*index) {
+            *visit = visit.saturating_add(1);
+          }
+          load.saturating_add(weights.get(*index).copied().unwrap_or_default())
+        })
+      })
+      .collect::<Vec<_>>();
+
+    assert!(visits.iter().all(|visits| *visits == 1));
+    assert_eq!(loads.iter().copied().max(), Some(101));
+  }
 }
 
 const fn should_parallel_find(engines: &[EngineSlot], haystack: &str) -> bool {
@@ -3827,11 +4259,15 @@ fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
     return matches;
   }
   matches.sort_by(|left, right| {
-    left.start.cmp(&right.start).then_with(|| {
-      let left_len = left.end.saturating_sub(left.start);
-      let right_len = right.end.saturating_sub(right.start);
-      right_len.cmp(&left_len)
-    })
+    left
+      .start
+      .cmp(&right.start)
+      .then_with(|| {
+        let left_len = left.end.saturating_sub(left.start);
+        let right_len = right.end.saturating_sub(right.start);
+        right_len.cmp(&left_len)
+      })
+      .then_with(|| left.pattern.cmp(&right.pattern))
   });
 
   let mut selected = Vec::new();
