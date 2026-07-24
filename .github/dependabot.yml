@@ -47,6 +47,7 @@ updates:
       oxc:
         patterns:
           - "oxlint"
+          - "oxlint-tsgolint"
           - "oxfmt"
       misc:
         patterns:
