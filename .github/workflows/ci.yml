@@ -1,8 +1,5 @@
 name: CI
 
-env:
-  NPM_VERSION: "11.11.1"
-
 on:
   push:
     branches: [main]
@@ -111,6 +108,12 @@ jobs:
             bun.lock
             package.json
             wasm/package.json
+            provenance/THIRD-PARTY-NOTICES.repo.txt
+            provenance/report.json
+            provenance/projects/root/THIRD-PARTY-NOTICES.txt
+            provenance/projects/root/sbom.cdx.json
+            provenance/projects/wasm/THIRD-PARTY-NOTICES.txt
+            provenance/projects/wasm/sbom.cdx.json
           package-files: package.json
 
   workflow-lint:
@@ -118,9 +121,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive="${RUNNER_TEMP}/actionlint.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+      - name: Lint workflows
+        run: '"${RUNNER_TEMP}/actionlint" -color'
 
   version-sync:
     name: Version sync
@@ -183,7 +201,7 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: npx --yes "npm@${NPM_VERSION}" install --include=optional
+      - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun test
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -228,7 +246,7 @@ jobs:
           node-version: "22"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: npx --yes "npm@${NPM_VERSION}" install --include=optional
+      - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -266,8 +284,27 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: npm pack --json --ignore-scripts --dry-run
+      - name: npm consumer smoke
         if: needs.check-changes.outputs.code-changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          consumer_dir="$(mktemp -d)"
+          npm pack --json --ignore-scripts --pack-destination "$consumer_dir" >/dev/null
+          tarball="$(find "$consumer_dir" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          if [ -z "$tarball" ]; then
+            echo "::error::npm pack did not produce a tarball."
+            exit 1
+          fi
+
+          cd "$consumer_dir"
+          npm install --ignore-scripts --include=optional "$tarball"
+          node --input-type=module -e '
+            const { TextSearch } = await import("@stll/text-search");
+            const search = new TextSearch(["contract"]);
+            if (!search.isMatch("contract")) process.exit(1);
+          '
       - run: cd wasm && npm pack --json --ignore-scripts --dry-run
         if: needs.check-changes.outputs.code-changed == 'true'
 

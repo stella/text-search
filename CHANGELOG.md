@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Windows x64 support: require native engine versions that ship the
-  `win32-x64-msvc` binding (`aho-corasick` >=1.0.4, `fuzzy-search`
-  >=1.1.2, `regex-set` >=1.0.5).
+  `win32-x64-msvc` binding (`aho-corasick` `>=1.0.4`, `fuzzy-search`
+  `>=1.1.2`, `regex-set` `>=1.0.5`).
 
 ## [1.0.4] - 2026-06-04
 
