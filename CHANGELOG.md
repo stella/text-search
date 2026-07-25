@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9
+
+### Patch Changes
+
+- [#95](https://github.com/stella/text-search/pull/95) [`2c56ed2`](https://github.com/stella/text-search/commit/2c56ed260a067bacee873efec5950fe7a0b84bff) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Make core timing and execution portable to single-thread WebAssembly hosts.
+
 ## 1.0.8
 
 ### Patch Changes
