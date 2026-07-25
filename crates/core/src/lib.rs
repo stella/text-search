@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
-use std::time::Instant;
 use std::{error, fmt};
 
 use stella_aho_corasick_core as aho_core;
 use stella_fuzzy_search_core as fuzzy_core;
 use stella_regex_set_core as regex_core;
+use web_time::Instant;
+
+mod exec;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -1450,15 +1452,13 @@ impl TextSearch {
       return warm_engine_refs_lazy_regex(&lazy_engines);
     }
 
-    let workers = std::thread::available_parallelism()
-      .map_or(1, usize::from)
-      .min(lazy_count);
+    let workers = crate::exec::available_parallelism().min(lazy_count);
     if workers <= 1 {
       return warm_engine_refs_lazy_regex(&lazy_engines);
     }
 
     let chunk_size = lazy_count.div_ceil(workers);
-    std::thread::scope(|scope| {
+    crate::exec::scope(|scope| {
       let mut handles = Vec::with_capacity(workers);
       for chunk in lazy_engines.chunks(chunk_size) {
         handles.push(scope.spawn(move || warm_engine_refs_lazy_regex(chunk)));
@@ -3356,7 +3356,7 @@ fn find_iter_engines_parallel(
   }
 
   let assignments = weighted_engine_assignments(engines, workers);
-  std::thread::scope(|scope| {
+  crate::exec::scope(|scope| {
     let mut handles = Vec::with_capacity(assignments.len());
     for assignment in &assignments {
       handles.push(scope.spawn(move || {
@@ -3401,7 +3401,7 @@ fn find_iter_engines_parallel_with_stats(
   }
 
   let assignments = weighted_engine_assignments(engines, workers);
-  std::thread::scope(|scope| {
+  crate::exec::scope(|scope| {
     let mut handles = Vec::with_capacity(assignments.len());
     for assignment in &assignments {
       handles.push(scope.spawn(move || {
@@ -3525,8 +3525,7 @@ const fn should_parallel_find(engines: &[EngineSlot], haystack: &str) -> bool {
 }
 
 fn parallel_find_workers(engine_count: usize) -> usize {
-  std::thread::available_parallelism()
-    .map_or(1, std::num::NonZeroUsize::get)
+  crate::exec::available_parallelism()
     .min(PARALLEL_FIND_MAX_WORKERS)
     .min(engine_count)
 }
@@ -3622,7 +3621,7 @@ fn split_literal_find_iter_parallel(
   }
 
   let chunk_size = engines.len().div_ceil(workers);
-  std::thread::scope(|scope| {
+  crate::exec::scope(|scope| {
     let mut handles = Vec::with_capacity(workers);
     for chunk in engines.chunks(chunk_size) {
       handles.push(
@@ -3657,7 +3656,7 @@ fn split_literal_find_iter_parallel_with_stats(
   }
 
   let chunk_size = engines.len().div_ceil(workers);
-  std::thread::scope(|scope| {
+  crate::exec::scope(|scope| {
     let mut handles = Vec::with_capacity(workers);
     for (chunk_index, chunk) in engines.chunks(chunk_size).enumerate() {
       let subslot_offset = chunk_index.saturating_mul(chunk_size);
