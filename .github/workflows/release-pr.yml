@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   version:
-    uses: stella/.github/.github/workflows/changeset-release-pr.yml@42bd6a23099a2dc219dd1af9c55f8f0506fcfffd
+    uses: stella/.github/.github/workflows/changeset-release-pr.yml@4c9e6dbc502a9e9436252315a3be2bd327c5e32e
+    with:
+      sync-cargo-inherited-lock: true
     secrets:
       CHANGELOG_APP_ID: ${{ secrets.CHANGELOG_APP_ID }}
       CHANGELOG_APP_PRIVATE_KEY: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}

@@ -11,12 +11,9 @@ if (typeof version !== "string" || !VERSION_PATTERN.test(version)) {
   process.exit(1);
 }
 
+execFileSync("cargo", ["metadata", "--locked", "--no-deps", "--format-version", "1"], {
+  stdio: "ignore",
+});
 execFileSync(process.execPath, ["scripts/version-sync.mjs", "sync", "--version", version], {
   stdio: "inherit",
-});
-execFileSync("cargo", ["update", "-p", "stella-text-search-core", "--precise", version], {
-  stdio: "inherit",
-});
-execFileSync("cargo", ["metadata", "--no-deps", "--format-version", "1"], {
-  stdio: "ignore",
 });
