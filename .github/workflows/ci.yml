@@ -29,7 +29,10 @@ jobs:
             code:
               - '.github/workflows/**'
               - 'VERSION'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
               - '__test__/**'
+              - 'crates/**'
               - 'src/**'
               - 'scripts/**'
               - 'bunfig.toml'
@@ -204,6 +207,39 @@ jobs:
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun test
+        if: needs.check-changes.outputs.code-changed == 'true'
+
+  rust:
+    name: Rust
+    if: >-
+      always()
+      && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [check-changes, trust-check, version-sync]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Skip when Rust checks are not required
+        if: needs.check-changes.outputs.code-changed != 'true'
+        run: echo "No trusted code changes; Rust checks skipped."
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        if: needs.check-changes.outputs.code-changed == 'true'
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - run: cargo fmt --all -- --check
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - run: cargo test --workspace --all-features
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - run: cargo check -p stella-text-search-core --target wasm32-unknown-unknown
         if: needs.check-changes.outputs.code-changed == 'true'
 
   runtime-compat:
