@@ -33,7 +33,7 @@ const PREPARED_LITERAL_UNICODE_BOUNDARIES: u8 = 1 << 2;
 const PREPARED_LITERAL_FLAGS_MASK: u8 = PREPARED_LITERAL_CASE_INSENSITIVE
   | PREPARED_LITERAL_WHOLE_WORDS
   | PREPARED_LITERAL_UNICODE_BOUNDARIES;
-const PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS: usize = 4;
+const PARALLEL_LAZY_REGEX_MIN_SLOTS: usize = 4;
 const PARALLEL_FIND_MIN_ENGINES: usize = 4;
 const PARALLEL_FIND_MIN_BYTES: usize = 32 * 1024;
 const PARALLEL_FIND_MAX_WORKERS: usize = 4;
@@ -704,6 +704,7 @@ pub struct TextSearch {
   engines: Vec<EngineSlot>,
   pattern_count: usize,
   overlap_strategy: OverlapStrategy,
+  lazy_regex_ready: OnceLock<()>,
 }
 
 enum EngineSlot {
@@ -1252,6 +1253,7 @@ impl TextSearch {
         engines: Vec::new(),
         pattern_count: 0,
         overlap_strategy: options.overlap_strategy,
+        lazy_regex_ready: ready_lazy_regex_state(&[]),
       });
     }
 
@@ -1286,6 +1288,7 @@ impl TextSearch {
     };
 
     Ok(Self {
+      lazy_regex_ready: ready_lazy_regex_state(std::slice::from_ref(&engine)),
       engines: vec![engine],
       pattern_count,
       overlap_strategy: options.overlap_strategy,
@@ -1350,6 +1353,7 @@ impl TextSearch {
       )?;
       return Ok(TextSearchBuildResult {
         search: Self {
+          lazy_regex_ready: ready_lazy_regex_state(&engines),
           engines,
           pattern_count: total_pattern_count,
           overlap_strategy: options.overlap_strategy,
@@ -1397,6 +1401,7 @@ impl TextSearch {
 
     Ok(TextSearchBuildResult {
       search: Self {
+        lazy_regex_ready: ready_lazy_regex_state(&engines),
         engines,
         pattern_count: total_pattern_count,
         overlap_strategy: options.overlap_strategy,
@@ -1448,13 +1453,17 @@ impl TextSearch {
       .filter(|engine| engine_has_uninitialized_lazy_regex(engine))
       .collect::<Vec<_>>();
     let lazy_count = lazy_engines.len();
-    if lazy_count < PARALLEL_LAZY_REGEX_WARM_MIN_SLOTS {
-      return warm_engine_refs_lazy_regex(&lazy_engines);
+    if lazy_count < PARALLEL_LAZY_REGEX_MIN_SLOTS {
+      warm_engine_refs_lazy_regex(&lazy_engines)?;
+      _ = self.lazy_regex_ready.set(());
+      return Ok(());
     }
 
     let workers = crate::exec::available_parallelism().min(lazy_count);
     if workers <= 1 {
-      return warm_engine_refs_lazy_regex(&lazy_engines);
+      warm_engine_refs_lazy_regex(&lazy_engines)?;
+      _ = self.lazy_regex_ready.set(());
+      return Ok(());
     }
 
     let chunk_size = lazy_count.div_ceil(workers);
@@ -1469,7 +1478,9 @@ impl TextSearch {
         })??;
       }
       Ok(())
-    })
+    })?;
+    _ = self.lazy_regex_ready.set(());
+    Ok(())
   }
 
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
@@ -1482,7 +1493,11 @@ impl TextSearch {
   }
 
   pub fn find_iter(&self, haystack: &str) -> Result<Vec<Match>> {
-    let mut matches = find_iter_engines(&self.engines, haystack)?;
+    let ready = self.lazy_regex_ready.get().is_some();
+    let mut matches = find_iter_engines(&self.engines, haystack, ready)?;
+    if !ready && !self.engines.iter().any(engine_has_uninitialized_lazy_regex) {
+      _ = self.lazy_regex_ready.set(());
+    }
     finalize_find_matches(&mut matches, self.overlap_strategy);
     Ok(matches)
   }
@@ -1865,6 +1880,14 @@ fn engine_has_uninitialized_lazy_regex(engine: &EngineSlot) -> bool {
       ..
     }) if cell.get().is_none()
   )
+}
+
+fn ready_lazy_regex_state(engines: &[EngineSlot]) -> OnceLock<()> {
+  let ready = OnceLock::new();
+  if !engines.iter().any(engine_has_uninitialized_lazy_regex) {
+    _ = ready.set(());
+  }
+  ready
 }
 
 pub fn classify_patterns(
@@ -3246,19 +3269,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
       )
     }
     EngineSlot::SplitLiteral(slot) => split_literal_find_iter(slot, haystack),
-    EngineSlot::Regex(slot) => {
-      let packed = regex_slot_find_iter_packed_bytes(slot, haystack)?;
-      extend_triple_matches(
-        SearchEngine::Regex,
-        haystack,
-        &packed,
-        &Remap::Mapped {
-          index_map: &slot.index_map,
-          name_map: &slot.name_map,
-          identity: false,
-        },
-      )
-    }
+    EngineSlot::Regex(slot) => regex_slot_find_iter(slot, haystack),
     EngineSlot::Fuzzy(slot) => extend_fuzzy_matches(
       haystack,
       &slot
@@ -3297,12 +3308,16 @@ fn engine_find_iter_with_stats(
 fn find_iter_engines(
   engines: &[EngineSlot],
   haystack: &str,
+  lazy_regex_ready: bool,
 ) -> Result<Vec<Match>> {
   if should_parallel_find(engines, haystack) {
     return find_iter_engines_parallel(engines, haystack);
   }
+  if lazy_regex_ready {
+    return find_iter_engines_sequential(engines, haystack);
+  }
 
-  find_iter_engines_sequential(engines, haystack)
+  find_iter_engines_cold_lazy_aware(engines, haystack)
 }
 
 fn find_iter_engines_with_stats(
@@ -3325,6 +3340,129 @@ fn find_iter_engines_sequential(
     matches.extend(engine_find_iter(engine, haystack)?);
   }
   Ok(matches)
+}
+
+fn find_iter_engines_cold_lazy_aware(
+  engines: &[EngineSlot],
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let mut matches = Vec::new();
+  let mut by_engine = None;
+  let mut candidates = Vec::new();
+
+  for (index, engine) in engines.iter().enumerate() {
+    if let EngineSlot::Regex(slot) = engine
+      && engine_has_uninitialized_lazy_regex(engine)
+    {
+      match regex_prefilter_matches(slot, haystack) {
+        Ok(true) => {
+          by_engine.get_or_insert_with(|| {
+            std::iter::repeat_with(|| None)
+              .take(engines.len())
+              .collect::<Vec<_>>()
+          });
+          candidates.push((index, slot));
+        }
+        Ok(false) => {
+          if let Some(results) = &mut by_engine
+            && let Some(result) = results.get_mut(index)
+          {
+            *result = Some(Ok(Vec::new()));
+          }
+        }
+        Err(error) => {
+          let Some(results) = &mut by_engine else {
+            return Err(error);
+          };
+          if let Some(result) = results.get_mut(index) {
+            *result = Some(Err(error));
+          }
+        }
+      }
+      continue;
+    }
+
+    let result = engine_find_iter(engine, haystack);
+    let Some(results) = &mut by_engine else {
+      matches.extend(result?);
+      continue;
+    };
+    if let Some(engine_result) = results.get_mut(index) {
+      *engine_result = Some(result);
+    }
+  }
+
+  let Some(mut by_engine) = by_engine else {
+    return Ok(matches);
+  };
+  let workers = parallel_find_workers(candidates.len());
+  if candidates.len() < PARALLEL_LAZY_REGEX_MIN_SLOTS || workers <= 1 {
+    for (index, slot) in candidates {
+      if let Some(result) = by_engine.get_mut(index) {
+        *result = Some(regex_slot_find_iter_after_prefilter(slot, haystack));
+      }
+    }
+  } else {
+    initialize_cold_lazy_regex_candidates(&candidates, &mut by_engine)?;
+    for (index, slot) in candidates {
+      if let Some(result) = by_engine.get_mut(index)
+        && result.is_none()
+      {
+        *result = Some(regex_slot_find_iter_after_prefilter(slot, haystack));
+      }
+    }
+  }
+
+  for result in by_engine.into_iter().flatten() {
+    matches.extend(result?);
+  }
+  Ok(matches)
+}
+
+fn initialize_cold_lazy_regex_candidates(
+  candidates: &[(usize, &RegexSlot)],
+  by_engine: &mut [Option<Result<Vec<Match>>>],
+) -> Result<()> {
+  let weights = candidates
+    .iter()
+    .map(|(_, slot)| slot.work_weight.max(1))
+    .collect::<Vec<_>>();
+  let assignments = weighted_assignments_for_weights(
+    &weights,
+    parallel_find_workers(candidates.len()),
+  );
+  crate::exec::scope(|scope| {
+    let mut handles = Vec::with_capacity(assignments.len());
+    for assignment in &assignments {
+      handles.push(scope.spawn(move || {
+        assignment
+          .iter()
+          .map(|candidate_index| {
+            let Some((engine_index, slot)) = candidates.get(*candidate_index)
+            else {
+              return Err(Error::PatternIndexNotAddressable {
+                pattern: u32::MAX,
+              });
+            };
+            Ok((*engine_index, regex_slot_engine(slot).map(|_| ())))
+          })
+          .collect::<Result<Vec<_>>>()
+      }));
+    }
+    for handle in handles {
+      let completed = handle.join().map_err(|_| {
+        Error::BuildRegex(String::from("Parallel search panicked"))
+      })??;
+      for (index, result) in completed {
+        if let Err(error) = result
+          && let Some(slot) = by_engine.get_mut(index)
+        {
+          *slot = Some(Err(error));
+        }
+      }
+    }
+    Ok(())
+  })
 }
 
 fn find_iter_engines_sequential_with_stats(
@@ -3367,7 +3505,7 @@ fn find_iter_engines_parallel(
               pattern: u32::MAX,
             });
           };
-          completed.push((*index, engine_find_iter(engine, haystack)?));
+          completed.push((*index, engine_find_iter(engine, haystack)));
         }
         Ok(completed)
       }));
@@ -3386,7 +3524,10 @@ fn find_iter_engines_parallel(
         }
       }
     }
-    let matches = by_engine.into_iter().flatten().flatten().collect();
+    let mut matches = Vec::new();
+    for result in by_engine.into_iter().flatten() {
+      matches.extend(result?);
+    }
     Ok(matches)
   })
 }
@@ -3414,7 +3555,7 @@ fn find_iter_engines_parallel_with_stats(
           };
           completed.push((
             *index,
-            engine_find_iter_with_stats(engine, haystack, *index)?,
+            engine_find_iter_with_stats(engine, haystack, *index),
           ));
         }
         Ok(completed)
@@ -3437,6 +3578,7 @@ fn find_iter_engines_parallel_with_stats(
     let mut matches = Vec::new();
     let mut stats = Vec::new();
     for result in by_engine.into_iter().flatten() {
+      let result = result?;
       matches.extend(result.matches);
       stats.extend(result.stats);
     }
@@ -3495,7 +3637,11 @@ fn engine_work_weight(engine: &EngineSlot) -> u64 {
 
 #[cfg(test)]
 mod scheduler_tests {
-  use super::weighted_assignments_for_weights;
+  use super::{
+    PatternEntry, RegexPattern, Result, TextSearch, TextSearchOptions,
+    engine_has_uninitialized_lazy_regex, find_iter_engines_sequential,
+    weighted_assignments_for_weights,
+  };
 
   #[test]
   fn weighted_scheduler_balances_adjacent_expensive_jobs() {
@@ -3516,6 +3662,57 @@ mod scheduler_tests {
 
     assert!(visits.iter().all(|visits| *visits == 1));
     assert_eq!(loads.iter().copied().max(), Some(101));
+  }
+
+  #[test]
+  fn cold_lazy_regexes_parallelize_small_search_once() -> Result<()> {
+    let patterns = (0..4)
+      .map(|index| {
+        let cue = format!("TOKEN{index}");
+        let mut pattern = RegexPattern::new(format!(r"{cue}-\d+"));
+        pattern.lazy = true;
+        pattern.prefilter_any.push(cue);
+        PatternEntry::Regex(pattern)
+      })
+      .collect::<Vec<_>>();
+    let search = TextSearch::new(patterns, TextSearchOptions::default())?;
+    let haystack = "TOKEN0-10 TOKEN1-11 TOKEN2-12 TOKEN3-13";
+
+    assert_eq!(search.find_iter(haystack)?.len(), 4);
+    assert!(
+      search
+        .engines
+        .iter()
+        .all(|engine| !engine_has_uninitialized_lazy_regex(engine))
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn cold_parallel_search_preserves_sequential_error_order() -> Result<()> {
+    let patterns = (0..8)
+      .map(|index| {
+        let source = match index {
+          1 => "(",
+          4 => "[",
+          _ => r"TOKEN\d+",
+        };
+        let mut pattern = RegexPattern::new(source);
+        pattern.lazy = true;
+        pattern.prefilter_any.push(String::from("TOKEN"));
+        PatternEntry::Regex(pattern)
+      })
+      .collect::<Vec<_>>();
+    let sequential =
+      TextSearch::new(patterns.clone(), TextSearchOptions::default())?;
+    let parallel = TextSearch::new(patterns, TextSearchOptions::default())?;
+    let haystack = "TOKEN42";
+    let sequential_result =
+      find_iter_engines_sequential(&sequential.engines, haystack);
+
+    assert!(sequential_result.is_err());
+    assert_eq!(parallel.find_iter(haystack), sequential_result);
+    Ok(())
   }
 }
 
@@ -3719,6 +3916,40 @@ fn regex_slot_is_match(slot: &RegexSlot, haystack: &str) -> Result<bool> {
   Ok(regex_slot_engine(slot)?.is_match(haystack))
 }
 
+fn regex_slot_find_iter(
+  slot: &RegexSlot,
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let packed = regex_slot_find_iter_packed_bytes(slot, haystack)?;
+  extend_regex_slot_matches(slot, haystack, &packed)
+}
+
+fn regex_slot_find_iter_after_prefilter(
+  slot: &RegexSlot,
+  haystack: &str,
+) -> Result<Vec<Match>> {
+  let packed =
+    regex_slot_find_iter_packed_bytes_after_prefilter(slot, haystack)?;
+  extend_regex_slot_matches(slot, haystack, &packed)
+}
+
+fn extend_regex_slot_matches(
+  slot: &RegexSlot,
+  haystack: &str,
+  packed: &[u32],
+) -> Result<Vec<Match>> {
+  extend_triple_matches(
+    SearchEngine::Regex,
+    haystack,
+    packed,
+    &Remap::Mapped {
+      index_map: &slot.index_map,
+      name_map: &slot.name_map,
+      identity: false,
+    },
+  )
+}
+
 fn regex_slot_find_iter_packed_bytes(
   slot: &RegexSlot,
   haystack: &str,
@@ -3726,6 +3957,14 @@ fn regex_slot_find_iter_packed_bytes(
   if !regex_prefilter_matches(slot, haystack)? {
     return Ok(Vec::new());
   }
+
+  regex_slot_find_iter_packed_bytes_after_prefilter(slot, haystack)
+}
+
+fn regex_slot_find_iter_packed_bytes_after_prefilter(
+  slot: &RegexSlot,
+  haystack: &str,
+) -> Result<Vec<u32>> {
   let engine = regex_slot_engine(slot)?;
   let Some(radius) = slot.prefilter_window_bytes else {
     return engine
