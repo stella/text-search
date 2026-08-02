@@ -1,0 +1,4 @@
+[[production]]
+package = "stella-text-search-core"
+lib = "stella_text_search_core"
+reason = "Downstream-facing library audited only for restricted visibility"
