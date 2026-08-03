@@ -1466,11 +1466,18 @@ impl TextSearch {
       return Ok(());
     }
 
-    let chunk_size = lazy_count.div_ceil(workers);
+    let weights = lazy_engines
+      .iter()
+      .map(|engine| engine_work_weight(engine))
+      .collect::<Vec<_>>();
+    let assignments = weighted_assignments_for_weights(&weights, workers);
     crate::exec::scope(|scope| {
-      let mut handles = Vec::with_capacity(workers);
-      for chunk in lazy_engines.chunks(chunk_size) {
-        handles.push(scope.spawn(move || warm_engine_refs_lazy_regex(chunk)));
+      let mut handles = Vec::with_capacity(assignments.len());
+      let engine_refs = lazy_engines.as_slice();
+      for assignment in &assignments {
+        handles.push(scope.spawn(move || {
+          warm_assigned_engine_refs_lazy_regex(engine_refs, assignment)
+        }));
       }
       for handle in handles {
         handle.join().map_err(|_| {
@@ -1867,6 +1874,19 @@ fn warm_engine_lazy_regex(engine: &EngineSlot) -> Result<()> {
 
 fn warm_engine_refs_lazy_regex(engines: &[&EngineSlot]) -> Result<()> {
   for engine in engines {
+    warm_engine_lazy_regex(engine)?;
+  }
+  Ok(())
+}
+
+fn warm_assigned_engine_refs_lazy_regex(
+  engines: &[&EngineSlot],
+  assignment: &[usize],
+) -> Result<()> {
+  for index in assignment {
+    let Some(engine) = engines.get(*index) else {
+      return Err(Error::PatternIndexNotAddressable { pattern: u32::MAX });
+    };
     warm_engine_lazy_regex(engine)?;
   }
   Ok(())
