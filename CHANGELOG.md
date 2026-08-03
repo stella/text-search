@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.10
+
+### Patch Changes
+
+- [#99](https://github.com/stella/text-search/pull/99) [`06e80b2`](https://github.com/stella/text-search/commit/06e80b27f470955e42c033d8afe0482d83053242) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Parallelize first-use searches across eligible lazy regex slots on small documents.
+
 ## 1.0.9
 
 ### Patch Changes
