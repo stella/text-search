@@ -177,10 +177,17 @@ const summarizeEngines = (engines) => {
     current.maxPatterns = Math.max(current.maxPatterns, patterns);
     summary.set(engine.type, current);
   }
-  return [...summary.values()].map((entry) => ({
-    ...entry,
-    minPatterns: entry.minPatterns === Number.POSITIVE_INFINITY ? 0 : entry.minPatterns,
-  }));
+  const entries = [];
+  for (const entry of summary.values()) {
+    entries.push({
+      type: entry.type,
+      slots: entry.slots,
+      patterns: entry.patterns,
+      minPatterns: entry.minPatterns === Number.POSITIVE_INFINITY ? 0 : entry.minPatterns,
+      maxPatterns: entry.maxPatterns,
+    });
+  }
+  return entries;
 };
 const engineDetails = (engines) =>
   engines.map((engine) => ({
