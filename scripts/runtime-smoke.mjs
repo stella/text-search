@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 
-import { TextSearch } from "../dist/index.mjs";
+const require = createRequire(import.meta.url);
+process.env.NAPI_RS_FORCE_WASI = "false";
+
+const { TextSearch } = await import("../dist/index.mjs");
+
+delete process.env.NAPI_RS_FORCE_WASI;
+
+const fuzzySearchModuleLoads = Object.keys(require.cache).filter((modulePath) =>
+  modulePath.includes("@stll/fuzzy-search"),
+);
+const nativeFuzzySearchBindingLoads = fuzzySearchModuleLoads.filter((modulePath) =>
+  modulePath.endsWith(".node"),
+);
+const wasiFuzzySearchModuleLoads = fuzzySearchModuleLoads.filter((modulePath) =>
+  modulePath.includes("wasi"),
+);
+
+assert.equal(nativeFuzzySearchBindingLoads.length, 1);
+assert.deepEqual(wasiFuzzySearchModuleLoads, []);
 
 const search = new TextSearch([
   { pattern: "s.r.o.", literal: true, name: "company-type" },

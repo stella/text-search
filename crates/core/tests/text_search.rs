@@ -6,7 +6,7 @@
 
 use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
-  EngineKind, Error, FuzzyDistance, FuzzyPattern, LiteralPattern,
+  EngineKind, Error, FuzzyDistance, FuzzyMetric, FuzzyPattern, LiteralPattern,
   OverlapStrategy, PatternEntry, PreparedArtifactPolicy,
   PreparedTextSearchArtifacts, RegexArtifactPolicy, RegexPattern, TextSearch,
   TextSearchOptions, classify_patterns, count_alternations,
@@ -15,6 +15,32 @@ use stella_text_search_core::{
 const SPLIT_LITERAL_FIXTURE_CHUNK_SIZE: usize = 100_000;
 const SPLIT_LITERAL_FIXTURE_SIZE: usize = SPLIT_LITERAL_FIXTURE_CHUNK_SIZE + 1;
 const SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN: u32 = 100_000;
+
+#[test]
+fn options_builder_preserves_defaults_and_overrides() {
+  assert_eq!(
+    TextSearchOptions::builder().build(),
+    TextSearchOptions::default()
+  );
+
+  let options = TextSearchOptions::builder()
+    .regex_chunk_size(128)
+    .regex_artifact_policy(RegexArtifactPolicy::Omit)
+    .fuzzy_metric(FuzzyMetric::DamerauLevenshtein)
+    .overlap_strategy(OverlapStrategy::All)
+    .build();
+
+  assert!(options.unicode_boundaries);
+  assert!(!options.whole_words);
+  assert_eq!(options.max_alternations, 50);
+  assert_eq!(options.regex_chunk_size, Some(128));
+  assert_eq!(options.regex_artifact_policy, RegexArtifactPolicy::Omit);
+  assert_eq!(options.fuzzy_metric, FuzzyMetric::DamerauLevenshtein);
+  assert_eq!(options.overlap_strategy, OverlapStrategy::All);
+  assert!(!options.normalize_diacritics);
+  assert!(!options.case_insensitive);
+  assert!(!options.all_literal);
+}
 
 #[test]
 fn routes_literal_regex_and_fuzzy_patterns() {

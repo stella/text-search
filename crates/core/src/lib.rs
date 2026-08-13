@@ -342,34 +342,32 @@ impl PreparedArtifactPolicy {
 }
 
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(bon::Builder, Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextSearchOptions {
+  #[builder(default = true)]
   pub unicode_boundaries: bool,
+  #[builder(default)]
   pub whole_words: bool,
+  #[builder(default = 50)]
   pub max_alternations: u32,
   pub regex_chunk_size: Option<usize>,
+  #[builder(default = RegexArtifactPolicy::Include)]
   pub regex_artifact_policy: RegexArtifactPolicy,
+  #[builder(default = FuzzyMetric::Levenshtein)]
   pub fuzzy_metric: FuzzyMetric,
+  #[builder(default)]
   pub normalize_diacritics: bool,
+  #[builder(default)]
   pub case_insensitive: bool,
+  #[builder(default = OverlapStrategy::Longest)]
   pub overlap_strategy: OverlapStrategy,
+  #[builder(default)]
   pub all_literal: bool,
 }
 
 impl Default for TextSearchOptions {
   fn default() -> Self {
-    Self {
-      unicode_boundaries: true,
-      whole_words: false,
-      max_alternations: 50,
-      regex_chunk_size: None,
-      regex_artifact_policy: RegexArtifactPolicy::Include,
-      fuzzy_metric: FuzzyMetric::Levenshtein,
-      normalize_diacritics: false,
-      case_insensitive: false,
-      overlap_strategy: OverlapStrategy::Longest,
-      all_literal: false,
-    }
+    Self::builder().build()
   }
 }
 
