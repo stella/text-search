@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
+import Module from "node:module";
 
-import { TextSearch } from "../dist/index.mjs";
+const wasiModuleLoads = [];
+const originalModuleLoad = Module._load;
+
+Module._load = (...args) => {
+  const [request] = args;
+  if (request.includes("wasi")) {
+    wasiModuleLoads.push(request);
+  }
+  return originalModuleLoad(...args);
+};
+process.env.NAPI_RS_FORCE_WASI = "false";
+
+const { TextSearch } = await import("../dist/index.mjs");
+
+Module._load = originalModuleLoad;
+delete process.env.NAPI_RS_FORCE_WASI;
+
+assert.deepEqual(wasiModuleLoads, []);
 
 const search = new TextSearch([
   { pattern: "s.r.o.", literal: true, name: "company-type" },
