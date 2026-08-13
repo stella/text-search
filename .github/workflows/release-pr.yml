@@ -3,6 +3,7 @@ name: Release PR
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: release-pr-${{ github.ref }}
