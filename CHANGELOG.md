@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.11
+
+### Patch Changes
+
+- [#106](https://github.com/stella/text-search/pull/106) [`cc3c8ae`](https://github.com/stella/text-search/commit/cc3c8ae1019890b80e3b22bd06faaa22109ae90c) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Refresh dependencies and expose a compile-time checked Rust options builder.
+
 ## 1.0.10
 
 ### Patch Changes
