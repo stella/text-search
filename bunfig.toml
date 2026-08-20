@@ -5,7 +5,7 @@
 # are excluded so they're installable immediately after release.
 minimumReleaseAge = 432_000
 minimumReleaseAgeExcludes = [
-  "bun-types", # quarantine-expires: 2026-08-25T14:11:33.785Z
+  "bun-types@1.4.0", # quarantine-expires: 2026-08-25T14:11:33.785Z
   "@stll/typescript-config",
   "@stll/oxlint-config",
   "@stll/aho-corasick",
