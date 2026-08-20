@@ -4022,28 +4022,22 @@ fn regex_slot_find_iter_packed_windowed(
     let local = engine
       .find_iter_packed_bytes(slice)
       .map_err(|error| Error::BuildRegex(error.to_string()))?;
-    let chunks = local.chunks_exact(MATCH_FIELDS);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = local.as_chunks::<MATCH_FIELDS>();
+    if !remainder.is_empty() {
       return Err(Error::InvalidPackedSearchResult {
         engine: SearchEngine::Regex,
         len: local.len(),
       });
     }
-    for chunk in chunks {
-      let [pattern, local_start, local_end] = chunk else {
-        return Err(Error::InvalidPackedSearchResult {
-          engine: SearchEngine::Regex,
-          len: local.len(),
-        });
-      };
-      let start = window.start.saturating_add(byte_index(*local_start));
-      let end = window.start.saturating_add(byte_index(*local_end));
+    for &[pattern, local_start, local_end] in chunks {
+      let start = window.start.saturating_add(byte_index(local_start));
+      let end = window.start.saturating_add(byte_index(local_end));
       if touches_internal_window_edge(*window, haystack.len(), start, end) {
         needs_full_context = true;
         continue;
       }
       triples.push([
-        *pattern,
+        pattern,
         match_offset(start, end)?,
         match_offset(end, start)?,
       ]);
@@ -4065,28 +4059,22 @@ fn regex_slot_find_iter_packed_windowed_full_context(
   let packed = engine
     .find_iter_packed_bytes(haystack)
     .map_err(|error| Error::BuildRegex(error.to_string()))?;
-  let chunks = packed.chunks_exact(MATCH_FIELDS);
-  if !chunks.remainder().is_empty() {
+  let (chunks, remainder) = packed.as_chunks::<MATCH_FIELDS>();
+  if !remainder.is_empty() {
     return Err(Error::InvalidPackedSearchResult {
       engine: SearchEngine::Regex,
       len: packed.len(),
     });
   }
   let mut triples = Vec::<[u32; MATCH_FIELDS]>::new();
-  for chunk in chunks {
-    let [pattern, start, end] = chunk else {
-      return Err(Error::InvalidPackedSearchResult {
-        engine: SearchEngine::Regex,
-        len: packed.len(),
-      });
-    };
-    let start = byte_index(*start);
-    let end = byte_index(*end);
+  for &[pattern, start, end] in chunks {
+    let start = byte_index(start);
+    let end = byte_index(end);
     if !match_is_inside_prefilter_window(start, end, windows) {
       continue;
     }
     triples.push([
-      *pattern,
+      pattern,
       match_offset(start, end)?,
       match_offset(end, start)?,
     ]);
@@ -4286,7 +4274,7 @@ const fn pattern_bounds_from_index_map(index_map: &[u32]) -> PatternBounds {
 }
 
 fn aho_pattern_count(engine: &aho_core::AhoCorasick) -> usize {
-  usize::try_from(engine.pattern_count()).map_or(usize::MAX, |count| count)
+  usize::try_from(engine.pattern_count()).unwrap_or(usize::MAX)
 }
 
 #[derive(Clone, Copy)]
@@ -4307,8 +4295,8 @@ fn extend_triple_matches(
   packed: &[u32],
   remap: &Remap<'_>,
 ) -> Result<Vec<Match>> {
-  let chunks = packed.chunks_exact(MATCH_FIELDS);
-  if !chunks.remainder().is_empty() {
+  let (chunks, remainder) = packed.as_chunks::<MATCH_FIELDS>();
+  if !remainder.is_empty() {
     return Err(Error::InvalidPackedSearchResult {
       engine,
       len: packed.len(),
@@ -4316,21 +4304,14 @@ fn extend_triple_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
-  for chunk in chunks {
-    let [local_pattern, start, end] = chunk else {
-      return Err(Error::InvalidPackedSearchResult {
-        engine,
-        len: packed.len(),
-      });
-    };
-    let (pattern, name) = remap_pattern(remap, *local_pattern)?;
+  for &[local_pattern, start, end] in chunks {
+    let (pattern, name) = remap_pattern(remap, local_pattern)?;
     // Engines return UTF-8 byte offsets directly, so no conversion is needed.
     matches.push(Match {
       pattern,
-      start: *start,
-      end: *end,
-      text: str_span(haystack, byte_index(*start), byte_index(*end))?
-        .to_owned(),
+      start,
+      end,
+      text: str_span(haystack, byte_index(start), byte_index(end))?.to_owned(),
       name,
       distance: None,
     });
@@ -4344,8 +4325,8 @@ fn extend_fuzzy_matches(
   index_map: &[u32],
   name_map: &[Option<String>],
 ) -> Result<Vec<Match>> {
-  let chunks = packed.chunks_exact(FUZZY_MATCH_FIELDS);
-  if !chunks.remainder().is_empty() {
+  let (chunks, remainder) = packed.as_chunks::<FUZZY_MATCH_FIELDS>();
+  if !remainder.is_empty() {
     return Err(Error::InvalidPackedSearchResult {
       engine: SearchEngine::Fuzzy,
       len: packed.len(),
@@ -4353,16 +4334,10 @@ fn extend_fuzzy_matches(
   }
 
   let mut matches = Vec::with_capacity(chunks.len());
-  for chunk in chunks {
-    let [local_pattern, start, end, distance] = chunk else {
-      return Err(Error::InvalidPackedSearchResult {
-        engine: SearchEngine::Fuzzy,
-        len: packed.len(),
-      });
-    };
-    let pattern_index = usize::try_from(*local_pattern).map_err(|_| {
+  for &[local_pattern, start, end, distance] in chunks {
+    let pattern_index = usize::try_from(local_pattern).map_err(|_| {
       Error::PatternIndexNotAddressable {
-        pattern: *local_pattern,
+        pattern: local_pattern,
       }
     })?;
     let Some(pattern) = index_map.get(pattern_index).copied() else {
@@ -4374,12 +4349,11 @@ fn extend_fuzzy_matches(
     // Engines return UTF-8 byte offsets directly, so no conversion is needed.
     matches.push(Match {
       pattern,
-      start: *start,
-      end: *end,
-      text: str_span(haystack, byte_index(*start), byte_index(*end))?
-        .to_owned(),
+      start,
+      end,
+      text: str_span(haystack, byte_index(start), byte_index(end))?.to_owned(),
       name: name_map.get(pattern_index).cloned().flatten(),
-      distance: Some(*distance),
+      distance: Some(distance),
     });
   }
   Ok(matches)
@@ -4467,22 +4441,16 @@ fn literal_prefilter_hit_ranges(
       let packed = engine
         .find_overlapping_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-      let chunks = packed.chunks_exact(MATCH_FIELDS);
-      if !chunks.remainder().is_empty() {
+      let (chunks, remainder) = packed.as_chunks::<MATCH_FIELDS>();
+      if !remainder.is_empty() {
         return Err(Error::InvalidPackedSearchResult {
           engine: SearchEngine::Literal,
           len: packed.len(),
         });
       }
       let mut ranges = Vec::with_capacity(chunks.len());
-      for chunk in chunks {
-        let [_pattern, start, end] = chunk else {
-          return Err(Error::InvalidPackedSearchResult {
-            engine: SearchEngine::Literal,
-            len: packed.len(),
-          });
-        };
-        ranges.push((byte_index(*start), byte_index(*end)));
+      for &[_pattern, start, end] in chunks {
+        ranges.push((byte_index(start), byte_index(end)));
       }
       Ok(ranges)
     }
