@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   version:
-    uses: stella/.github/.github/workflows/changeset-release-pr.yml@9a6f0b6dd423b9c368c63d9466b1aebbe6984ba3
+    uses: stella/.github/.github/workflows/changeset-release-pr.yml@48aacae31829ce15216a6b766b03a92fd2e84da3
     with:
       sync-cargo-inherited-lock: true
     secrets:
