@@ -11,14 +11,20 @@ const readJob = (name: string) => {
 
   const bodyStart = start + marker.length;
   const remainder = workflow.slice(bodyStart);
-  const nextJob = remainder.search(/^  [a-z][a-z0-9-]*:\n/m);
+  const nextJob = remainder.search(/^  [A-Za-z_][A-Za-z0-9_-]*:\n/m);
 
   return nextJob === -1 ? workflow.slice(start) : workflow.slice(start, bodyStart + nextJob);
 };
 
 test("builds packages without npm publishing credentials", () => {
+  const verify = readJob("verify");
   const pack = readJob("pack");
 
+  expect(verify).toContain("persist-credentials: false");
+  expect(pack).toContain("persist-credentials: false");
+  expect(pack).toContain(
+    'npm install --global --ignore-scripts "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"',
+  );
   expect(pack).toContain("permissions:\n      contents: read");
   expect(pack).not.toContain("contents: write");
   expect(pack).not.toContain("id-token: write");
