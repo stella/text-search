@@ -22,19 +22,26 @@ test("builds packages without npm publishing credentials", () => {
 
   expect(verify).toContain("persist-credentials: false");
   expect(pack).toContain("persist-credentials: false");
+  expect(verify).toContain('node-version: "22.21.1"');
+  expect(pack).toContain('node-version: "22.21.1"');
+  expect(verify).toContain("bun-version-file: package.json");
+  expect(pack).toContain("bun-version-file: package.json");
   expect(pack).toContain(
-    'npm install --global --ignore-scripts "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"',
+    'npm install --global --ignore-scripts "@cyclonedx/cdxgen@${CDXGEN_VERSION}"',
   );
   expect(pack).toContain("permissions:\n      contents: read");
   expect(pack).not.toContain("contents: write");
   expect(pack).not.toContain("id-token: write");
 });
 
-test("delegates synchronized publishing with the narrow release contract", () => {
+test("delegates synchronized publishing with the guarded release contract", () => {
   const finalize = readJob("finalize");
 
   expect(finalize).toContain(
-    "uses: stella/.github/.github/workflows/npm-version-finalize.yml@1ce0079bbdbf93a4c1917d2857496b89aedcec14",
+    "github.ref == 'refs/heads/main'\n      && (needs.preflight.outputs.already-released != 'true'",
+  );
+  expect(finalize).toContain(
+    "uses: stella/.github/.github/workflows/npm-version-finalize.yml@437d9d78c38114a15c368daed7d3d1b36fd6b8fc",
   );
   expect(finalize).toContain("permissions:\n      contents: write\n      id-token: write");
   expect(finalize).not.toContain("pull-requests: write");

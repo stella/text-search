@@ -1,9 +1,5 @@
 name: Release
 
-env:
-  NODE_VERSION: "22"
-  CDXGEN_VERSION: "12.1.5"
-
 on:
   push:
     branches: [main]
@@ -64,10 +60,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+          node-version: "22.21.1"
       - run: node scripts/version-sync.mjs check
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -92,15 +90,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+          node-version: "22.21.1"
       - run: bun install --frozen-lockfile
       - name: Install pinned SBOM generator
         # Lifecycle scripts are unnecessary for this fixed release metadata tool.
         # zizmor: ignore[adhoc-packages]
-        run: npm install --global --ignore-scripts "@cyclonedx/cdxgen@${{ env.CDXGEN_VERSION }}"
+        env:
+          CDXGEN_VERSION: "12.1.5"
+        run: npm install --global --ignore-scripts "@cyclonedx/cdxgen@${CDXGEN_VERSION}"
       - run: bun run build:js
 
       - name: Pack release tarballs
@@ -148,10 +150,11 @@ jobs:
     name: Finalize
     needs: [preflight, pack]
     if: >-
-      needs.preflight.outputs.already-released != 'true'
-      && (github.event_name == 'push'
-          || (inputs.publish_to_npm && github.ref == 'refs/heads/main'))
-    uses: stella/.github/.github/workflows/npm-version-finalize.yml@1ce0079bbdbf93a4c1917d2857496b89aedcec14
+      github.ref == 'refs/heads/main'
+      && (needs.preflight.outputs.already-released != 'true'
+          && (github.event_name == 'push'
+              || (inputs.publish_to_npm && github.ref == 'refs/heads/main')))
+    uses: stella/.github/.github/workflows/npm-version-finalize.yml@437d9d78c38114a15c368daed7d3d1b36fd6b8fc
     with:
       package-files: |
         package.json
