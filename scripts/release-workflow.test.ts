@@ -24,8 +24,8 @@ test("builds packages without npm publishing credentials", () => {
   expect(pack).toContain("persist-credentials: false");
   expect(verify).toContain('node-version: "22.21.1"');
   expect(pack).toContain('node-version: "22.21.1"');
-  expect(verify).toContain('bun-version: "1.4.0"');
-  expect(pack).toContain('bun-version: "1.4.0"');
+  expect(verify).toContain("bun-version-file: package.json");
+  expect(pack).toContain("bun-version-file: package.json");
   expect(pack).toContain(
     'npm install --global --ignore-scripts "@cyclonedx/cdxgen@${CDXGEN_VERSION}"',
   );
@@ -41,7 +41,7 @@ test("delegates synchronized publishing with the guarded release contract", () =
     "github.ref == 'refs/heads/main'\n      && (needs.preflight.outputs.already-released != 'true'",
   );
   expect(finalize).toContain(
-    "uses: stella/.github/.github/workflows/npm-version-finalize.yml@06d3be1f42585ac33635102120f917bb74f9ecab",
+    "uses: stella/.github/.github/workflows/npm-version-finalize.yml@437d9d78c38114a15c368daed7d3d1b36fd6b8fc",
   );
   expect(finalize).toContain("permissions:\n      contents: write\n      id-token: write");
   expect(finalize).not.toContain("pull-requests: write");
