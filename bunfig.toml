@@ -5,31 +5,30 @@
 # are excluded so they're installable immediately after release.
 minimumReleaseAge = 432_000
 minimumReleaseAgeExcludes = [
-  "bun-types@1.4.0", # quarantine-expires: 2026-08-25T14:11:33.785Z
-  "@stll/typescript-config",
-  "@stll/oxlint-config",
-  "@stll/aho-corasick",
-  "@stll/aho-corasick-darwin-arm64",
-  "@stll/aho-corasick-darwin-x64",
-  "@stll/aho-corasick-linux-arm64-gnu",
-  "@stll/aho-corasick-linux-x64-gnu",
-  "@stll/aho-corasick-win32-x64-msvc",
-  "@stll/aho-corasick-wasm",
-  "@stll/aho-corasick-wasm32-wasi",
-  "@stll/fuzzy-search",
-  "@stll/fuzzy-search-darwin-arm64",
-  "@stll/fuzzy-search-darwin-x64",
-  "@stll/fuzzy-search-linux-arm64-gnu",
-  "@stll/fuzzy-search-linux-x64-gnu",
-  "@stll/fuzzy-search-win32-x64-msvc",
-  "@stll/fuzzy-search-wasm",
-  "@stll/fuzzy-search-wasm32-wasi",
-  "@stll/regex-set",
-  "@stll/regex-set-darwin-arm64",
-  "@stll/regex-set-darwin-x64",
-  "@stll/regex-set-linux-arm64-gnu",
-  "@stll/regex-set-linux-x64-gnu",
-  "@stll/regex-set-win32-x64-msvc",
-  "@stll/regex-set-wasm",
-  "@stll/regex-set-wasm32-wasi",
+  "@stll/typescript-config", # quarantine-excluded-since: 2026-05-31T22:16:56.000Z
+  "@stll/oxlint-config", # quarantine-excluded-since: 2026-05-31T22:16:56.000Z
+  "@stll/aho-corasick", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/aho-corasick-darwin-arm64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/aho-corasick-darwin-x64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/aho-corasick-linux-arm64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/aho-corasick-linux-x64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/aho-corasick-win32-x64-msvc", # quarantine-excluded-since: 2026-06-11T12:33:18.000Z
+  "@stll/aho-corasick-wasm", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/aho-corasick-wasm32-wasi", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/fuzzy-search", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/fuzzy-search-darwin-arm64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/fuzzy-search-darwin-x64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/fuzzy-search-linux-arm64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/fuzzy-search-linux-x64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/fuzzy-search-win32-x64-msvc", # quarantine-excluded-since: 2026-06-11T12:33:18.000Z
+  "@stll/fuzzy-search-wasm", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/fuzzy-search-wasm32-wasi", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/regex-set", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/regex-set-darwin-arm64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/regex-set-darwin-x64", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/regex-set-linux-arm64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/regex-set-linux-x64-gnu", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
+  "@stll/regex-set-win32-x64-msvc", # quarantine-excluded-since: 2026-06-11T12:33:18.000Z
+  "@stll/regex-set-wasm", # quarantine-excluded-since: 2026-04-17T11:14:22.000Z
+  "@stll/regex-set-wasm32-wasi", # quarantine-excluded-since: 2026-05-15T09:10:36.000Z
 ]
