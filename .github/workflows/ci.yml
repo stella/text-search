@@ -420,7 +420,7 @@ jobs:
         if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.provenance-changed == 'true'
-      - uses: stella/.github/actions/provenance-check@48aacae31829ce15216a6b766b03a92fd2e84da3
+      - uses: stella/.github/actions/provenance-check@437d9d78c38114a15c368daed7d3d1b36fd6b8fc
         if: needs.check-changes.outputs.provenance-changed == 'true'
         with:
           provenance-version: v0.1.3
