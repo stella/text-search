@@ -14,8 +14,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: stella/.github/.github/workflows/provenance-update.yml@48aacae31829ce15216a6b766b03a92fd2e84da3
-    secrets: inherit
+    uses: stella/.github/.github/workflows/provenance-update.yml@636b7841096c8f0cc5a1572077b78768ef8fea42
+    secrets:
+      app_id: ${{ secrets.CHANGELOG_APP_ID }}
+      app_private_key: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}
     with:
       install-command: bun install --frozen-lockfile
       provenance-version: v0.1.3
