@@ -94,7 +94,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: stella/.github/.github/actions/changeset-policy@5628b97fb3c560c0d961baa60c272c598eddcab5
+      - uses: stella/.github/.github/actions/changeset-policy@2ac805220ed86dcaa154e332e0f3dbbc7b0e8024 # v1.7.1
         with:
           release-paths: |
             src/**
@@ -227,7 +227,7 @@ jobs:
         run: echo "No trusted code changes; Rust checks skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.check-changes.outputs.code-changed == 'true'
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
           components: clippy, rustfmt
@@ -266,7 +266,7 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
           toolchain: ${{ env.HAWK_RUST_TOOLCHAIN }}
@@ -420,7 +420,7 @@ jobs:
         if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.provenance-changed == 'true'
-      - uses: stella/.github/actions/provenance-check@48aacae31829ce15216a6b766b03a92fd2e84da3
+      - uses: stella/.github/actions/provenance-check@636b7841096c8f0cc5a1572077b78768ef8fea42
         if: needs.check-changes.outputs.provenance-changed == 'true'
         with:
           provenance-version: v0.1.3

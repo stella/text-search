@@ -40,12 +40,12 @@ test("delegates synchronized publishing with the guarded release contract", () =
   expect(finalize).toContain(
     "github.ref == 'refs/heads/main'\n      && (needs.preflight.outputs.already-released != 'true'",
   );
-  expect(finalize).toContain(
-    "uses: stella/.github/.github/workflows/npm-version-finalize.yml@437d9d78c38114a15c368daed7d3d1b36fd6b8fc",
+  expect(finalize).toMatch(
+    /uses: stella\/\.github\/\.github\/workflows\/npm-version-finalize\.yml@[0-9a-f]{40}\n/,
   );
   expect(finalize).toContain("permissions:\n      contents: write\n      id-token: write");
   expect(finalize).not.toContain("pull-requests: write");
   expect(finalize).not.toContain("secrets: inherit");
-  expect(finalize).toContain("CHANGELOG_APP_ID: ${{ secrets.CHANGELOG_APP_ID }}");
-  expect(finalize).toContain("CHANGELOG_APP_PRIVATE_KEY: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}");
+  expect(finalize).not.toContain("CHANGELOG_APP_ID");
+  expect(finalize).not.toContain("update-changelog");
 });
