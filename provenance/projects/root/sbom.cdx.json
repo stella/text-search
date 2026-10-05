@@ -95,8 +95,8 @@
       "licenses": [
         {
           "license": {
-            "id": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
+            "id": "Apache-2.0",
+            "url": "https://opensource.org/licenses/Apache-2.0"
           }
         }
       ],

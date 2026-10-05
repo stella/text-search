@@ -14,12 +14,13 @@
   "bugs": {
     "url": "https://github.com/stella/text-search/issues"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/stella/text-search"
   },
   "files": [
+    "NOTICE",
     "dist"
   ],
   "type": "module",
