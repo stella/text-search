@@ -111,6 +111,8 @@ jobs:
           set -euo pipefail
           mkdir -p release-artifacts
 
+          cp LICENSE NOTICE wasm/
+
           npm pack --json --ignore-scripts --pack-destination release-artifacts
           (
             cd wasm

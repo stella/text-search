@@ -20,6 +20,7 @@
     "url": "https://github.com/stella/text-search"
   },
   "files": [
+    "NOTICE",
     "dist"
   ],
   "type": "module",
