@@ -207,7 +207,10 @@ fn prepared_build_stats_report_internal_regex_slots() {
     .filter(|stat| stat.engine == EngineKind::Regex)
     .collect::<Vec<_>>();
 
-  assert_ne!(regex_stats, [] as [&stella_text_search_core::BuildStats; 0]);
+  assert_ne!(
+    regex_stats,
+    Vec::<&stella_text_search_core::BuildStats>::new()
+  );
   assert_eq!(
     regex_stats
       .iter()
@@ -533,7 +536,7 @@ fn prepared_regex_artifacts_roundtrip_bytes() {
     TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
   assert_ne!(
     artifacts.regex_sets,
-    [] as [stella_text_search_core::PreparedRegexArtifact; 0]
+    Vec::<stella_text_search_core::PreparedRegexArtifact>::new()
   );
 
   let bytes = artifacts.to_bytes().unwrap();
@@ -562,7 +565,7 @@ fn prepared_lazy_regex_artifacts_can_be_omitted() {
     TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
   assert_ne!(
     artifacts.regex_sets,
-    [] as [stella_text_search_core::PreparedRegexArtifact; 0]
+    Vec::<stella_text_search_core::PreparedRegexArtifact>::new()
   );
   assert!(
     artifacts
@@ -581,7 +584,7 @@ fn prepared_lazy_regex_artifacts_can_be_omitted() {
   );
   assert_eq!(
     prepared.find_iter("Invoice-1234").unwrap(),
-    [] as [stella_text_search_core::Match; 0]
+    Vec::<stella_text_search_core::Match>::new()
   );
 }
 
@@ -615,7 +618,7 @@ fn prepared_lazy_prefilter_regex_artifacts_can_be_omitted() {
   );
   assert_eq!(
     prepared.find_iter("Ticket-abcd").unwrap(),
-    [] as [stella_text_search_core::Match; 0]
+    Vec::<stella_text_search_core::Match>::new()
   );
 }
 
@@ -634,7 +637,7 @@ fn prepared_lazy_regex_artifacts_can_be_omitted_by_default() {
     TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
   assert_ne!(
     artifacts.regex_sets,
-    [] as [stella_text_search_core::PreparedRegexArtifact; 0]
+    Vec::<stella_text_search_core::PreparedRegexArtifact>::new()
   );
   assert!(
     artifacts
@@ -711,7 +714,7 @@ fn prepared_eager_regex_artifacts_can_be_omitted() {
     TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
   assert_ne!(
     artifacts.regex_sets,
-    [] as [stella_text_search_core::PreparedRegexArtifact; 0]
+    Vec::<stella_text_search_core::PreparedRegexArtifact>::new()
   );
   assert!(
     artifacts
@@ -744,7 +747,7 @@ fn prepared_eager_regex_artifacts_can_be_omitted_by_default() {
     TextSearch::prepare_artifacts(patterns.clone(), options).unwrap();
   assert_ne!(
     artifacts.regex_sets,
-    [] as [stella_text_search_core::PreparedRegexArtifact; 0]
+    Vec::<stella_text_search_core::PreparedRegexArtifact>::new()
   );
   assert!(
     artifacts
@@ -1675,7 +1678,7 @@ fn lazy_regex_prefilter_window_verifies_internal_edge_matches() {
 
   assert_eq!(
     search.find_iter("xfoo").unwrap(),
-    [] as [stella_text_search_core::Match; 0]
+    Vec::<stella_text_search_core::Match>::new()
   );
   assert!(!search.is_match("xfoo").unwrap());
 }
