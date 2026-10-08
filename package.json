@@ -69,16 +69,16 @@
     "@stll/fuzzy-search-wasm": "^1.1.4",
     "@stll/oxlint-config": "0.7.0",
     "@stll/regex-set-wasm": "^1.0.5",
-    "@stll/typescript-config": "^0.6.0",
-    "@types/node": "26.6.2",
+    "@stll/typescript-config": "^0.7.0",
+    "@types/node": "26.6.4",
     "bun-types": "1.4.2",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.85.0",
-    "oxlint-tsgolint": "7.0.2002",
+    "oxfmt": "0.71.0",
+    "oxlint": "1.86.0",
+    "oxlint-tsgolint": "7.0.2003",
     "tsdown": "0.23.0",
     "typescript": "^7.0.2",
     "unrun": "^0.3.1",
-    "vite": "8.3.0"
+    "vite": "8.3.2"
   },
   "engines": {
     "node": ">= 18"
