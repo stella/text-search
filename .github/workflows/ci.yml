@@ -180,8 +180,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
+        if: needs.check-changes.outputs.code-changed == 'true'
+      - run: bun run check:toolchain
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run lint
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -204,6 +208,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -271,6 +277,8 @@ jobs:
         with:
           toolchain: ${{ env.HAWK_RUST_TOOLCHAIN }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.code-changed == 'true'
       - name: Install Hawk
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -335,6 +343,8 @@ jobs:
         with:
           node-version: "22"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -369,6 +379,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.check-changes.outputs.code-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
@@ -417,6 +429,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.check-changes.outputs.provenance-changed == 'true'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
         if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.provenance-changed == 'true'
