@@ -236,7 +236,8 @@ oxlint + oxfmt. Suppress a rule only with the rule name and a reason:
 
 - `bun install`
 - `bun run lint`
-- `bun run typecheck`
+- `bun run typecheck` (`bun check --no-pretty --all --project=tsconfig.json`)
+- `bun run check:typecheck-parity`
 - `bun test`
 - `bun run test:runtime:bun`
 - `bun run test:runtime:node`
@@ -248,3 +249,7 @@ oxlint + oxfmt. Suppress a rule only with the rule name and a reason:
 - Keep routing decisions explicit: literal, regex, fuzzy, and fallback engines should be testable without relying on incidental implementation details.
 - Preserve match ordering, offsets, and replace-safe spans across engines.
 - Keep dependency versions aligned with the underlying `@stll/aho-corasick`, `@stll/regex-set`, and `@stll/fuzzy-search` packages.
+
+### TypeScript Tooling
+
+Use `bun run typecheck` for type checking and `bun run check:typecheck-parity` to verify diagnostic coverage against TypeScript. Editors keep the TypeScript language service because Bun has no language server. Keep `typescript` for editor support and declaration generation through tsdown.
