@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.12
+
+### Patch Changes
+
+- [#141](https://github.com/stella/text-search/pull/141) [`d5dcb96`](https://github.com/stella/text-search/commit/d5dcb964bc02e5b10ca1e3a25651e0981c491689) Thanks [@jan-kubica](https://github.com/jan-kubica)! - License the packages under Apache-2.0 and update the published license metadata.
+
 ## 1.0.11
 
 ### Patch Changes
