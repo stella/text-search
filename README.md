@@ -167,3 +167,10 @@ cargo test --locked
 ## License
 
 [Apache-2.0](./LICENSE)
+
+## Development
+
+Run `bun run typecheck` to check types with `bun check --no-pretty --all --project=tsconfig.json`.
+Run `bun run check:typecheck-parity` to compare repository diagnostics and seeded diagnostic classes with TypeScript; CI runs both checks.
+Editors continue to use the TypeScript language service because Bun has no language server.
+The `typescript` dependency also supports declaration generation through tsdown.
