@@ -130,6 +130,12 @@ jobs:
 
   workflow-lint:
     name: Workflow lint
+    if: >-
+      always()
+      && !cancelled()
+      && (github.event_name != 'pull_request'
+          || needs.trust-check.outputs.trusted == 'true')
+    needs: [trust-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read

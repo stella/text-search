@@ -22,10 +22,11 @@ test("builds packages without npm publishing credentials", () => {
 
   expect(verify).toContain("persist-credentials: false");
   expect(pack).toContain("persist-credentials: false");
-  expect(verify).toContain('node-version: "22.21.1"');
-  expect(pack).toContain('node-version: "22.21.1"');
+  expect(verify).toContain("node-version-file: .node-version");
+  expect(pack).toContain("node-version-file: .node-version");
   expect(verify).toContain("bun-version-file: package.json");
   expect(pack).toContain("bun-version-file: package.json");
+  expect(readFileSync(new URL("../.node-version", import.meta.url), "utf8").trim()).toBe("26.10.0");
   expect(pack).toContain(
     'npm install --global --ignore-scripts "@cyclonedx/cdxgen@${CDXGEN_VERSION}"',
   );
