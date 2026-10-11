@@ -27,6 +27,10 @@ jobs:
         with:
           filters: |
             code:
+              - '.node-version'
+              - '**/rust-toolchain'
+              - '**/rust-toolchain.toml'
+              - 'stll-toolchain.json'
               - '.github/workflows/**'
               - 'VERSION'
               - 'Cargo.toml'
@@ -45,6 +49,10 @@ jobs:
               - 'provenance/**'
               - 'wasm/**'
             provenance:
+              - '.node-version'
+              - '**/rust-toolchain'
+              - '**/rust-toolchain.toml'
+              - 'stll-toolchain.json'
               - '.github/workflows/**'
               - 'VERSION'
               - 'bunfig.toml'
@@ -94,7 +102,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: stella/.github/.github/actions/changeset-policy@2ac805220ed86dcaa154e332e0f3dbbc7b0e8024 # v1.7.1
+      - uses: stella/.github/.github/actions/changeset-policy@5764ab66e4df84cfd2e642c7d7e4678261e668f8 # v1.7.1
         with:
           release-paths: |
             src/**
@@ -145,7 +153,7 @@ jobs:
         run: '"${RUNNER_TEMP}/actionlint" -color'
 
   version-sync:
-    name: Version sync
+    name: Release Node selector and version sync
     if: >-
       always()
       && !cancelled()
@@ -159,7 +167,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - run: node scripts/version-sync.mjs check
 
   lint:
@@ -169,30 +177,21 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, workflow-lint, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Skip when lint is not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; lint skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run check:toolchain
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run typecheck
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run check:typecheck-parity
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run lint
-        if: needs.check-changes.outputs.code-changed == 'true'
 
   test:
     name: Test
@@ -201,24 +200,18 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Skip when tests are not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; tests skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun test
-        if: needs.check-changes.outputs.code-changed == 'true'
 
   rust:
     name: Rust
@@ -227,31 +220,39 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      RUSTUP_TOOLCHAIN: 1.99.0
+      STELLA_SOURCE_LINT_REV: a1bd81740ecb4b66999f56d1716e1190c4e7272f
     steps:
-      - name: Skip when Rust checks are not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; Rust checks skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        if: needs.check-changes.outputs.code-changed == 'true'
         with:
+          toolchain: 1.99.0
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
-        if: needs.check-changes.outputs.code-changed == 'true'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: source-lint-cache
+        with:
+          path: ${{ runner.temp }}/stella-source-lint/bin
+          key: stella-source-lint-${{ runner.os }}-${{ runner.arch }}-${{ env.STELLA_SOURCE_LINT_REV }}
+      - name: Install stable Rust source checker
+        if: steps.source-lint-cache.outputs.cache-hit != 'true'
+        run: >-
+          cargo install --git https://github.com/stella/tooling
+          --rev "$STELLA_SOURCE_LINT_REV" --locked
+          --root "$RUNNER_TEMP/stella-source-lint" stella_source_lint
+      - run: echo "$RUNNER_TEMP/stella-source-lint/bin" >> "$GITHUB_PATH"
+      - run: cargo stella-lint .
       - run: cargo fmt --all -- --check
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: cargo test --workspace --all-features
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: cargo check -p stella-text-search-core --target wasm32-unknown-unknown
-        if: needs.check-changes.outputs.code-changed == 'true'
 
   hawk:
     name: Hawk
@@ -260,6 +261,7 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
@@ -269,23 +271,16 @@ jobs:
       HAWK_VERSION: "0.1.12"
       HAWK_SHA256: f9cafbbc5777b2b00c362619b8b62af942d2900a121acae2e73210a8ebffd857
     steps:
-      - name: Skip when Hawk is not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; Hawk skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          toolchain: ${{ env.HAWK_RUST_TOOLCHAIN }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+          toolchain: 1.97.1 # Hawk exception: tooling#99, expires 2026-11-11
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.code-changed == 'true'
       - name: Install Hawk
-        if: needs.check-changes.outputs.code-changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -305,7 +300,6 @@ jobs:
             cargo-hawk-x86_64-unknown-linux-gnu/cargo-hawk-driver
           echo "$install_dir" >> "$GITHUB_PATH"
       - name: Check internal Rust visibility
-        if: needs.check-changes.outputs.code-changed == 'true'
         run: bun run rust:hawk
 
   runtime-compat:
@@ -315,6 +309,7 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, version-sync]
     runs-on: >-
       ${{
@@ -337,32 +332,22 @@ jobs:
           - os: macos-15
             runtime: node
     steps:
-      - name: Skip when runtime checks are not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; runtime checks skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          node-version: "22"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+          node-version-file: .node-version
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
-        if: needs.check-changes.outputs.code-changed == 'true'
       - name: Bun runtime smoke
         if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && matrix.runtime == 'bun'
+          matrix.runtime == 'bun'
         run: bun run test:runtime:bun
       - name: Node runtime smoke
         if: >-
-          needs.check-changes.outputs.code-changed == 'true'
-          && matrix.runtime == 'node'
+          matrix.runtime == 'node'
         run: bun run test:runtime:node
 
   pack:
@@ -372,26 +357,19 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.code-changed == 'true'
     needs: [check-changes, trust-check, version-sync]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Skip when packaging is not required
-        if: needs.check-changes.outputs.code-changed != 'true'
-        run: echo "No trusted code changes; pack skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.code-changed == 'true'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run build:js
-        if: needs.check-changes.outputs.code-changed == 'true'
       - name: npm consumer smoke
-        if: needs.check-changes.outputs.code-changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -412,7 +390,6 @@ jobs:
             if (!search.isMatch("contract")) process.exit(1);
           '
       - run: cd wasm && npm pack --json --ignore-scripts --dry-run
-        if: needs.check-changes.outputs.code-changed == 'true'
 
   provenance:
     name: Provenance
@@ -421,24 +398,18 @@ jobs:
       && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
+      && needs.check-changes.outputs.provenance-changed == 'true'
     needs: [check-changes, trust-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
     steps:
-      - name: Skip when provenance is not required
-        if: needs.check-changes.outputs.provenance-changed != 'true'
-        run: echo "No trusted provenance changes; provenance check skipped."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.check-changes.outputs.provenance-changed == 'true'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
-        if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
-        if: needs.check-changes.outputs.provenance-changed == 'true'
-      - uses: stella/.github/actions/provenance-check@636b7841096c8f0cc5a1572077b78768ef8fea42
-        if: needs.check-changes.outputs.provenance-changed == 'true'
+      - uses: stella/.github/actions/provenance-check@5764ab66e4df84cfd2e642c7d7e4678261e668f8
         with:
           provenance-version: v0.1.3
