@@ -1,0 +1,10 @@
+{
+  "rustExceptions": [
+    {
+      "pin": "1.97.1",
+      "reason": "cargo-hawk 0.1.12 requires Rust 1.97.1; applies only to Hawk checks.",
+      "tracking": "https://github.com/stella/tooling/issues/99",
+      "expires": "2026-11-11"
+    }
+  ]
+}
