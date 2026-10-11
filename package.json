@@ -69,7 +69,7 @@
     "@changesets/cli": "3.0.3",
     "@stll/aho-corasick-wasm": "^1.0.4",
     "@stll/fuzzy-search-wasm": "^1.1.4",
-    "@stll/oxlint-config": "0.10.0",
+    "@stll/oxlint-config": "1.0.0",
     "@stll/regex-set-wasm": "^1.0.5",
     "@stll/typescript-config": "^0.6.0",
     "@types/node": "26.6.2",
