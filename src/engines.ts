@@ -12,6 +12,11 @@ import type {
   PatternEntry as FuzzyPatternEntry,
 } from "@stll/fuzzy-search";
 import type { Options as RegexOptions, PatternEntry as RegexPatternEntry } from "@stll/regex-set";
+import type {
+  EntityIndexBuilderEngine,
+  EntityIndexEngine,
+  EntityIndexOptions,
+} from "./entity-index-contract";
 import type { Match } from "./types";
 
 type Engine = {
@@ -20,6 +25,8 @@ type Engine = {
 };
 
 type Engines = {
+  EntityIndexBuilder: new (options: EntityIndexOptions) => EntityIndexBuilderEngine;
+  EntityIndex: { fromBytes: (bytes: Uint8Array) => EntityIndexEngine };
   AhoCorasick: new (patterns: AhoPatternEntry[], options?: AhoOptions) => Engine;
   FuzzySearch: new (patterns: FuzzyPatternEntry[], options?: FuzzyOptions) => Engine;
   RegexSet: new (patterns: RegexPatternEntry[], options?: RegexOptions) => Engine;
