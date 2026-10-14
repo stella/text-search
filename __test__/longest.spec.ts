@@ -35,6 +35,8 @@ describe("literal longest selection", () => {
           wholeWords: true,
           unicodeBoundaries: false,
         });
+        expect(search.isMatch("a bc")).toBe(true);
+        expect(search.isMatch("xa bc")).toBe(false);
         expect(search.findIter("a bc").map(({ text }) => text)).toEqual(["a"]);
         expect(search.findIter("a b").map(({ text }) => text)).toEqual(["a b"]);
         expect(
