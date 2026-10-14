@@ -63,7 +63,11 @@ export class EntityIndexBuilder {
 
 /** Immutable candidate index; callers score and rank the returned survivors. */
 export class EntityIndex {
-  private constructor(private inner: EntityIndexEngine) {}
+  private inner: EntityIndexEngine;
+
+  private constructor(inner: EntityIndexEngine) {
+    this.inner = inner;
+  }
 
   /** @internal */
   static _fromEngine(inner: EntityIndexEngine): EntityIndex {
