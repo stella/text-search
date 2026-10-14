@@ -109,6 +109,11 @@ new TextSearch(patterns, {
 });
 ```
 
+With `overlapStrategy: "all"`, literal engines return overlapping occurrences,
+including across dictionary chunks. Fuzzy and regex engines keep their native
+non-overlapping behavior because they do not expose an overlapping API.
+`replaceAll` always selects non-overlapping spans.
+
 ## API
 
 | Method                           | Returns    | Description                   |
