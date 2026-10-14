@@ -667,7 +667,6 @@ function buildAcEngine(
 
   const { AhoCorasick } = getEngines();
   const ac = new AhoCorasick(literals, {
-    matchKind: "leftmost-longest",
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
     caseInsensitive: options.caseInsensitive,
@@ -713,7 +712,6 @@ function buildIdentityAcEngine(
   }
 
   const ac = new AhoCorasick(patterns, {
-    matchKind: "leftmost-longest",
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
     caseInsensitive: options.caseInsensitive,

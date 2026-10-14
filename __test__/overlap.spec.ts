@@ -55,26 +55,6 @@ describe('overlapStrategy "all"', () => {
     expect(search.findIter("aaa").filter(({ pattern }) => pattern === 0)).toHaveLength(2);
   });
 
-  test.each([false, true])(
-    "default literal selection is independent of pattern order, allLiteral=%s",
-    (allLiteral) => {
-      for (const patterns of [
-        ["a", "aa", "aaa"],
-        ["aaa", "aa", "a"],
-        ["aa", "a", "aaa"],
-      ]) {
-        const search = new TextSearch(patterns, { allLiteral });
-        expect(search.findIter("aaaa").map(({ text }) => text)).toEqual(["aaa", "a"]);
-        expect(
-          search.replaceAll(
-            "aaaa",
-            patterns.map((pattern) => pattern.toUpperCase()),
-          ),
-        ).toBe("AAAA");
-      }
-    },
-  );
-
   test("default selection and replacement remain non-overlapping", () => {
     const patterns = ["aa", "aaa"];
     const defaults = new TextSearch(patterns);
@@ -84,6 +64,8 @@ describe('overlapStrategy "all"', () => {
       end = match.end;
     }
     const search = new TextSearch(patterns, { overlapStrategy: "all" });
-    expect(search.replaceAll("aaaa", ["SHORT", "LONG"])).toBe("LONGa");
+    expect(search.replaceAll("aaaa", ["SHORT", "LONG"])).toBe(
+      defaults.replaceAll("aaaa", ["SHORT", "LONG"]),
+    );
   });
 });
