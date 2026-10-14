@@ -247,9 +247,10 @@ describe("auto-optimization", () => {
     expect(ts.findIter("ALPHA beta alphabet").map((match) => match.pattern)).toEqual([0, 1]);
   });
 
-  test("large all-literal whole-word sets split without changing global selection", () => {
+  test("large all-literal whole-word sets preserve overlaps across chunks", () => {
     const patterns = Array.from({ length: 120_001 }, (_, index) => `term-${index}`);
     patterns[0] = "alpha";
+    patterns[1] = "beta";
     patterns[40_000] = "alpha beta";
 
     const ts = new TextSearch(patterns, {
@@ -264,10 +265,22 @@ describe("auto-optimization", () => {
     expect(engines[0]!.type).toBe("split-ac");
     expect(ts.findIter("alpha beta")).toEqual([
       {
+        pattern: 0,
+        start: 0,
+        end: 5,
+        text: "alpha",
+      },
+      {
         pattern: 40_000,
         start: 0,
         end: 10,
         text: "alpha beta",
+      },
+      {
+        pattern: 1,
+        start: 6,
+        end: 10,
+        text: "beta",
       },
     ]);
   });

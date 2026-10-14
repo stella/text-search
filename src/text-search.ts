@@ -36,7 +36,7 @@ type RegexSlot = {
 
 type AcSlot = {
   type: "ac";
-  ac: Engine;
+  ac: OverlapEngine;
   indexMap: number[];
   nameMap: (string | undefined)[];
   identityMap?: true;
@@ -262,7 +262,10 @@ export class TextSearch {
       if (engine === undefined) {
         throw new Error("Zero-overhead path requires a single engine");
       }
-      return engineFindIter(engine, haystack);
+      return engineFindIter(engine, {
+        haystack,
+        overlapStrategy: this.overlapAll ? "all" : "longest",
+      });
     }
 
     // Single engine but needs name remapping
@@ -271,13 +274,19 @@ export class TextSearch {
       if (engine === undefined) {
         throw new Error("Expected single engine after length check");
       }
-      return remapMatches(engineFindIter(engine, haystack), engine);
+      return remapMatches(
+        engineFindIter(engine, { haystack, overlapStrategy: this.overlapAll ? "all" : "longest" }),
+        engine,
+      );
     }
 
     // Multi-engine: collect from all, remap in-place
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engineFindIter(engine, haystack);
+      const matches = engineFindIter(engine, {
+        haystack,
+        overlapStrategy: this.overlapAll ? "all" : "longest",
+      });
       // In-place remapping avoids .map() allocation
       for (const m of remapMatches(matches, engine)) {
         all.push(m);
@@ -297,7 +306,7 @@ export class TextSearch {
 
     for (const engine of this.engines) {
       // AC doesn't have whichMatch — use findIter
-      const matches = engineFindIter(engine, haystack);
+      const matches = engineFindIter(engine, { haystack });
       for (const m of matches) {
         const idx = getOriginalPatternIndex(engine, m.pattern);
         seen.add(idx);
@@ -322,7 +331,7 @@ export class TextSearch {
     // replacement, even if overlapStrategy is "all".
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engineFindIter(engine, haystack);
+      const matches = engineFindIter(engine, { haystack });
       for (const m of remapMatches(matches, engine)) {
         all.push(m);
       }
@@ -687,7 +696,7 @@ function buildIdentityAcEngine(
           wholeWords: options.wholeWords,
           unicodeBoundaries: options.unicodeBoundaries,
           caseInsensitive: options.caseInsensitive,
-        }) as OverlapEngine,
+        }),
         patternOffset: i,
       });
     }
@@ -793,12 +802,22 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
 /**
  * Dispatch findIter to the correct engine.
  */
-function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
+type EngineFindOptions = {
+  haystack: string;
+  overlapStrategy?: "longest" | "all";
+};
+
+function engineFindIter(
+  engine: EngineSlot,
+  { haystack, overlapStrategy = "longest" }: EngineFindOptions,
+): Match[] {
   switch (engine.type) {
     case "ac":
-      return engine.ac.findIter(haystack);
+      return overlapStrategy === "all"
+        ? engine.ac.findOverlappingIter(haystack).sort((a, b) => a.start - b.start)
+        : engine.ac.findIter(haystack);
     case "split-ac":
-      return splitAcFindIter(engine, haystack);
+      return splitAcFindIter(engine, { haystack, overlapStrategy });
     case "fuzzy":
       return engine.fs.findIter(haystack);
     case "regex":
@@ -810,7 +829,10 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
   throw new Error("Unsupported engine type");
 }
 
-function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
+function splitAcFindIter(
+  engine: SplitAcSlot,
+  { haystack, overlapStrategy }: EngineFindOptions,
+): Match[] {
   const all: Match[] = [];
   for (const { ac, patternOffset } of engine.acs) {
     const matches = ac.findOverlappingIter(haystack);
@@ -823,7 +845,9 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
       });
     }
   }
-  return selectLeftmostLongestMatches(all);
+  return overlapStrategy === "all"
+    ? all.sort((a, b) => a.start - b.start)
+    : selectLeftmostLongestMatches(all);
 }
 
 function selectLeftmostLongestMatches(matches: Match[]): Match[] {
