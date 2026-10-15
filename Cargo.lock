@@ -438,8 +438,8 @@ dependencies = [
 
 [[package]]
 name = "stella-fuzzy-search-core"
-version = "1.1.4"
-source = "git+https://github.com/stella/fuzzy-search?rev=d87334b6e5f0458409ee354fa721bf6d4ade6ddc#d87334b6e5f0458409ee354fa721bf6d4ade6ddc"
+version = "1.1.5"
+source = "git+https://github.com/stella/fuzzy-search?rev=059f8496380e07650db83444930733c6b2614991#059f8496380e07650db83444930733c6b2614991"
 dependencies = [
  "bon",
  "unicode-case-mapping",
