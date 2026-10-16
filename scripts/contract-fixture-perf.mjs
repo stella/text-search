@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
