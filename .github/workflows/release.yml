@@ -65,7 +65,7 @@ jobs:
           bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.21.1"
+          node-version-file: .node-version
       - run: node scripts/version-sync.mjs check
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -95,7 +95,7 @@ jobs:
           bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.21.1"
+          node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - name: Install pinned SBOM generator
         # Lifecycle scripts are unnecessary for this fixed release metadata tool.

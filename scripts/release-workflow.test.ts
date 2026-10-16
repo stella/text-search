@@ -22,8 +22,8 @@ test("builds packages without npm publishing credentials", () => {
 
   expect(verify).toContain("persist-credentials: false");
   expect(pack).toContain("persist-credentials: false");
-  expect(verify).toContain('node-version: "22.21.1"');
-  expect(pack).toContain('node-version: "22.21.1"');
+  expect(verify).toContain("node-version-file: .node-version");
+  expect(pack).toContain("node-version-file: .node-version");
   expect(verify).toContain("bun-version-file: package.json");
   expect(pack).toContain("bun-version-file: package.json");
   expect(pack).toContain(

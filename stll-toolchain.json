@@ -3,13 +3,16 @@
     "install": "bun install --frozen-lockfile",
     "rust": {
       "toolchain": "1.99.0",
-      "components": [
-        "clippy",
-        "rustfmt"
-      ],
-      "targets": [
-        "wasm32-unknown-unknown"
-      ]
+      "components": ["clippy", "rustfmt"],
+      "targets": ["wasm32-unknown-unknown"]
     }
-  }
+  },
+  "rustExceptions": [
+    {
+      "pin": "1.97.1",
+      "reason": "cargo-hawk 0.1.12 prebuilt artifacts use compiler-private APIs and require Rust 1.97.1, as declared by the release's rust-toolchain.toml.",
+      "tracking": "https://github.com/stella/tooling/issues/99",
+      "expires": "2026-11-11"
+    }
+  ]
 }
