@@ -18,16 +18,31 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      code-changed: ${{ steps.filter.outputs.code }}
+      code-changed: ${{ steps.filter.outputs.code == 'true' || steps.toolchain.outputs.changed == 'true' }}
+      toolchain-changed: ${{ steps.toolchain.outputs.changed }}
       provenance-changed: ${{ steps.filter.outputs.provenance }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Detect shared toolchain changes
+        id: toolchain
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'unavailable-toolchain-base' }}
+        run: |
+          result=$(bunx --no-install stll-toolchain-changed --since "$BASE_REF")
+          printf '%s\n' "$result"
+          printf 'changed=%s\n' "$(printf '%s' "$result" | jq -r '.changed')" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: filter
         with:
           filters: |
             code:
-              - '.github/workflows/**'
               - 'VERSION'
               - 'Cargo.toml'
               - 'Cargo.lock'
@@ -36,11 +51,6 @@ jobs:
               - 'crates/**'
               - 'src/**'
               - 'scripts/**'
-              - 'bunfig.toml'
-              - 'package.json'
-              - 'bun.lock'
-              - 'tsconfig.json'
-              - 'tsdown.config.ts'
               - '.provenance.yml'
               - 'provenance/**'
               - 'wasm/**'
@@ -159,7 +169,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - run: node scripts/version-sync.mjs check
 
   lint:
@@ -190,7 +200,7 @@ jobs:
       - run: bun run typecheck
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run check:typecheck-parity
-        if: needs.check-changes.outputs.code-changed == 'true'
+        if: needs.check-changes.outputs.toolchain-changed == 'true'
       - run: bun run lint
         if: needs.check-changes.outputs.code-changed == 'true'
 
@@ -345,7 +355,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
