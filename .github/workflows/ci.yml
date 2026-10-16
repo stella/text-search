@@ -90,10 +90,12 @@ jobs:
           HEAD_REPO: >-
             ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.repository }}
+          HAS_RUN_CI_LABEL: >-
+            ${{ contains(github.event.pull_request.labels.*.name, 'run-ci') }}
         run: |
           if [[ "$HEAD_REPO" == "$BASE_REPO" ]]; then
             echo "trusted=true" >> "$GITHUB_OUTPUT"
-          elif [[ '${{ contains(github.event.pull_request.labels.*.name, 'run-ci') }}' == 'true' ]]; then
+          elif [[ "$HAS_RUN_CI_LABEL" == 'true' ]]; then
             echo "trusted=true" >> "$GITHUB_OUTPUT"
           else
             echo "trusted=false" >> "$GITHUB_OUTPUT"
