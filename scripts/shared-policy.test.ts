@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 const root = new URL("../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
@@ -16,6 +17,61 @@ test("repository workflows satisfy the installed shared toolchain guard", () => 
   expect(workflow).toContain('toolchain: "1.97.1"');
   const manifest = JSON.parse(read("package.json"));
   expect(manifest.scripts["rust:hawk"]).toContain("cargo +1.97.1 hawk");
+});
+
+test("change detection follows trust and the CI dependency graph stays acyclic", () => {
+  const workflow = Bun.YAML.parse(read(".github/workflows/ci.yml"));
+  const jobs = workflow.jobs;
+  const detector = jobs["check-changes"];
+  expect(detector.needs).toEqual(["trust-check"]);
+  expect(jobs["trust-check"].needs).toBeUndefined();
+  const condition = detector.if.trim().replace(/\s+/gu, " ");
+  expect(condition).toBe(
+    "always() && !cancelled() && (github.event_name != 'pull_request' || needs.trust-check.outputs.trusted == 'true')",
+  );
+  for (const scenario of [
+    { event: "pull_request", trust: "true", cancelled: false, expected: true },
+    { event: "pull_request", trust: "false", cancelled: false, expected: false },
+    { event: "pull_request", trust: "", cancelled: false, expected: false },
+    { event: "push", trust: "", cancelled: false, expected: true },
+    { event: "workflow_dispatch", trust: "", cancelled: false, expected: true },
+    { event: "pull_request", trust: "true", cancelled: true, expected: false },
+  ]) {
+    const result = runInNewContext(
+      condition.replaceAll("needs.trust-check.", 'needs["trust-check"].'),
+      {
+        always: () => true,
+        cancelled: () => scenario.cancelled,
+        github: { event_name: scenario.event },
+        needs: { "trust-check": { outputs: { trusted: scenario.trust } } },
+      },
+    );
+    expect(result).toBe(scenario.expected);
+  }
+  const dependencies = (job: unknown) => {
+    if (typeof job !== "object" || job === null || !("needs" in job)) return [];
+    const needs = job.needs;
+    if (typeof needs === "string") return [needs];
+    if (Array.isArray(needs) && needs.every((value: unknown) => typeof value === "string"))
+      return needs;
+    throw new Error("invalid CI dependency declaration");
+  };
+  const graph = new Map(
+    Object.entries(jobs).map(([name, job]) => [name, dependencies(job)] as const),
+  );
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (name: string): void => {
+    expect(visiting.has(name)).toBe(false);
+    if (visited.has(name)) return;
+    const needs = graph.get(name);
+    if (needs === undefined) throw new Error("unknown CI job: " + name);
+    visiting.add(name);
+    for (const dependency of needs) visit(dependency);
+    visiting.delete(name);
+    visited.add(name);
+  };
+  for (const name of graph.keys()) visit(name);
 });
 
 test("first-party quarantine exemptions use exact supported annotations", () => {
