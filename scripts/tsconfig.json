@@ -1,5 +1,5 @@
 {
-  "extends": "@stll/typescript-config/node.json",
+  "extends": "@stll/typescript-config/bun.json",
   "include": [
     "**/*.js",
     "**/*.mjs",
