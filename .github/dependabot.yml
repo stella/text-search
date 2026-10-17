@@ -1,70 +1,159 @@
 version: 2
-
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "cron"
-      cronjob: "0 3 * * *"
-      timezone: "Europe/Prague"
-    cooldown:
-      default-days: 5
-    groups:
-      minor-and-patch:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    labels:
-      - "📦 dependencies"
-    commit-message:
-      prefix: "chore"
-    reviewers:
-      - "jan-kubica"
-
-  - package-ecosystem: "bun"
+  - package-ecosystem: bun
     directories:
-      - "/"
-      - "/wasm"
+      - /
+      - /wasm
     schedule:
-      interval: "cron"
-      cronjob: "0 3 * * *"
-      timezone: "Europe/Prague"
+      interval: weekly
+      day: saturday
+      time: "07:00"
+      timezone: Europe/Prague
     cooldown:
       default-days: 5
-    open-pull-requests-limit: 10
     groups:
-      minor-and-patch:
+      dependencies:
         patterns:
           - "*"
         update-types:
-          - "minor"
-          - "patch"
-      napi:
-        patterns:
-          - "@napi-rs/*"
-          - "napi*"
+          - minor
+          - patch
+    ignore:
+      - dependency-name: oxlint
         update-types:
-          - "major"
-      emnapi:
-        patterns:
-          - "@emnapi/*"
-          - "emnapi"
-          - "@napi-rs/wasm-runtime"
-          - "@tybys/wasm-util"
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: oxlint-tsgolint
         update-types:
-          - "major"
-      oxc:
-        patterns:
-          - "oxlint"
-          - "oxlint-tsgolint"
-          - "oxfmt"
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@oxlint/plugins"
         update-types:
-          - "major"
-    labels:
-      - "📦 dependencies"
-    commit-message:
-      prefix: "chore"
-    reviewers:
-      - "jan-kubica"
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@stll/oxlint-plugin"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: oxfmt
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: lefthook
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@typescript/native"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: typescript-compat
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: bun-types
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "07:00"
+      timezone: Europe/Prague
+    cooldown:
+      default-days: 5
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "07:00"
+      timezone: Europe/Prague
+    cooldown:
+      default-days: 5
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: actions/checkout
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: oven-sh/setup-bun
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/setup-node
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/setup-python
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: astral-sh/setup-uv
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/cache
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/cache/restore
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/cache/save
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/upload-artifact
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: actions/download-artifact
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: stella/.github/.github/workflows/package-consumer-compat.yml
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
