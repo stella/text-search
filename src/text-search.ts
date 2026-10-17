@@ -1,3 +1,4 @@
+import type { Options as AhoOptions } from "@stll/aho-corasick";
 import type { ClassifiedPattern } from "./classify";
 import { classifyPatterns } from "./classify";
 import { getEngines } from "./engines";
@@ -656,12 +657,7 @@ function buildAcEngine(
     nameMap.push(cp.name);
   }
 
-  const { AhoCorasick } = getEngines();
-  const ac = new AhoCorasick(literals, {
-    wholeWords: options.wholeWords,
-    unicodeBoundaries: options.unicodeBoundaries,
-    caseInsensitive: options.caseInsensitive,
-  });
+  const ac = createAcAutomaton(literals, options);
 
   return { type: "ac", ac, indexMap, nameMap, patternCount: literals.length };
 }
@@ -687,7 +683,7 @@ function buildIdentityAcEngine(
           wholeWords: options.wholeWords,
           unicodeBoundaries: options.unicodeBoundaries,
           caseInsensitive: options.caseInsensitive,
-        }) as OverlapEngine,
+        }),
         patternOffset: i,
       });
     }
@@ -702,11 +698,7 @@ function buildIdentityAcEngine(
     };
   }
 
-  const ac = new AhoCorasick(patterns, {
-    wholeWords: options.wholeWords,
-    unicodeBoundaries: options.unicodeBoundaries,
-    caseInsensitive: options.caseInsensitive,
-  });
+  const ac = createAcAutomaton(patterns, options);
 
   return {
     type: "ac",
@@ -715,6 +707,23 @@ function buildIdentityAcEngine(
     nameMap: [],
     identityMap: true,
     patternCount: patterns.length,
+  };
+}
+
+/** Select native longest matches, filtering ASCII word boundaries before selection. */
+function createAcAutomaton(patterns: string[], options: AhoOptions) {
+  const { AhoCorasick } = getEngines();
+  const ac = new AhoCorasick(patterns, { ...options, matchKind: "leftmost-longest" });
+  if (options.wholeWords !== true || options.unicodeBoundaries !== false) {
+    return ac;
+  }
+
+  // The JS ASCII boundary filter runs after native selection. Retrieve all
+  // occurrences so an invalid longer span cannot hide a valid shorter one.
+  return {
+    isMatch: (haystack: string) => ac.findOverlappingIter(haystack).length > 0,
+    findIter: (haystack: string) => selectLeftmostLongestMatches(ac.findOverlappingIter(haystack)),
+    findOverlappingIter: (haystack: string) => ac.findOverlappingIter(haystack),
   };
 }
 
