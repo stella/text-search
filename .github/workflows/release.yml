@@ -60,12 +60,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.21.1"
+          node-version-file: .node-version
       - run: node scripts/version-sync.mjs check
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -90,12 +90,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.21.1"
+          node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - name: Install pinned SBOM generator
         # Lifecycle scripts are unnecessary for this fixed release metadata tool.
@@ -156,7 +156,7 @@ jobs:
       && (needs.preflight.outputs.already-released != 'true'
           && (github.event_name == 'push'
               || (inputs.publish_to_npm && github.ref == 'refs/heads/main')))
-    uses: stella/.github/.github/workflows/npm-version-finalize.yml@5764ab66e4df84cfd2e642c7d7e4678261e668f8
+    uses: stella/.github/.github/workflows/npm-version-finalize.yml@8f19eb7220047e5b06f6e75f0b9f908bfd01f5f6
     with:
       package-files: |
         package.json

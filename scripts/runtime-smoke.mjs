@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
+import { readRuntimeSmokeMatches } from "./runtime-smoke-inputs.mjs";
+
 const require = createRequire(import.meta.url);
 process.env.NAPI_RS_FORCE_WASI = "false";
 
@@ -29,7 +31,9 @@ const search = new TextSearch([
 ]);
 
 const haystack = "Ing. Jan Novak, s.r.o., narozen 15.03.1990.";
-const matches = search.findIter(haystack);
+/** @type {unknown} */
+const nativeMatches = search.findIter(haystack);
+const matches = readRuntimeSmokeMatches(nativeMatches);
 
 assert.equal(search.isMatch(haystack), true);
 assert.equal(matches.length, 4);
