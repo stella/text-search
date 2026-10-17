@@ -156,7 +156,7 @@ jobs:
       && (needs.preflight.outputs.already-released != 'true'
           && (github.event_name == 'push'
               || (inputs.publish_to_npm && github.ref == 'refs/heads/main')))
-    uses: stella/.github/.github/workflows/npm-version-finalize.yml@5764ab66e4df84cfd2e642c7d7e4678261e668f8
+    uses: stella/.github/.github/workflows/npm-version-finalize.yml@8f19eb7220047e5b06f6e75f0b9f908bfd01f5f6
     with:
       package-files: |
         package.json

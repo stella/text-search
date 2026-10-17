@@ -49,3 +49,16 @@ test("delegates synchronized publishing with the guarded release contract", () =
   expect(finalize).not.toContain("CHANGELOG_APP_ID");
   expect(finalize).not.toContain("update-changelog");
 });
+
+test("uses the finalizer pin required by the release policy caller", () => {
+  const policy = readFileSync(
+    new URL("../.github/workflows/release-policy.yml", import.meta.url),
+    "utf8",
+  );
+  const policyUse = policy.match(
+    /uses: stella\/\.github\/\.github\/workflows\/release-policy\.yml@([0-9a-f]{40})/u,
+  );
+  const pin = policyUse?.at(1);
+  if (pin === undefined) throw new Error("Release policy must use an immutable shared pin");
+  expect(readJob("finalize")).toContain(`npm-version-finalize.yml@${pin}`);
+});
