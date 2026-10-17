@@ -1,7 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: bun
-    directory: /
+    directories:
+      - /
+      - /wasm
     schedule:
       interval: weekly
       day: saturday
