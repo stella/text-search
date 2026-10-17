@@ -115,6 +115,8 @@ export type TextSearchOptions = {
    *   at each position (default).
    * - "all": return all matches including overlaps.
    *   Useful when the caller applies its own dedup.
+   *   Fuzzy and regex engines retain their native
+   *   non-overlapping matching behavior.
    *
    * @default "longest"
    */

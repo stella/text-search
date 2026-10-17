@@ -20,7 +20,12 @@ type Engine = {
 };
 
 type Engines = {
-  AhoCorasick: new (patterns: AhoPatternEntry[], options?: AhoOptions) => Engine;
+  AhoCorasick: new (
+    patterns: AhoPatternEntry[],
+    options?: AhoOptions,
+  ) => Engine & {
+    findOverlappingIter: (haystack: string) => Match[];
+  };
   FuzzySearch: new (patterns: FuzzyPatternEntry[], options?: FuzzyOptions) => Engine;
   RegexSet: new (patterns: RegexPatternEntry[], options?: RegexOptions) => Engine;
 };
