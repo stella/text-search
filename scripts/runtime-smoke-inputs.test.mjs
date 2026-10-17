@@ -13,6 +13,8 @@ void test("validates the consumed fields of actual-shaped engine matches", () =>
     { text: "Ing. Jan" },
     { text: "Novak", name: "surname", distance: 0 },
   ]);
+  const sparse = [];
+  sparse.length = 1;
   for (const malformed of [
     null,
     {},
@@ -21,7 +23,7 @@ void test("validates the consumed fields of actual-shaped engine matches", () =>
     [{ text: 1 }],
     [{ text: "x", name: false }],
     [{ text: "x", distance: "0" }],
-    new Array(1),
+    sparse,
   ])
     assert.throws(() => readRuntimeSmokeMatches(malformed), TypeError);
 });
