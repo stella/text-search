@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { TextSearch } from "../src/index.ts";
+import { readDenyListData, readRegexMetadata } from "./contract-fixture-inputs.mjs";
 
 const DEFAULT_MAX_FIND_MS = 15_000;
 const DEFAULT_MAX_BUILD_MS = 15_000;
@@ -61,6 +63,7 @@ const regexChunkSize =
     : Number(process.env.TEXT_SEARCH_CONTRACT_REGEX_CHUNK_SIZE);
 
 const allowedLabels = new Set(DEFAULT_ENTITY_LABELS);
+const sourceRegexMetadata = readRegexMetadata(REGEX_META);
 const config = {
   threshold: 0.3,
   enableTriggerPhrases: true,
@@ -82,7 +85,7 @@ const regexPatterns = [];
 const regexMeta = [];
 
 for (const [index, pattern] of REGEX_PATTERNS.entries()) {
-  const meta = REGEX_META[index];
+  const meta = sourceRegexMetadata[index];
   if (!meta || !allowedLabels.has(meta.label)) continue;
   regexPatterns.push(pattern);
   regexMeta.push(meta);
@@ -119,7 +122,7 @@ const regexSearch = new TextSearch([...regexPatterns, ...triggerEntries], regexO
 let literalSearch = null;
 let literalPatterns = [];
 if (includeFullLiterals) {
-  const denyListData = await buildDenyList(config, createPipelineContext());
+  const denyListData = readDenyListData(await buildDenyList(config, createPipelineContext()));
   const streetTypes = await buildStreetTypePatterns();
   const countryPatterns = buildCountryPatterns().patterns;
   const alnumRe = /[\p{L}\p{N}]/u;

@@ -22,8 +22,8 @@ test("builds packages without npm publishing credentials", () => {
 
   expect(verify).toContain("persist-credentials: false");
   expect(pack).toContain("persist-credentials: false");
-  expect(verify).toContain('node-version: "22.21.1"');
-  expect(pack).toContain('node-version: "22.21.1"');
+  expect(verify).toContain("node-version-file: .node-version");
+  expect(pack).toContain("node-version-file: .node-version");
   expect(verify).toContain("bun-version-file: package.json");
   expect(pack).toContain("bun-version-file: package.json");
   expect(pack).toContain(
@@ -48,4 +48,17 @@ test("delegates synchronized publishing with the guarded release contract", () =
   expect(finalize).not.toContain("secrets: inherit");
   expect(finalize).not.toContain("CHANGELOG_APP_ID");
   expect(finalize).not.toContain("update-changelog");
+});
+
+test("uses the finalizer pin required by the release policy caller", () => {
+  const policy = readFileSync(
+    new URL("../.github/workflows/release-policy.yml", import.meta.url),
+    "utf8",
+  );
+  const policyUse = policy.match(
+    /uses: stella\/\.github\/\.github\/workflows\/release-policy\.yml@([0-9a-f]{40})/u,
+  );
+  const pin = policyUse?.at(1);
+  if (pin === undefined) throw new Error("Release policy must use an immutable shared pin");
+  expect(readJob("finalize")).toContain(`npm-version-finalize.yml@${pin}`);
 });

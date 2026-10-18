@@ -140,16 +140,13 @@ function main() {
     return;
   }
 
-  if (command === "check") {
-    const mismatches = describeMismatches(version);
-    if (mismatches.length > 0) {
-      console.error("Version drift detected:");
-      for (const mismatch of mismatches) {
-        console.error(`- ${mismatch}`);
-      }
-      process.exit(1);
+  const mismatches = describeMismatches(version);
+  if (mismatches.length > 0) {
+    console.error("Version drift detected:");
+    for (const mismatch of mismatches) {
+      console.error(`- ${mismatch}`);
     }
-    return;
+    process.exit(1);
   }
 }
 

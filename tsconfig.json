@@ -1,8 +1,5 @@
 {
   "extends": "@stll/typescript-config/library.json",
-  "compilerOptions": {
-    "allowImportingTsExtensions": true
-  },
-  "include": ["src/**/*.ts", "tsdown.config.ts"],
+  "include": ["src/**/*.ts", "tsdown.config.ts", "oxlint.config.ts"],
   "exclude": ["node_modules", "dist", "wasm/dist"]
 }
