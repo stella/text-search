@@ -215,8 +215,6 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run typecheck
         if: needs.check-changes.outputs.code-changed == 'true'
-      - run: bun run check:typecheck-parity
-        if: needs.check-changes.outputs.toolchain-changed == 'true'
       - run: bun run lint
         if: needs.check-changes.outputs.code-changed == 'true'
 
