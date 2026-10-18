@@ -46,12 +46,23 @@ test("pins ordinary runtimes and bounds the Hawk compiler exception", () => {
 });
 
 test("runs parity only through the dispatch-only proofs workflow", () => {
-  const workflow = read(".github/workflows/typecheck-proofs.yml");
-  const triggers = workflow.split("on:\n").at(1)?.split("\npermissions:").at(0);
-  expect(triggers?.trim()).toBe("workflow_dispatch:");
-  expect(workflow).toContain("contents: read");
-  expect(workflow).toContain("persist-credentials: false");
-  expect(workflow).toContain("bun install --frozen-lockfile");
-  expect(workflow).toContain("bun run check:toolchain");
-  expect(workflow).toContain("bun run check:typecheck-parity");
+  const workflow = Bun.YAML.parse(read(".github/workflows/typecheck-proofs.yml"));
+  expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
+  expect(workflow.permissions).toEqual({ contents: "read" });
+  const steps = workflow.jobs["typecheck-parity"].steps;
+  expect(
+    steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@")).with[
+      "persist-credentials"
+    ],
+  ).toBe(false);
+  expect(steps.map((step: { run?: string }) => step.run).filter(Boolean)).toEqual([
+    "bun install --frozen-lockfile",
+    "bun run check:toolchain",
+    "bun run check:typecheck-parity",
+  ]);
+  const parity = steps.find(
+    (step: { run?: string }) => step.run === "bun run check:typecheck-parity",
+  );
+  expect(parity).toBeDefined();
+  expect(parity.if).toBeUndefined();
 });
