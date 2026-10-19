@@ -155,6 +155,81 @@ describe("TextSearch", () => {
     ]);
   });
 
+  test("Unicode whole-word empty literals treat unpaired surrogates as code units", () => {
+    for (const haystack of ["a\uDC00a", "a\uD800a"]) {
+      const search = new TextSearch([""], {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: true,
+        overlapStrategy: "all",
+      });
+      expect(search.findIter(haystack).map(({ start }) => start)).toEqual([0, 1, 2, 3]);
+      expect(search.replaceAll(haystack, ["|"])).toBe(
+        `|${haystack[0]}|${haystack[1]}|${haystack[2]}|`,
+      );
+    }
+  });
+
+  test("Unicode empty-literal boundaries agree with the code-point definition", () => {
+    const isWord = (value: string) => /^[\p{L}\p{N}_]$/u.test(value);
+    const codePoints = (value: string) => {
+      const result: Array<{ start: number; end: number; value: string }> = [];
+      for (let offset = 0; offset < value.length;) {
+        const first = value.charCodeAt(offset);
+        const second = value.charCodeAt(offset + 1);
+        const width =
+          first >= 0xd800 && first <= 0xdbff && second >= 0xdc00 && second <= 0xdfff ? 2 : 1;
+        result.push({
+          start: offset,
+          end: offset + width,
+          value: value.slice(offset, offset + width),
+        });
+        offset += width;
+      }
+      return result;
+    };
+    let state = 0x169;
+    const random = () => {
+      state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+      return state;
+    };
+    const tokens = ["a", "Z", " ", "𐐀", "𝟘", "\uD800", "\uDBFF", "\uDC00", "\uDFFF"];
+
+    for (let iteration = 0; iteration < 250; iteration += 1) {
+      const haystack = Array.from(
+        { length: random() % 18 },
+        () => tokens[random() % tokens.length],
+      ).join("");
+      const points = codePoints(haystack);
+      const expectedOffsets = [0];
+      for (let index = 1; index < points.length; index += 1) {
+        if (isWord(points[index - 1].value) !== isWord(points[index].value)) {
+          expectedOffsets.push(points[index].start);
+        }
+      }
+      if (haystack.length > 0) expectedOffsets.push(haystack.length);
+
+      const search = new TextSearch([""], {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: true,
+        overlapStrategy: "all",
+      });
+      const actualOffsets = search.findIter(haystack).map(({ start }) => start);
+      expect(actualOffsets).toEqual(expectedOffsets);
+      expect(
+        actualOffsets.every((offset) => offset === 0 || points.some(({ end }) => end === offset)),
+      ).toBe(true);
+
+      let expectedReplacement = haystack;
+      for (let index = expectedOffsets.length - 1; index >= 0; index -= 1) {
+        const offset = expectedOffsets[index];
+        expectedReplacement = `${expectedReplacement.slice(0, offset)}|${expectedReplacement.slice(offset)}`;
+      }
+      expect(search.replaceAll(haystack, ["|"])).toBe(expectedReplacement);
+    }
+  });
+
   test("empty literals use global selection on every literal route", () => {
     const patterns = ["", "a"];
     const expected = [

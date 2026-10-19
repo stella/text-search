@@ -918,8 +918,7 @@ function engineFindCandidates(engine: EngineSlot, haystack: string): Match[] {
           }
         }
         if (offset === haystack.length) break;
-        const codePoint = haystack.codePointAt(offset);
-        offset += codePoint !== undefined && codePoint > 0xffff ? 2 : 1;
+        offset += codePointAfter(haystack, offset).length;
       }
     }
     return matches;
@@ -940,16 +939,23 @@ function isEmptyWholeWordBoundary(
 }
 
 function codePointBefore(value: string, offset: number): string {
-  const previous = value.codePointAt(offset - 1);
-  if (previous === undefined) return "";
-  const codePoint =
-    previous >= 0xdc00 && previous <= 0xdfff ? value.codePointAt(offset - 2) : previous;
-  return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
+  const previous = value.charCodeAt(offset - 1);
+  if (Number.isNaN(previous)) return "";
+  if (previous < 0xdc00 || previous > 0xdfff) return value[offset - 1] ?? "";
+
+  const preceding = value.charCodeAt(offset - 2);
+  if (preceding >= 0xd800 && preceding <= 0xdbff) return value.slice(offset - 2, offset);
+  return value[offset - 1] ?? "";
 }
 
 function codePointAfter(value: string, offset: number): string {
-  const codePoint = value.codePointAt(offset);
-  return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
+  const current = value.charCodeAt(offset);
+  if (Number.isNaN(current)) return "";
+  if (current < 0xd800 || current > 0xdbff) return value[offset] ?? "";
+
+  const following = value.charCodeAt(offset + 1);
+  if (following >= 0xdc00 && following <= 0xdfff) return value.slice(offset, offset + 2);
+  return value[offset] ?? "";
 }
 
 function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
