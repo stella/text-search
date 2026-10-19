@@ -1107,8 +1107,14 @@ fn literal_longest_selection_matches_typescript_api() {
     .unwrap();
     let matches = search.find_iter("aa").unwrap();
     assert_eq!(matches.len(), 1);
-    assert_eq!(matches[0].text, "aa");
-    assert_eq!((matches[0].start, matches[0].end), (0, 2));
+    assert_eq!(
+      matches.first().map(|found| (
+        found.text.as_str(),
+        found.start,
+        found.end
+      )),
+      Some(("aa", 0, 2))
+    );
   }
 }
 
@@ -1117,9 +1123,11 @@ fn single_literal_engine_matches_global_selection_on_generated_corpus() {
   let literals = (1..=24)
     .map(|length| "a".repeat(length))
     .collect::<Vec<_>>();
-  let haystack = (0..40)
-    .map(|index| format!("{}b", "a".repeat((index * 7) % 31)))
-    .collect::<String>();
+  let haystack = (0..40).fold(String::new(), |mut haystack, index| {
+    haystack.push_str(&"a".repeat((index * 7) % 31));
+    haystack.push('b');
+    haystack
+  });
   let direct = TextSearch::new(
     literals.iter().cloned().map(PatternEntry::from),
     TextSearchOptions {
@@ -1155,7 +1163,10 @@ fn single_literal_engine_reports_only_native_iterator_matches() {
 
   let result = search.find_iter_with_stats(&"a".repeat(100)).unwrap();
   assert_eq!(result.stats.len(), 1);
-  assert_eq!(result.stats[0].match_count, result.matches.len());
+  assert_eq!(
+    result.stats.first().map(|stats| stats.match_count),
+    Some(result.matches.len())
+  );
   assert_eq!(result.matches.len(), 5);
 }
 
@@ -1169,8 +1180,9 @@ fn duplicate_empty_literals_select_the_lowest_pattern_index() {
     },
   )
   .unwrap();
-  assert_eq!(unnamed.find_iter("").unwrap()[0].pattern, 0);
-  assert_eq!(unnamed.find_iter("").unwrap().len(), 1);
+  let unnamed_matches = unnamed.find_iter("").unwrap();
+  assert_eq!(unnamed_matches.first().map(|found| found.pattern), Some(0));
+  assert_eq!(unnamed_matches.len(), 1);
   assert_eq!(
     unnamed
       .replace_all("", &[String::from("first"), String::from("second")])
@@ -1190,14 +1202,73 @@ fn duplicate_empty_literals_select_the_lowest_pattern_index() {
   let matches = named.find_iter("").unwrap();
   assert_eq!(matches.len(), 1);
   assert_eq!(
-    (matches[0].pattern, matches[0].name.as_deref()),
-    (0, Some("first"))
+    matches
+      .first()
+      .map(|found| (found.pattern, found.name.as_deref())),
+    Some((0, Some("first")))
   );
   assert_eq!(
     named
       .replace_all("", &[String::from("first"), String::from("second")])
       .unwrap(),
     "first"
+  );
+}
+
+#[test]
+fn empty_literals_use_global_selection_on_every_literal_route() {
+  let patterns = vec![PatternEntry::from(""), PatternEntry::from("a")];
+  let direct = TextSearch::new(
+    patterns.clone(),
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  let routed = TextSearch::new(
+    vec![
+      PatternEntry::from(""),
+      PatternEntry::from("a"),
+      PatternEntry::Regex(RegexPattern::new("z+")),
+    ],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+
+  let direct_matches = direct.find_iter("aa").unwrap();
+  assert_eq!(direct_matches, routed.find_iter("aa").unwrap());
+  assert_eq!(
+    direct_matches
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end))
+      .collect::<Vec<_>>(),
+    vec![(1, 0, 1), (1, 1, 2), (0, 2, 2)]
+  );
+  assert_eq!(
+    direct
+      .replace_all("aa", &[String::from("E"), String::from("A")])
+      .unwrap(),
+    "AAE"
+  );
+
+  let overlap = TextSearch::new(
+    patterns,
+    TextSearchOptions {
+      all_literal: true,
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  assert_eq!(
+    overlap
+      .find_iter("aa")
+      .unwrap()
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 0), (1, 0, 1), (0, 1, 1), (1, 1, 2), (0, 2, 2)]
   );
 }
 

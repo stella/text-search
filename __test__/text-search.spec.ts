@@ -112,6 +112,34 @@ describe("TextSearch", () => {
     expect(named.replaceAll("", ["first", "second"])).toBe("first");
   });
 
+  test("empty literals use global selection on every literal route", () => {
+    const patterns = ["", "a"];
+    const expected = [
+      { pattern: 1, start: 0, end: 1, text: "a" },
+      { pattern: 1, start: 1, end: 2, text: "a" },
+      { pattern: 0, start: 2, end: 2, text: "" },
+    ];
+    const direct = new TextSearch(patterns, { allLiteral: true });
+    const routed = new TextSearch([...patterns, /z+/]);
+
+    expect(direct.findIter("aa")).toEqual(expected);
+    expect(routed.findIter("aa")).toEqual(expected);
+    expect(direct.replaceAll("aa", ["E", "A"])).toBe("AAE");
+    expect(routed.replaceAll("aa", ["E", "A", "unused"])).toBe("AAE");
+
+    const overlap = new TextSearch(patterns, {
+      allLiteral: true,
+      overlapStrategy: "all",
+    });
+    expect(overlap.findIter("aa")).toEqual([
+      { pattern: 0, start: 0, end: 0, text: "" },
+      { pattern: 1, start: 0, end: 1, text: "a" },
+      { pattern: 0, start: 1, end: 1, text: "" },
+      { pattern: 1, start: 1, end: 2, text: "a" },
+      { pattern: 0, start: 2, end: 2, text: "" },
+    ]);
+  });
+
   test("ASCII whole-word filtering precedes longest selection", () => {
     const search = new TextSearch(["a", "a b"], {
       allLiteral: true,
@@ -130,10 +158,11 @@ describe("TextSearch", () => {
         eligible: false,
       },
       { options: { allLiteral: true, overlapStrategy: "all" as const }, eligible: false },
+      { options: { allLiteral: true }, patterns: ["", "a"], eligible: false },
     ];
 
-    for (const { options, eligible } of cases) {
-      const search = new TextSearch(["a", "a b"], options);
+    for (const { options, eligible, patterns = ["a", "a b"] } of cases) {
+      const search = new TextSearch(patterns, options);
       const ac = Reflect.get(search, "engines")[0].ac;
       let nativeCalls = 0;
       let overlappingCalls = 0;

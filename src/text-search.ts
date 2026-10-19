@@ -42,6 +42,7 @@ type AcSlot = {
   identityMap?: true;
   patternCount?: number;
   requiresOverlapSelection: boolean;
+  containsEmptyLiteral: boolean;
 };
 
 type SplitAcSlot = {
@@ -365,7 +366,12 @@ export class TextSearch {
 
 function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
   const engine = engines.length === 1 ? engines[0] : undefined;
-  return !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection;
+  return (
+    !overlapAll &&
+    engine?.type === "ac" &&
+    !engine.requiresOverlapSelection &&
+    !engine.containsEmptyLiteral
+  );
 }
 
 function chunkSharedRegexPatterns(
@@ -692,6 +698,7 @@ function buildAcEngine(
     nameMap,
     patternCount: literals.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    containsEmptyLiteral: literals.includes(""),
   };
 }
 
@@ -747,6 +754,7 @@ function buildIdentityAcEngine(
     identityMap: true,
     patternCount: patterns.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    containsEmptyLiteral: patterns.includes(""),
   };
 }
 
@@ -869,7 +877,14 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
 
 /** Stable public order for overlapStrategy "all": start, end, pattern. */
 function sortAllMatches(matches: Match[]): Match[] {
-  return matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
+  matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
+  return matches.filter(
+    (match, index) =>
+      match.start !== match.end ||
+      index === 0 ||
+      matches[index - 1]?.start !== match.start ||
+      matches[index - 1]?.end !== match.end,
+  );
 }
 
 /**
