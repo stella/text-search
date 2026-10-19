@@ -2,9 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { TextSearch } from "../src";
 import { getEngines, initEngines } from "../src/engines";
+import { textSearchTestHooks } from "../src/text-search";
 
 const registeredEngines = getEngines();
-afterEach(() => initEngines(registeredEngines));
+afterEach(() => {
+  initEngines(registeredEngines);
+  textSearchTestHooks.reset();
+});
 
 describe("TextSearch", () => {
   test("basic matching", () => {
@@ -140,6 +144,62 @@ describe("TextSearch", () => {
       { pattern: 0, start: 0, end: 0, text: "" },
       { pattern: 1, start: 0, end: 0, text: "" },
     ]);
+  });
+
+  test("split literal route restores duplicate empty matches at every Unicode boundary", () => {
+    const patterns = ["", "", ...Array.from({ length: 19_998 }, (_, index) => `missing-${index}`)];
+    const search = new TextSearch(patterns, {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: true,
+      overlapStrategy: "all",
+    });
+
+    expect(search.findIter("a b")).toEqual(
+      [0, 1, 2, 3].flatMap((start) => [
+        { pattern: 0, start, end: start, text: "" },
+        { pattern: 1, start, end: start, text: "" },
+      ]),
+    );
+  });
+
+  test("forced literal routes have identical randomized results", () => {
+    let state = 0x169;
+    const random = () => {
+      state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+      return state;
+    };
+    const atoms = ["", "", "a", "ab", "é", "𐐀", "_", " "];
+    const haystackAtoms = ["a", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
+
+    for (let iteration = 0; iteration < 120; iteration += 1) {
+      const patterns = Array.from(
+        { length: 2 + (random() % 7) },
+        () => atoms[random() % atoms.length],
+      );
+      const haystack = Array.from(
+        { length: random() % 14 },
+        () => haystackAtoms[random() % haystackAtoms.length],
+      ).join("");
+      const options = {
+        allLiteral: true,
+        overlapStrategy: random() % 2 === 0 ? ("longest" as const) : ("all" as const),
+        wholeWords: random() % 2 === 0,
+        unicodeBoundaries: random() % 2 === 0,
+      };
+      const replacements = patterns.map((_, index) => `<${index}>`);
+
+      textSearchTestHooks.forceIdentityAcRoute("ordinary");
+      const ordinary = new TextSearch(patterns, options);
+      textSearchTestHooks.setIdentityAcChunkSize(2);
+      textSearchTestHooks.forceIdentityAcRoute("split");
+      const split = new TextSearch(patterns, options);
+
+      expect(split.findIter(haystack)).toEqual(ordinary.findIter(haystack));
+      expect(split.replaceAll(haystack, replacements)).toBe(
+        ordinary.replaceAll(haystack, replacements),
+      );
+    }
   });
 
   test("Unicode whole-word empty literals do not split supplementary letters", () => {
