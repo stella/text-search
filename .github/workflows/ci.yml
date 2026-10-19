@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 concurrency:
@@ -38,7 +40,7 @@ jobs:
       - name: Detect shared toolchain changes
         id: toolchain
         env:
-          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'unavailable-toolchain-base' }}
+          BASE_REF: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha || github.event.before || 'unavailable-toolchain-base' }}
         run: |
           result=$(bunx --no-install stll-toolchain-changed --since "$BASE_REF")
           printf '%s\n' "$result"
@@ -461,3 +463,64 @@ jobs:
         if: needs.check-changes.outputs.provenance-changed == 'true'
         with:
           provenance-version: v0.1.3
+
+  ci-result:
+    if: >-
+      always()
+      && ((github.event_name == 'pull_request'
+           && needs.trust-check.outputs.trusted == 'true')
+          || github.event_name == 'merge_group')
+    needs:
+      - check-changes
+      - trust-check
+      - changeset
+      - workflow-lint
+      - version-sync
+      - lint
+      - test
+      - rust
+      - hawk
+      - runtime-compat
+      - pack
+      - provenance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require every selected validation job
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHECK_CHANGES_RESULT: ${{ needs.check-changes.result }}
+          TRUST_RESULT: ${{ needs.trust-check.result }}
+          CHANGESET_RESULT: ${{ needs.changeset.result }}
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
+          VERSION_SYNC_RESULT: ${{ needs.version-sync.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          RUST_RESULT: ${{ needs.rust.result }}
+          HAWK_RESULT: ${{ needs.hawk.result }}
+          RUNTIME_RESULT: ${{ needs.runtime-compat.result }}
+          PACK_RESULT: ${{ needs.pack.result }}
+          PROVENANCE_RESULT: ${{ needs.provenance.result }}
+        run: |
+          set -euo pipefail
+
+          test "$CHECK_CHANGES_RESULT" = success
+          test "$WORKFLOW_LINT_RESULT" = success
+          test "$VERSION_SYNC_RESULT" = success
+          test "$LINT_RESULT" = success
+          test "$TEST_RESULT" = success
+          test "$RUST_RESULT" = success
+          test "$HAWK_RESULT" = success
+          test "$RUNTIME_RESULT" = success
+          test "$PACK_RESULT" = success
+          test "$PROVENANCE_RESULT" = success
+
+          if [ "$EVENT_NAME" = pull_request ]; then
+            test "$TRUST_RESULT" = success
+            test "$CHANGESET_RESULT" = success
+          else
+            # These validations are pull-request-only and may skip on merge groups.
+            case "$TRUST_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+            case "$CHANGESET_RESULT" in success|skipped) ;; *) exit 1 ;; esac
+          fi
