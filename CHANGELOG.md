@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- [#152](https://github.com/stella/text-search/pull/152) [`b082386`](https://github.com/stella/text-search/commit/b082386a5dc7e41c9df18042beb8c918ae5b8ea6) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Add the EntityIndex facade with boost-aware candidate thresholds, builder completion modes, serialization, and native memory accounting. The entity backend requires the forthcoming fuzzy-search 1.2.0 dependency update; the current typed stub reports that requirement explicitly.
+
+### Patch Changes
+
+- [#141](https://github.com/stella/text-search/pull/141) [`d5dcb96`](https://github.com/stella/text-search/commit/d5dcb964bc02e5b10ca1e3a25651e0981c491689) Thanks [@jan-kubica](https://github.com/jan-kubica)! - License the packages under Apache-2.0 and update the published license metadata.
+
+- [#154](https://github.com/stella/text-search/pull/154) [`f7d7118`](https://github.com/stella/text-search/commit/f7d71180671427d55864a61d54e14b932918fe88) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Update the fuzzy-search engine to 1.1.5 in every package, including the minimum `@stll/fuzzy-search-wasm` version that `@stll/text-search-wasm` requires, and refresh the bon and wasm-bindgen crates.
+
 ## 1.0.11
 
 ### Patch Changes
