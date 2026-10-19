@@ -294,7 +294,11 @@ describe("TextSearch", () => {
         textSearchTestHooks.forceIdentityAcRoute("split");
         const split = new TextSearch(patterns, options);
 
-        expect(split.findIter(haystack)).toEqual(ordinary.findIter(haystack));
+        const ordinaryMatches = ordinary.findIter(haystack);
+        const splitMatches = split.findIter(haystack);
+        expect(splitMatches).toEqual(ordinaryMatches);
+        expect(ordinary.isMatch(haystack)).toBe(ordinaryMatches.length > 0);
+        expect(split.isMatch(haystack)).toBe(splitMatches.length > 0);
         expect(split.replaceAll(haystack, replacements)).toBe(
           ordinary.replaceAll(haystack, replacements),
         );
@@ -365,6 +369,7 @@ describe("TextSearch", () => {
       unicodeBoundaries: false,
     });
     expect(search.findIter("a bc").map(({ text }) => text)).toEqual(["a"]);
+    expect(search.isMatch("a bc")).toBe(true);
   });
 
   test("literal fast-path eligibility follows the shared option table", () => {

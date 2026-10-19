@@ -745,10 +745,20 @@ proptest::proptest! {
       .enumerate()
       .map(|(index, _)| format!("<{index}>"))
       .collect::<Vec<_>>();
+    let fresh_matches = fresh.find_iter(&haystack).unwrap();
+    let loaded_matches = loaded.find_iter(&haystack).unwrap();
 
     proptest::prop_assert_eq!(
-      loaded.find_iter(&haystack).unwrap(),
-      fresh.find_iter(&haystack).unwrap(),
+      &loaded_matches,
+      &fresh_matches,
+    );
+    proptest::prop_assert_eq!(
+      fresh.is_match(&haystack).unwrap(),
+      !fresh_matches.is_empty(),
+    );
+    proptest::prop_assert_eq!(
+      loaded.is_match(&haystack).unwrap(),
+      !loaded_matches.is_empty(),
     );
     proptest::prop_assert_eq!(
       loaded.replace_all(&haystack, &replacements).unwrap(),
@@ -774,9 +784,15 @@ proptest::proptest! {
         all_literal_options,
         &all_literal_artifacts,
       ).unwrap();
+      let loaded_without_patterns_matches =
+        loaded_without_patterns.find_iter(&haystack).unwrap();
       proptest::prop_assert_eq!(
-        loaded_without_patterns.find_iter(&haystack).unwrap(),
-        fresh.find_iter(&haystack).unwrap(),
+        &loaded_without_patterns_matches,
+        &fresh_matches,
+      );
+      proptest::prop_assert_eq!(
+        loaded_without_patterns.is_match(&haystack).unwrap(),
+        !loaded_without_patterns_matches.is_empty(),
       );
       proptest::prop_assert_eq!(
         loaded_without_patterns.replace_all(&haystack, &replacements).unwrap(),
@@ -1389,6 +1405,31 @@ fn single_literal_engine_matches_global_selection_on_generated_corpus() {
     direct.find_iter(&haystack).unwrap(),
     globally_selected.find_iter(&haystack).unwrap()
   );
+}
+
+#[test]
+fn ascii_whole_word_is_match_uses_candidate_selection() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from("a"), PatternEntry::from("a b")],
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      unicode_boundaries: false,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert_eq!(
+    search
+      .find_iter("a bc")
+      .unwrap()
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["a"]
+  );
+  assert!(search.is_match("a bc").unwrap());
 }
 
 #[test]
