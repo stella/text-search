@@ -12,6 +12,7 @@ const ASCII_WHOLE_WORD_WINDOW_SIZE = 64 * 1024;
 let identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 let identityAcTestRoute: "production" | "ordinary" | "split" = "production";
 let asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
+let selectionPassCount = 0;
 
 /** Test-only route control. Not re-exported by the package entry point. */
 export const textSearchTestHooks = {
@@ -27,10 +28,14 @@ export const textSearchTestHooks = {
     }
     asciiWholeWordWindowSize = size;
   },
+  getSelectionPassCount(): number {
+    return selectionPassCount;
+  },
   reset(): void {
     identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
     identityAcTestRoute = "production";
     asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
+    selectionPassCount = 0;
   },
 };
 
@@ -308,19 +313,20 @@ export class TextSearch {
       return engineFindIter(engine, haystack);
     }
 
-    // Single engine but needs name remapping
+    // A single engine's native iterator has already selected non-overlapping
+    // matches unless the literal route explicitly requires candidates.
     if (this.engines.length === 1) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Expected single engine after length check");
       }
-      const matches = remapMatches(
-        isLiteralFastPathEligible(this.engines, this.overlapAll)
-          ? engineFindIter(engine, haystack)
-          : engineFindCandidates(engine, haystack),
-        engine,
+      if (isNativeResultEligible(this.engines, this.overlapAll)) {
+        return remapMatches(engineFindIter(engine, haystack), engine);
+      }
+      return finalizeMatches(
+        remapMatches(engineFindCandidates(engine, haystack), engine),
+        this.overlapAll,
       );
-      return this.overlapAll ? sortAllMatches(matches) : mergeAndSelect(matches);
     }
 
     // Multi-engine: collect from all, remap in-place
@@ -333,11 +339,7 @@ export class TextSearch {
       }
     }
 
-    if (this.overlapAll) {
-      return sortAllMatches(all);
-    }
-
-    return mergeAndSelect(all);
+    return finalizeMatches(all, this.overlapAll);
   }
 
   /** Which pattern indices matched (not where). */
@@ -419,6 +421,16 @@ function isZeroOverheadFindEligible(engines: EngineSlot[], overlapAll: boolean):
   if (engines.length !== 1 || engine === undefined) return false;
   if (engine.type === "regex" || engine.type === "fuzzy") return true;
   return isLiteralFastPathEligible(engines, overlapAll);
+}
+
+function isNativeResultEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines.length === 1 ? engines[0] : undefined;
+  if (engine === undefined) return false;
+  return (
+    engine.type === "regex" ||
+    engine.type === "fuzzy" ||
+    isLiteralFastPathEligible(engines, overlapAll)
+  );
 }
 
 function chunkSharedRegexPatterns(
@@ -992,6 +1004,11 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
 function sortAllMatches(matches: Match[]): Match[] {
   matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
   return matches;
+}
+
+function finalizeMatches(matches: Match[], overlapAll: boolean): Match[] {
+  selectionPassCount += 1;
+  return overlapAll ? sortAllMatches(matches) : mergeAndSelect(matches);
 }
 
 /**

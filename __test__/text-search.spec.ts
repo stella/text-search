@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { EmptyPatternError, TextSearch } from "../src";
 import { getEngines, initEngines } from "../src/engines";
 import { textSearchTestHooks } from "../src/text-search";
-import type { Match } from "../src/types";
+import type { Match, PatternEntry } from "../src/types";
 
 const registeredEngines = getEngines();
 // The merge behavior from main before equal non-empty spans were collapsed.
@@ -118,6 +118,46 @@ describe("TextSearch", () => {
 
       expect(search.findIter("alpha")).toBe(expected);
       expect(calls).toBe(1);
+    }
+  });
+
+  test("single-engine routes skip selection whenever native iteration is final", () => {
+    const cases: { label: string; pattern: PatternEntry; expectedName?: string }[] = [
+      { label: "unnamed literal", pattern: "aa" },
+      {
+        label: "named literal",
+        pattern: { pattern: "aa", literal: true, name: "literal" },
+        expectedName: "literal",
+      },
+      { label: "unnamed regex", pattern: /a+/ },
+      {
+        label: "named regex",
+        pattern: { pattern: /a+/, name: "regex" },
+        expectedName: "regex",
+      },
+      { label: "fuzzy", pattern: { pattern: "aaaa", distance: 1 } },
+      {
+        label: "named fuzzy",
+        pattern: { pattern: "aaaa", distance: 1, name: "fuzzy" },
+        expectedName: "fuzzy",
+      },
+    ];
+
+    for (const { label, pattern, expectedName } of cases) {
+      for (const overlapStrategy of ["longest", "all"] as const) {
+        textSearchTestHooks.reset();
+        const matches = new TextSearch([pattern], { overlapStrategy }).findIter("aaaa");
+        const nativeResultIsFinal = !label.includes("literal") || overlapStrategy === "longest";
+
+        expect(textSearchTestHooks.getSelectionPassCount(), `${label}: ${overlapStrategy}`).toBe(
+          nativeResultIsFinal ? 0 : 1,
+        );
+        expect(matches.length, `${label}: ${overlapStrategy}`).toBeGreaterThan(0);
+        expect(
+          matches.every(({ pattern: index, name }) => index === 0 && name === expectedName),
+          `${label}: ${overlapStrategy}`,
+        ).toBe(true);
+      }
     }
   });
 

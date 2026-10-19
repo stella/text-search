@@ -1515,7 +1515,7 @@ impl TextSearch {
     {
       return literal_find_iter(slot, haystack);
     }
-    if let Some(engine) = zero_overhead_non_literal_slot(&self.engines) {
+    if let Some(engine) = native_non_literal_slot(&self.engines) {
       let matches = engine_find_iter(engine, haystack)?;
       if !engine_has_uninitialized_lazy_regex(engine) {
         _ = self.lazy_regex_ready.set(());
@@ -1551,7 +1551,7 @@ impl TextSearch {
       )];
       return Ok(TextSearchFindResult { matches, stats });
     }
-    if let Some(engine) = zero_overhead_non_literal_slot(&self.engines) {
+    if let Some(engine) = native_non_literal_slot(&self.engines) {
       return engine_find_iter_with_stats(engine, haystack, 0);
     }
     let mut result = find_iter_engines_with_stats(&self.engines, haystack)?;
@@ -2446,22 +2446,12 @@ fn literal_fast_path_slot(
   (!slot.requires_overlap_selection).then_some(slot)
 }
 
-fn zero_overhead_non_literal_slot(
-  engines: &[EngineSlot],
-) -> Option<&EngineSlot> {
+fn native_non_literal_slot(engines: &[EngineSlot]) -> Option<&EngineSlot> {
   let [engine] = engines else {
     return None;
   };
-  let (index_map, name_map) = match engine {
-    EngineSlot::Regex(slot) => (&slot.index_map, &slot.name_map),
-    EngineSlot::Fuzzy(slot) => (&slot.index_map, &slot.name_map),
-    EngineSlot::Literal(_) | EngineSlot::SplitLiteral(_) => return None,
-  };
-  let identity = index_map
-    .iter()
-    .enumerate()
-    .all(|(index, pattern)| u32::try_from(index) == Ok(*pattern));
-  (identity && name_map.iter().all(Option::is_none)).then_some(engine)
+  matches!(engine, EngineSlot::Regex(_) | EngineSlot::Fuzzy(_))
+    .then_some(engine)
 }
 
 /// Builds a regex slot.

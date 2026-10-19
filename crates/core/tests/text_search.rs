@@ -1541,17 +1541,26 @@ proptest::proptest! {
       0..96,
     ),
     fuzzy in proptest::prop_oneof![Just(false), Just(true)],
+    named in proptest::prop_oneof![Just(false), Just(true)],
     overlap_all in proptest::prop_oneof![Just(false), Just(true)],
     whole_words in proptest::prop_oneof![Just(false), Just(true)],
     pattern_kind in 0_u8..4,
   ) {
     let haystack = characters.into_iter().collect::<String>();
-    let pattern = match (fuzzy, pattern_kind) {
+    let mut pattern = match (fuzzy, pattern_kind) {
       (true, _) => PatternEntry::Fuzzy(FuzzyPattern::new("aaa", FuzzyDistance::Exact(1))),
       (false, 0) => PatternEntry::Regex(RegexPattern::new("a+")),
       (false, 1 | 2) => PatternEntry::Regex(RegexPattern::new("a*")),
       (false, _) => PatternEntry::Regex(RegexPattern::new("(?i)b*")),
     };
+    if named {
+      if let PatternEntry::Regex(pattern) = &mut pattern {
+        pattern.name = Some(String::from("regex"));
+      }
+      if let PatternEntry::Fuzzy(pattern) = &mut pattern {
+        pattern.name = Some(String::from("fuzzy"));
+      }
+    }
     let options = TextSearchOptions {
       overlap_strategy: if overlap_all {
         OverlapStrategy::All
