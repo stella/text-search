@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { TextSearch } from "../src";
 import { getEngines, initEngines } from "../src/engines";
 import { textSearchTestHooks } from "../src/text-search";
+import type { Match } from "../src/types";
 
 const registeredEngines = getEngines();
 afterEach(() => {
@@ -72,6 +73,53 @@ describe("TextSearch", () => {
 
     expect(search.findIter("aaa").map(({ name }) => name)).toEqual(["letter", "letter", "letter"]);
     expect(nativeCalls).toBe(1);
+  });
+
+  test("single regex and fuzzy engines return their native result arrays", () => {
+    for (const search of [
+      new TextSearch([/a+/]),
+      new TextSearch([{ pattern: "alpha", distance: 1 }]),
+    ]) {
+      const slot = Reflect.get(search, "engines")[0];
+      const engine = slot.type === "regex" ? slot.rs : slot.fs;
+      const expected = engine.findIter("alpha");
+      let calls = 0;
+      engine.findIter = () => {
+        calls += 1;
+        return expected;
+      };
+
+      expect(search.findIter("alpha")).toBe(expected);
+      expect(calls).toBe(1);
+    }
+  });
+
+  test("single non-literal routes match global routing on a generated corpus", () => {
+    let state = 0x169;
+    const random = () => {
+      state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+      return state;
+    };
+    for (let iteration = 0; iteration < 64; iteration += 1) {
+      const haystack = Array.from({ length: random() % 40 }, () =>
+        random() % 3 === 0 ? "b" : "a",
+      ).join("");
+      for (const pattern of [/a+/, { pattern: "aaa", distance: 1 }]) {
+        const direct = new TextSearch([pattern]);
+        const routed = new TextSearch([pattern, { pattern: "never", literal: true }]);
+        const publicFields = ({ pattern: patternIndex, start, end, text, name, distance }: Match) => ({
+          pattern: patternIndex,
+          start,
+          end,
+          text,
+          name,
+          distance,
+        });
+        expect(direct.findIter(haystack).map(publicFields)).toEqual(
+          routed.findIter(haystack).map(publicFields),
+        );
+      }
+    }
   });
 
   test("eligible replaceAll uses the native literal iterator for every overlap strategy", () => {

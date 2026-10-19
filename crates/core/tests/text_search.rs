@@ -1525,6 +1525,47 @@ proptest::proptest! {
   }
 }
 
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(64))]
+
+  #[test]
+  fn single_non_literal_routes_match_global_routing(
+    characters in proptest::collection::vec(
+      proptest::prop_oneof![Just('a'), Just('b'), Just(' ')],
+      0..96,
+    ),
+    fuzzy in proptest::prop_oneof![Just(false), Just(true)],
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
+    whole_words in proptest::prop_oneof![Just(false), Just(true)],
+  ) {
+    let haystack = characters.into_iter().collect::<String>();
+    let pattern = if fuzzy {
+      PatternEntry::Fuzzy(FuzzyPattern::new("aaa", FuzzyDistance::Exact(1)))
+    } else {
+      PatternEntry::Regex(RegexPattern::new("a+"))
+    };
+    let options = TextSearchOptions {
+      overlap_strategy: if overlap_all {
+        OverlapStrategy::All
+      } else {
+        OverlapStrategy::Longest
+      },
+      whole_words,
+      ..TextSearchOptions::default()
+    };
+    let direct = TextSearch::new(vec![pattern.clone()], options).unwrap();
+    let routed = TextSearch::new(
+      vec![pattern, PatternEntry::Literal(LiteralPattern::new("never"))],
+      options,
+    ).unwrap();
+
+    proptest::prop_assert_eq!(
+      direct.find_iter(&haystack).unwrap(),
+      routed.find_iter(&haystack).unwrap(),
+    );
+  }
+}
+
 #[test]
 fn which_match_keeps_cross_engine_overlaps() {
   let search = TextSearch::new(

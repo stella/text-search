@@ -284,7 +284,7 @@ export class TextSearch {
     // Fast path: single engine, identity indexMap,
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
-    if (this.zeroOverhead && isLiteralFastPathEligible(this.engines, this.overlapAll)) {
+    if (this.zeroOverhead && isZeroOverheadFindEligible(this.engines, this.overlapAll)) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Zero-overhead path requires a single engine");
@@ -397,6 +397,13 @@ function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): 
     !engine.requiresOverlapSelection &&
     !engine.containsEmptyLiteral
   );
+}
+
+function isZeroOverheadFindEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines[0];
+  if (engines.length !== 1 || engine === undefined) return false;
+  if (engine.type === "regex" || engine.type === "fuzzy") return true;
+  return isLiteralFastPathEligible(engines, overlapAll);
 }
 
 function chunkSharedRegexPatterns(
