@@ -258,17 +258,12 @@ export class TextSearch {
     // Fast path: single engine, identity indexMap,
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
-    if (this.zeroOverhead && !this.overlapAll) {
+    if (this.zeroOverhead && isLiteralFastPathEligible(this.engines, this.overlapAll)) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Zero-overhead path requires a single engine");
       }
-      if (
-        engine.type !== "split-ac" &&
-        (engine.type !== "ac" || !engine.requiresOverlapSelection)
-      ) {
-        return engineFindIter(engine, haystack);
-      }
+      return engineFindIter(engine, haystack);
     }
 
     // Single engine but needs name remapping
@@ -278,7 +273,7 @@ export class TextSearch {
         throw new Error("Expected single engine after length check");
       }
       const matches = remapMatches(
-        !this.overlapAll && engine.type === "ac" && !engine.requiresOverlapSelection
+        isLiteralFastPathEligible(this.engines, this.overlapAll)
           ? engineFindIter(engine, haystack)
           : engineFindCandidates(engine, haystack),
         engine,
@@ -332,14 +327,23 @@ export class TextSearch {
 
     // Always use non-overlapping matches for
     // replacement, even if overlapStrategy is "all".
-    const all: Match[] = [];
-    for (const engine of this.engines) {
-      const matches = engineFindCandidates(engine, haystack);
-      for (const m of remapMatches(matches, engine)) {
-        all.push(m);
+    let matches: Match[];
+    if (isLiteralFastPathEligible(this.engines, this.overlapAll)) {
+      const engine = this.engines[0];
+      if (engine === undefined) {
+        throw new Error("Literal fast path requires a single engine");
       }
+      matches = remapMatches(engineFindIter(engine, haystack), engine);
+    } else {
+      const all: Match[] = [];
+      for (const engine of this.engines) {
+        const candidates = engineFindCandidates(engine, haystack);
+        for (const m of remapMatches(candidates, engine)) {
+          all.push(m);
+        }
+      }
+      matches = mergeAndSelect(all);
     }
-    const matches = mergeAndSelect(all);
 
     let result = "";
     let last = 0;
@@ -357,6 +361,11 @@ export class TextSearch {
     result += haystack.slice(last);
     return result;
   }
+}
+
+function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines.length === 1 ? engines[0] : undefined;
+  return !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection;
 }
 
 function chunkSharedRegexPatterns(

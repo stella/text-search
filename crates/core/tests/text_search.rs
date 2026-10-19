@@ -43,6 +43,30 @@ fn options_builder_preserves_defaults_and_overrides() {
 }
 
 #[test]
+fn ascii_whole_word_filtering_precedes_longest_selection() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from("a"), PatternEntry::from("a b")],
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      unicode_boundaries: false,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert_eq!(
+    search
+      .find_iter("a bc")
+      .unwrap()
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["a"]
+  );
+}
+
+#[test]
 fn routes_literal_regex_and_fuzzy_patterns() {
   let search = TextSearch::new(
     vec![

@@ -717,6 +717,7 @@ struct LiteralSlot {
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
   identity_map: bool,
+  requires_overlap_selection: bool,
 }
 
 struct SplitLiteralSlot {
@@ -1495,8 +1496,8 @@ impl TextSearch {
   }
 
   pub fn find_iter(&self, haystack: &str) -> Result<Vec<Match>> {
-    if self.overlap_strategy == OverlapStrategy::Longest
-      && let [EngineSlot::Literal(slot)] = self.engines.as_slice()
+    if let Some(slot) =
+      literal_fast_path_slot(&self.engines, self.overlap_strategy)
     {
       return literal_find_iter(slot, haystack);
     }
@@ -1513,8 +1514,8 @@ impl TextSearch {
     &self,
     haystack: &str,
   ) -> Result<TextSearchFindResult> {
-    if self.overlap_strategy == OverlapStrategy::Longest
-      && let [EngineSlot::Literal(slot)] = self.engines.as_slice()
+    if let Some(slot) =
+      literal_fast_path_slot(&self.engines, self.overlap_strategy)
     {
       let start = Instant::now();
       let matches = literal_find_iter(slot, haystack)?;
@@ -2288,6 +2289,8 @@ fn build_identity_literal_engine(
     index_map: Vec::new(),
     name_map: Vec::new(),
     identity_map: true,
+    requires_overlap_selection: options.whole_words
+      && !options.unicode_boundaries,
   }))
 }
 
@@ -2349,6 +2352,8 @@ fn load_identity_literal_engine(
       index_map: Vec::new(),
       name_map: Vec::new(),
       identity_map: true,
+      requires_overlap_selection: options.whole_words
+        && !options.unicode_boundaries,
     },
     pattern_count,
   ))
@@ -2373,7 +2378,22 @@ fn build_literal_engine(
     index_map,
     name_map,
     identity_map: false,
+    requires_overlap_selection: options.whole_words
+      && !options.unicode_boundaries,
   })
+}
+
+fn literal_fast_path_slot(
+  engines: &[EngineSlot],
+  overlap_strategy: OverlapStrategy,
+) -> Option<&LiteralSlot> {
+  if overlap_strategy != OverlapStrategy::Longest {
+    return None;
+  }
+  let [EngineSlot::Literal(slot)] = engines else {
+    return None;
+  };
+  (!slot.requires_overlap_selection).then_some(slot)
 }
 
 /// Builds a regex slot.
@@ -3677,10 +3697,40 @@ fn engine_work_weight(engine: &EngineSlot) -> u64 {
 #[cfg(test)]
 mod scheduler_tests {
   use super::{
-    PatternEntry, RegexPattern, Result, TextSearch, TextSearchOptions,
-    engine_has_uninitialized_lazy_regex, find_iter_engines_sequential,
+    OverlapStrategy, PatternEntry, RegexPattern, Result, TextSearch,
+    TextSearchOptions, engine_has_uninitialized_lazy_regex,
+    find_iter_engines_sequential, literal_fast_path_slot,
     weighted_assignments_for_weights,
   };
+
+  #[test]
+  fn literal_fast_path_eligibility_follows_shared_option_table() -> Result<()> {
+    let cases = [
+      (false, true, OverlapStrategy::Longest, true),
+      (true, true, OverlapStrategy::Longest, true),
+      (true, false, OverlapStrategy::Longest, false),
+      (false, true, OverlapStrategy::All, false),
+    ];
+
+    for (whole_words, unicode_boundaries, overlap_strategy, eligible) in cases {
+      let options = TextSearchOptions {
+        all_literal: true,
+        whole_words,
+        unicode_boundaries,
+        overlap_strategy,
+        ..TextSearchOptions::default()
+      };
+      let search = TextSearch::new(
+        vec![PatternEntry::from("a"), PatternEntry::from("a b")],
+        options,
+      )?;
+      assert_eq!(
+        literal_fast_path_slot(&search.engines, overlap_strategy).is_some(),
+        eligible
+      );
+    }
+    Ok(())
+  }
 
   #[test]
   fn weighted_scheduler_balances_adjacent_expensive_jobs() {

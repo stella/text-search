@@ -38,8 +38,9 @@ describe("TextSearch", () => {
 
   test("single literal engine matches global selection on a generated corpus", () => {
     const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
-    const haystack = Array.from({ length: 40 }, (_, index) =>
-      `${"a".repeat((index * 7) % 31)}b`,
+    const haystack = Array.from(
+      { length: 40 },
+      (_, index) => `${"a".repeat((index * 7) % 31)}b`,
     ).join("");
     const direct = new TextSearch(patterns, { allLiteral: true });
     const globallySelected = new TextSearch([...patterns, /z+/], { allLiteral: false });
@@ -61,12 +62,41 @@ describe("TextSearch", () => {
       throw new Error("overlapping iterator should not run");
     };
 
-    expect(search.findIter("aaa").map(({ name }) => name)).toEqual([
-      "letter",
-      "letter",
-      "letter",
-    ]);
+    expect(search.findIter("aaa").map(({ name }) => name)).toEqual(["letter", "letter", "letter"]);
     expect(nativeCalls).toBe(1);
+  });
+
+  test("eligible replaceAll uses the native literal iterator", () => {
+    const search = new TextSearch(["a", "aa"], { allLiteral: true });
+    const engine = Reflect.get(search, "engines")[0];
+    const ac = engine.ac;
+    let nativeCalls = 0;
+    const nativeFindIter = ac.findIter.bind(ac);
+    ac.findIter = (haystack: string) => {
+      nativeCalls += 1;
+      return nativeFindIter(haystack);
+    };
+    ac.findOverlappingIter = () => {
+      throw new Error("overlapping iterator should not run");
+    };
+
+    expect(search.replaceAll("aaa", ["A", "AA"])).toBe("AAA");
+    expect(nativeCalls).toBe(1);
+  });
+
+  test("eligible replaceAll matches global selection on a generated corpus", () => {
+    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const replacements = patterns.map((_, index) => `[${index}]`);
+    const haystack = Array.from(
+      { length: 40 },
+      (_, index) => `${"a".repeat((index * 7) % 31)}b`,
+    ).join("");
+    const direct = new TextSearch(patterns, { allLiteral: true });
+    const globallySelected = new TextSearch([...patterns, /z+/]);
+
+    expect(direct.replaceAll(haystack, replacements)).toBe(
+      globallySelected.replaceAll(haystack, [...replacements, "unused"]),
+    );
   });
 
   test("duplicate empty literals select the lowest pattern index", () => {
@@ -78,19 +108,50 @@ describe("TextSearch", () => {
       { pattern: "", literal: true, name: "first" },
       { pattern: "", literal: true, name: "second" },
     ]);
-    expect(named.findIter("")).toEqual([
-      { pattern: 0, start: 0, end: 0, text: "", name: "first" },
-    ]);
+    expect(named.findIter("")).toEqual([{ pattern: 0, start: 0, end: 0, text: "", name: "first" }]);
     expect(named.replaceAll("", ["first", "second"])).toBe("first");
   });
 
   test("ASCII whole-word filtering precedes longest selection", () => {
-    const search = new TextSearch(["a", "aa"], {
+    const search = new TextSearch(["a", "a b"], {
       allLiteral: true,
       wholeWords: true,
       unicodeBoundaries: false,
     });
-    expect(search.findIter("aa").map(({ text }) => text)).toEqual(["aa"]);
+    expect(search.findIter("a bc").map(({ text }) => text)).toEqual(["a"]);
+  });
+
+  test("literal fast-path eligibility follows the shared option table", () => {
+    const cases = [
+      { options: { allLiteral: true }, eligible: true },
+      { options: { allLiteral: true, wholeWords: true }, eligible: true },
+      {
+        options: { allLiteral: true, wholeWords: true, unicodeBoundaries: false },
+        eligible: false,
+      },
+      { options: { allLiteral: true, overlapStrategy: "all" as const }, eligible: false },
+    ];
+
+    for (const { options, eligible } of cases) {
+      const search = new TextSearch(["a", "a b"], options);
+      const ac = Reflect.get(search, "engines")[0].ac;
+      let nativeCalls = 0;
+      let overlappingCalls = 0;
+      const nativeFindIter = ac.findIter.bind(ac);
+      const overlappingFindIter = ac.findOverlappingIter.bind(ac);
+      ac.findIter = (haystack: string) => {
+        nativeCalls += 1;
+        return nativeFindIter(haystack);
+      };
+      ac.findOverlappingIter = (haystack: string) => {
+        overlappingCalls += 1;
+        return overlappingFindIter(haystack);
+      };
+
+      search.findIter("a bc");
+      expect(nativeCalls > 0).toBe(eligible);
+      expect(overlappingCalls > 0).toBe(!eligible);
+    }
   });
 
   test("selects literal candidates globally across engine routes", () => {
