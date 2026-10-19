@@ -85,6 +85,64 @@ Large alternation-heavy regexes are isolated into
 their own RegexSet instance so they do not poison
 the shared DFA for simpler patterns.
 
+## Entity candidate index
+
+`EntityIndexBuilder` and `EntityIndex` provide candidate retrieval over
+caller-normalized tokens and aliases. They are exported by both entry points.
+The current dependency uses a temporary typed stub: construction and
+deserialization throw `EntityIndex requires @stll/fuzzy-search >= 1.2.0`.
+The native and WASM entity engines will be connected with the 1.2.0 dependency
+update.
+
+```ts
+import { EntityIndexBuilder, EntityIndex } from "@stll/text-search";
+
+const builder = new EntityIndexBuilder({
+  forms: 1,
+  budget: { byLength: [0, 0, 0, 0, 1, 1, 2], basis: "shorter" },
+  initialWeight: 1,
+  initialSimilarity: 0.8,
+});
+const id = builder.intern(0, "example");
+builder.addAlias({
+  entryId: 0,
+  entityGroup: 0,
+  quality: 1,
+  forms: [
+    {
+      form: 0,
+      tokens: [{ id, weight: 1, minimumWeight: 1 }],
+      joins: [],
+      minimumTotal: 1,
+    },
+  ],
+});
+const index = builder.finish([new Float64Array([1])]);
+const restored = EntityIndex.fromBytes(index.toBytes());
+const result = restored.search(
+  {
+    tokens: [{ form: 0, text: "example", weight: 1 }],
+    units: [{ form: 0, text: "example", positions: [0] }],
+  },
+  { cutoff: 0.8, boostProduct: 1, maxCost: restored.workCap },
+);
+```
+
+`finishAsync(weights)` builds on the native worker pool.
+`finishSteps(weights, maxUnits)` returns a generator that yields between bounded
+construction steps and returns the completed index. Finishing consumes the
+builder. Token weights are supplied as one `Float64Array` per spelling form.
+
+`boostProduct` is the product of `(1 - boost)` across active score boosts;
+use `1` without boosts. Search conservatively inverts these boosts before
+retrieval. Results contain packed `matchKeys` (unit, form, token ID triples),
+aligned `similarities`, `queryWeights`, surviving alias IDs, deterministic
+`cost` counters, and `exhausted`. Exhausted results may be incomplete. Callers
+perform final scoring and ranking.
+
+`nativeBytes` reports engine memory; `postingCount` reports the posting count.
+`workCap` is `250_000 + 8 * postingCount`.
+
 ## Rust core
 
 The repository also contains `stella-text-search-core`
@@ -159,7 +217,7 @@ cargo test --locked
 ```
 
 Run `bun run typecheck` to check types with `bun check --no-pretty --all --project=tsconfig.json`.
-Run `bun run check:typecheck-parity` to compare repository diagnostics and seeded diagnostic classes with TypeScript; CI runs the ordinary typecheck for code changes and selects parity when the shared toolchain detector reports changed or unreadable history.
+Run `bun run check:typecheck-parity` to compare repository diagnostics and seeded diagnostic classes with TypeScript; CI runs the ordinary typecheck for code changes, while the dispatch-only Typecheck proofs workflow runs parity.
 Editors continue to use the TypeScript language service because Bun has no language server.
 The `typescript` dependency also supports declaration generation through tsdown.
 

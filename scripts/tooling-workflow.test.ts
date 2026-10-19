@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("runs parity on shared detector changes and preserves domain checks", () => {
+test("preserves shared detector changes and domain checks", () => {
   const workflow = read(".github/workflows/ci.yml");
   expect(workflow).toContain('stll-toolchain-changed --since "$BASE_REF"');
   expect(workflow).toContain("fetch-depth: 0");
@@ -16,7 +16,7 @@ test("runs parity on shared detector changes and preserves domain checks", () =>
   expect(workflow).toContain(
     "steps.filter.outputs.provenance == 'true' || steps.toolchain.outputs.changed == 'true'",
   );
-  expect(workflow).toContain("if: needs.check-changes.outputs.toolchain-changed == 'true'");
+  expect(workflow).not.toContain("bun run check:typecheck-parity");
   const domain = workflow.split("            code:").at(1)?.split("            provenance:").at(0);
   expect(domain).toContain("'crates/**'");
   expect(domain).toContain("'src/**'");
@@ -43,4 +43,26 @@ test("pins ordinary runtimes and bounds the Hawk compiler exception", () => {
     tracking: "https://github.com/stella/tooling/issues/99",
     expires: "2026-11-11",
   });
+});
+
+test("runs parity only through the dispatch-only proofs workflow", () => {
+  const workflow = Bun.YAML.parse(read(".github/workflows/typecheck-proofs.yml"));
+  expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
+  expect(workflow.permissions).toEqual({ contents: "read" });
+  const steps = workflow.jobs["typecheck-parity"].steps;
+  expect(
+    steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@")).with[
+      "persist-credentials"
+    ],
+  ).toBe(false);
+  expect(steps.map((step: { run?: string }) => step.run).filter(Boolean)).toEqual([
+    "bun install --frozen-lockfile",
+    "bun run check:toolchain",
+    "bun run check:typecheck-parity",
+  ]);
+  const parity = steps.find(
+    (step: { run?: string }) => step.run === "bun run check:typecheck-parity",
+  );
+  expect(parity).toBeDefined();
+  expect(parity.if).toBeUndefined();
 });
