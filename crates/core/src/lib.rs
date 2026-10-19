@@ -4397,6 +4397,9 @@ fn extend_triple_matches(
 
   let mut matches = Vec::with_capacity(chunks.len());
   for &[local_pattern, start, end] in chunks {
+    if start == end && !haystack.is_char_boundary(byte_index(start)) {
+      continue;
+    }
     let (pattern, name) = remap_pattern(remap, local_pattern)?;
     // Engines return UTF-8 byte offsets directly, so no conversion is needed.
     matches.push(Match {

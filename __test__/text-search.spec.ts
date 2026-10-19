@@ -140,6 +140,44 @@ describe("TextSearch", () => {
     ]);
   });
 
+  test("empty literals on non-ASCII haystacks stay on character boundaries", () => {
+    for (const wholeWords of [false, true]) {
+      const expected = wholeWords
+        ? [
+            { pattern: 0, start: 0, end: 0, text: "" },
+            { pattern: 0, start: 2, end: 2, text: "" },
+          ]
+        : [
+            { pattern: 0, start: 0, end: 0, text: "" },
+            { pattern: 0, start: 1, end: 1, text: "" },
+            { pattern: 0, start: 2, end: 2, text: "" },
+          ];
+      const search = new TextSearch([{ pattern: "", literal: true }, /Z/], { wholeWords });
+      expect(search.findIter("éa")).toEqual(expected);
+      expect(search.replaceAll("éa", ["E", "Z"])).toBe(wholeWords ? "EéaE" : "EéEaE");
+
+      const overlap = new TextSearch([{ pattern: "", literal: true }, /Z/], {
+        wholeWords,
+        overlapStrategy: "all",
+      });
+      expect(overlap.findIter("éa")).toEqual(expected);
+    }
+  });
+
+  test("non-ASCII empty-literal regression does not abort its process", () => {
+    const child = Bun.spawnSync([
+      process.execPath,
+      "-e",
+      `import { TextSearch } from "./src/index.ts";
+       const matches = new TextSearch(
+         [{ pattern: "", literal: true }, /Z/],
+         { wholeWords: true },
+       ).findIter("éa");
+       if (matches.some(({ start, end }) => start > 2 || end > 2)) process.exit(2);`,
+    ]);
+    expect(child.exitCode).toBe(0);
+  });
+
   test("ASCII whole-word filtering precedes longest selection", () => {
     const search = new TextSearch(["a", "a b"], {
       allLiteral: true,
@@ -163,7 +201,8 @@ describe("TextSearch", () => {
 
     for (const { options, eligible, patterns = ["a", "a b"] } of cases) {
       const search = new TextSearch(patterns, options);
-      const ac = Reflect.get(search, "engines")[0].ac;
+      const slot = Reflect.get(search, "engines")[0];
+      const ac = slot.candidateAc ?? slot.ac;
       let nativeCalls = 0;
       let overlappingCalls = 0;
       const nativeFindIter = ac.findIter.bind(ac);

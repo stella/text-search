@@ -43,6 +43,11 @@ type AcSlot = {
   patternCount?: number;
   requiresOverlapSelection: boolean;
   containsEmptyLiteral: boolean;
+  candidateAc?: OverlapEngine;
+  candidatePatternMap: number[];
+  emptyPattern?: number;
+  emptyWholeWords: boolean;
+  emptyUnicodeBoundaries: boolean;
 };
 
 type SplitAcSlot = {
@@ -690,6 +695,19 @@ function buildAcEngine(
     caseInsensitive: options.caseInsensitive,
     matchKind: "leftmost-longest",
   });
+  const candidatePatterns = literals.filter((literal) => literal.length > 0);
+  const candidatePatternMap = literals.flatMap((literal, index) =>
+    literal.length > 0 ? [index] : [],
+  );
+  const candidateAc =
+    candidatePatterns.length > 0
+      ? (new AhoCorasick(candidatePatterns, {
+          wholeWords: options.wholeWords,
+          unicodeBoundaries: options.unicodeBoundaries,
+          caseInsensitive: options.caseInsensitive,
+          matchKind: "leftmost-longest",
+        }) as OverlapEngine)
+      : undefined;
 
   return {
     type: "ac",
@@ -699,6 +717,11 @@ function buildAcEngine(
     patternCount: literals.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
     containsEmptyLiteral: literals.includes(""),
+    candidateAc,
+    candidatePatternMap,
+    emptyPattern: literals.findIndex((literal) => literal.length === 0),
+    emptyWholeWords: options.wholeWords,
+    emptyUnicodeBoundaries: options.unicodeBoundaries,
   };
 }
 
@@ -755,6 +778,21 @@ function buildIdentityAcEngine(
     patternCount: patterns.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
     containsEmptyLiteral: patterns.includes(""),
+    candidateAc: patterns.includes("")
+      ? (new AhoCorasick(
+          patterns.filter((pattern) => pattern.length > 0),
+          {
+            wholeWords: options.wholeWords,
+            unicodeBoundaries: options.unicodeBoundaries,
+            caseInsensitive: options.caseInsensitive,
+            matchKind: "leftmost-longest",
+          },
+        ) as OverlapEngine)
+      : undefined,
+    candidatePatternMap: patterns.flatMap((pattern, index) => (pattern.length > 0 ? [index] : [])),
+    emptyPattern: patterns.findIndex((pattern) => pattern.length === 0),
+    emptyWholeWords: options.wholeWords,
+    emptyUnicodeBoundaries: options.unicodeBoundaries,
   };
 }
 
@@ -854,9 +892,47 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
  * fuzzy engines expose only their native non-overlapping iterators. */
 function engineFindCandidates(engine: EngineSlot, haystack: string): Match[] {
   if (engine.type === "ac") {
-    return engine.ac.findOverlappingIter(haystack);
+    if (!engine.containsEmptyLiteral) {
+      return engine.ac.findOverlappingIter(haystack);
+    }
+
+    const matches = engine.candidateAc?.findOverlappingIter(haystack) ?? [];
+    for (const match of matches) {
+      const originalPattern = engine.candidatePatternMap[match.pattern];
+      if (originalPattern === undefined) {
+        throw new Error("Literal candidate pattern is out of range");
+      }
+      match.pattern = originalPattern;
+    }
+    const emptyPattern = engine.emptyPattern;
+    if (emptyPattern !== undefined && emptyPattern >= 0) {
+      for (let offset = 0; offset <= haystack.length;) {
+        if (
+          !engine.emptyWholeWords ||
+          isEmptyWholeWordBoundary(haystack, offset, engine.emptyUnicodeBoundaries)
+        ) {
+          matches.push({ pattern: emptyPattern, start: offset, end: offset, text: "" });
+        }
+        if (offset === haystack.length) break;
+        const codePoint = haystack.codePointAt(offset);
+        offset += codePoint !== undefined && codePoint > 0xffff ? 2 : 1;
+      }
+    }
+    return matches;
   }
   return engineFindIter(engine, haystack);
+}
+
+function isEmptyWholeWordBoundary(
+  haystack: string,
+  offset: number,
+  unicodeBoundaries: boolean,
+): boolean {
+  if (offset === 0 || offset === haystack.length) return true;
+  const wordPattern = unicodeBoundaries ? /^[\p{L}\p{N}_]$/u : /^[A-Za-z0-9_]$/;
+  const before = String.fromCodePoint(haystack.codePointAt(offset - 1) ?? 0);
+  const after = String.fromCodePoint(haystack.codePointAt(offset) ?? 0);
+  return wordPattern.test(before) !== wordPattern.test(after);
 }
 
 function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {

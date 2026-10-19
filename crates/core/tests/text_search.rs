@@ -4,6 +4,7 @@
   clippy::unwrap_used
 )]
 
+use proptest::strategy::Just;
 use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
   EngineKind, Error, FuzzyDistance, FuzzyMetric, FuzzyPattern, LiteralPattern,
@@ -875,7 +876,7 @@ proptest::proptest! {
   #[test]
   fn mixed_artifact_grouping_matches_single_pattern_reference(
     tokens in proptest::collection::vec(0_u8..8, 0..128),
-    overlap_all in proptest::bool::ANY,
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
   ) {
     let patterns = (0..8)
       .map(|index| {
@@ -1270,6 +1271,105 @@ fn empty_literals_use_global_selection_on_every_literal_route() {
       .collect::<Vec<_>>(),
     vec![(0, 0, 0), (1, 0, 1), (0, 1, 1), (1, 1, 2), (0, 2, 2)]
   );
+}
+
+#[test]
+fn empty_literals_on_non_ascii_haystacks_stay_on_character_boundaries() {
+  for whole_words in [false, true] {
+    for overlap_strategy in [OverlapStrategy::Longest, OverlapStrategy::All] {
+      let search = TextSearch::new(
+        vec![
+          PatternEntry::from(""),
+          PatternEntry::Regex(RegexPattern::new("Z")),
+        ],
+        TextSearchOptions {
+          whole_words,
+          overlap_strategy,
+          ..TextSearchOptions::default()
+        },
+      )
+      .unwrap();
+      let matches = search.find_iter("éa").unwrap();
+      let expected = if whole_words {
+        vec![(0, 0, 0), (0, 3, 3)]
+      } else {
+        vec![(0, 0, 0), (0, 2, 2), (0, 3, 3)]
+      };
+      assert_eq!(
+        matches
+          .iter()
+          .map(|found| (found.pattern, found.start, found.end))
+          .collect::<Vec<_>>(),
+        expected
+      );
+      assert_eq!(
+        search
+          .replace_all("éa", &[String::from("E"), String::from("Z")])
+          .unwrap(),
+        if whole_words { "EéaE" } else { "EéEaE" }
+      );
+    }
+  }
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(64))]
+
+  #[test]
+  fn empty_literal_offsets_are_boundaries_and_routes_agree(
+    characters in proptest::collection::vec(
+      proptest::prop_oneof![
+        proptest::strategy::Just('a'),
+        proptest::strategy::Just('é'),
+        proptest::strategy::Just('界'),
+        proptest::strategy::Just('😀'),
+      ],
+      1..96,
+    ),
+    whole_words in proptest::prop_oneof![
+      proptest::strategy::Just(false),
+      proptest::strategy::Just(true),
+    ],
+    overlap_all in proptest::prop_oneof![
+      proptest::strategy::Just(false),
+      proptest::strategy::Just(true),
+    ],
+  ) {
+    let haystack = characters.into_iter().collect::<String>();
+    let overlap_strategy = if overlap_all {
+      OverlapStrategy::All
+    } else {
+      OverlapStrategy::Longest
+    };
+    let options = TextSearchOptions {
+      whole_words,
+      overlap_strategy,
+      ..TextSearchOptions::default()
+    };
+    let direct = TextSearch::new(
+      vec![
+        PatternEntry::from(""),
+        PatternEntry::Regex(RegexPattern::new("q")),
+      ],
+      options,
+    ).unwrap();
+    let routed = TextSearch::new(
+      vec![
+        PatternEntry::from(""),
+        PatternEntry::Regex(RegexPattern::new("q")),
+        PatternEntry::Regex(RegexPattern::new("r")),
+      ],
+      options,
+    ).unwrap();
+    let direct_matches = direct.find_iter(&haystack).unwrap();
+    let routed_matches = routed.find_iter(&haystack).unwrap();
+
+    proptest::prop_assert_eq!(&direct_matches, &routed_matches);
+    for found in direct_matches {
+      proptest::prop_assert!(haystack.is_char_boundary(usize::try_from(found.start).unwrap()));
+      proptest::prop_assert!(haystack.is_char_boundary(usize::try_from(found.end).unwrap()));
+    }
+  }
 }
 
 #[test]
