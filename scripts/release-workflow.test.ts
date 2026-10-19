@@ -50,6 +50,21 @@ test("delegates synchronized publishing with the guarded release contract", () =
   expect(finalize).not.toContain("update-changelog");
 });
 
+test("forwards release app credentials to every finalizer", () => {
+  const jobs = workflow.matchAll(/^  ([A-Za-z_][A-Za-z0-9_-]*):\n/gm);
+  const finalizers = [...jobs]
+    .map(([, name]) => readJob(name))
+    .filter((job) => job.includes("npm-version-finalize.yml@"));
+
+  expect(finalizers.length).toBeGreaterThan(0);
+  for (const finalizer of finalizers) {
+    expect(finalizer).toContain("RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}");
+    expect(finalizer).toContain(
+      "RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
+    );
+  }
+});
+
 test("uses the finalizer pin required by the release policy caller", () => {
   const policy = readFileSync(
     new URL("../.github/workflows/release-policy.yml", import.meta.url),
