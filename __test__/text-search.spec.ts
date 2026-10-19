@@ -213,40 +213,56 @@ describe("TextSearch", () => {
 
   test("forced literal routes have identical randomized results", () => {
     let state = 0x169;
-    const random = () => {
+    const randomInt = (upperBound: number) => {
       state = (state * 1_664_525 + 1_013_904_223) >>> 0;
-      return state;
+      return (state >>> 8) % upperBound;
     };
     const atoms = ["", "", "a", "ab", "é", "𐐀", "_", " "];
     const haystackAtoms = ["a", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
+    const optionCombinations = [
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true },
+    ] as const;
+    const expectedCombinationCount = 8;
+    const casesPerCombination = 15;
+    const exercisedCombinations = new Map<string, number>();
 
-    for (let iteration = 0; iteration < 120; iteration += 1) {
-      const patterns = Array.from(
-        { length: 2 + (random() % 7) },
-        () => atoms[random() % atoms.length],
-      );
-      const haystack = Array.from(
-        { length: random() % 14 },
-        () => haystackAtoms[random() % haystackAtoms.length],
-      ).join("");
-      const options = {
-        allLiteral: true,
-        overlapStrategy: random() % 2 === 0 ? ("longest" as const) : ("all" as const),
-        wholeWords: random() % 2 === 0,
-        unicodeBoundaries: random() % 2 === 0,
-      };
-      const replacements = patterns.map((_, index) => `<${index}>`);
+    for (const options of optionCombinations) {
+      const combination = `${options.overlapStrategy}/${options.wholeWords}/${options.unicodeBoundaries}`;
+      for (let iteration = 0; iteration < casesPerCombination; iteration += 1) {
+        const patterns = Array.from(
+          { length: 2 + randomInt(7) },
+          () => atoms[randomInt(atoms.length)],
+        );
+        const haystack = Array.from(
+          { length: randomInt(14) },
+          () => haystackAtoms[randomInt(haystackAtoms.length)],
+        ).join("");
+        const replacements = patterns.map((_, index) => `<${index}>`);
 
-      textSearchTestHooks.forceIdentityAcRoute("ordinary");
-      const ordinary = new TextSearch(patterns, options);
-      textSearchTestHooks.setIdentityAcChunkSize(2);
-      textSearchTestHooks.forceIdentityAcRoute("split");
-      const split = new TextSearch(patterns, options);
+        textSearchTestHooks.forceIdentityAcRoute("ordinary");
+        const ordinary = new TextSearch(patterns, options);
+        textSearchTestHooks.setIdentityAcChunkSize(2);
+        textSearchTestHooks.forceIdentityAcRoute("split");
+        const split = new TextSearch(patterns, options);
 
-      expect(split.findIter(haystack)).toEqual(ordinary.findIter(haystack));
-      expect(split.replaceAll(haystack, replacements)).toBe(
-        ordinary.replaceAll(haystack, replacements),
-      );
+        expect(split.findIter(haystack)).toEqual(ordinary.findIter(haystack));
+        expect(split.replaceAll(haystack, replacements)).toBe(
+          ordinary.replaceAll(haystack, replacements),
+        );
+        exercisedCombinations.set(combination, (exercisedCombinations.get(combination) ?? 0) + 1);
+      }
+    }
+
+    expect(exercisedCombinations.size).toBe(expectedCombinationCount);
+    for (const count of exercisedCombinations.values()) {
+      expect(count).toBeGreaterThanOrEqual(casesPerCombination);
     }
   });
 
