@@ -17,6 +17,36 @@ const SPLIT_LITERAL_FIXTURE_CHUNK_SIZE: usize = 100_000;
 const SPLIT_LITERAL_FIXTURE_SIZE: usize = SPLIT_LITERAL_FIXTURE_CHUNK_SIZE + 1;
 const SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN: u32 = 100_000;
 
+// The merge behavior from main before equal non-empty spans were collapsed.
+fn main_merge_and_select(
+  mut matches: Vec<stella_text_search_core::Match>,
+) -> Vec<stella_text_search_core::Match> {
+  if matches.len() <= 1 {
+    return matches;
+  }
+  matches.sort_by(|left, right| {
+    left
+      .start
+      .cmp(&right.start)
+      .then_with(|| {
+        let left_len = left.end.saturating_sub(left.start);
+        let right_len = right.end.saturating_sub(right.start);
+        right_len.cmp(&left_len)
+      })
+      .then_with(|| left.pattern.cmp(&right.pattern))
+  });
+
+  let mut selected = Vec::new();
+  let mut last_end = 0;
+  for found in matches {
+    if found.start >= last_end {
+      last_end = found.end;
+      selected.push(found);
+    }
+  }
+  selected
+}
+
 #[test]
 fn options_builder_preserves_defaults_and_overrides() {
   assert_eq!(
@@ -1422,12 +1452,14 @@ proptest::proptest! {
     fuzzy in proptest::prop_oneof![Just(false), Just(true)],
     overlap_all in proptest::prop_oneof![Just(false), Just(true)],
     whole_words in proptest::prop_oneof![Just(false), Just(true)],
+    pattern_kind in 0_u8..4,
   ) {
     let haystack = characters.into_iter().collect::<String>();
-    let pattern = if fuzzy {
-      PatternEntry::Fuzzy(FuzzyPattern::new("aaa", FuzzyDistance::Exact(1)))
-    } else {
-      PatternEntry::Regex(RegexPattern::new("a+"))
+    let pattern = match (fuzzy, pattern_kind) {
+      (true, _) => PatternEntry::Fuzzy(FuzzyPattern::new("aaa", FuzzyDistance::Exact(1))),
+      (false, 0) => PatternEntry::Regex(RegexPattern::new("a+")),
+      (false, 1 | 2) => PatternEntry::Regex(RegexPattern::new("a*")),
+      (false, _) => PatternEntry::Regex(RegexPattern::new("(?i)b*")),
     };
     let options = TextSearchOptions {
       overlap_strategy: if overlap_all {
@@ -1440,13 +1472,65 @@ proptest::proptest! {
     };
     let direct = TextSearch::new(vec![pattern.clone()], options).unwrap();
     let routed = TextSearch::new(
-      vec![pattern, PatternEntry::Literal(LiteralPattern::new("never"))],
+      vec![pattern.clone(), PatternEntry::Literal(LiteralPattern::new("never"))],
       options,
     ).unwrap();
 
+    let candidates = TextSearch::new(
+      vec![pattern, PatternEntry::Literal(LiteralPattern::new("never"))],
+      TextSearchOptions { overlap_strategy: OverlapStrategy::All, ..options },
+    ).unwrap().find_iter(&haystack).unwrap();
+    let expected = if overlap_all { candidates } else { main_merge_and_select(candidates) };
+
     proptest::prop_assert_eq!(
-      direct.find_iter(&haystack).unwrap(),
-      routed.find_iter(&haystack).unwrap(),
+      &direct.find_iter(&haystack).unwrap(),
+      &expected,
+    );
+    proptest::prop_assert_eq!(
+      &routed.find_iter(&haystack).unwrap(),
+      &expected,
+    );
+  }
+}
+
+#[test]
+fn multiple_regex_routes_preserve_main_zero_width_merge_behavior() {
+  let patterns = vec![
+    PatternEntry::Regex(RegexPattern::new("a*")),
+    PatternEntry::Regex(RegexPattern::new("(?i)b*")),
+    PatternEntry::Literal(LiteralPattern::new("never")),
+  ];
+
+  for (haystack, expected) in [
+    ("", vec![(0, 0, 0), (1, 0, 0)]),
+    ("ab", vec![(0, 0, 1), (1, 1, 2), (0, 2, 2)]),
+  ] {
+    let options = TextSearchOptions {
+      regex_chunk_size: Some(1),
+      ..TextSearchOptions::default()
+    };
+    let candidates = TextSearch::new(
+      patterns.clone(),
+      TextSearchOptions {
+        overlap_strategy: OverlapStrategy::All,
+        ..options
+      },
+    )
+    .unwrap()
+    .find_iter(haystack)
+    .unwrap();
+    let reference = main_merge_and_select(candidates);
+    let actual = TextSearch::new(patterns.clone(), options)
+      .unwrap()
+      .find_iter(haystack)
+      .unwrap();
+    assert_eq!(actual, reference);
+    assert_eq!(
+      actual
+        .iter()
+        .map(|found| (found.pattern, found.start, found.end))
+        .collect::<Vec<_>>(),
+      expected,
     );
   }
 }

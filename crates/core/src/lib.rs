@@ -4661,7 +4661,7 @@ fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
   let mut previous_span = None;
   for found in matches {
     let span = (found.start, found.end);
-    if previous_span == Some(span) {
+    if found.start != found.end && previous_span == Some(span) {
       continue;
     }
     previous_span = Some(span);

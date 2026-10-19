@@ -24,7 +24,7 @@ export function mergeAndSelect(matches: Match[]): Match[] {
   let previousSpan = { start: -1, end: -1 };
 
   for (const m of matches) {
-    if (m.start === previousSpan.start && m.end === previousSpan.end) {
+    if (m.start !== m.end && m.start === previousSpan.start && m.end === previousSpan.end) {
       continue;
     }
     previousSpan.start = m.start;

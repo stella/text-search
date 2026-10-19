@@ -6,6 +6,33 @@ import { textSearchTestHooks } from "../src/text-search";
 import type { Match } from "../src/types";
 
 const registeredEngines = getEngines();
+// The merge behavior from main before equal non-empty spans were collapsed.
+const mainMergeAndSelect = (matches: Match[]): Match[] => {
+  if (matches.length <= 1) return matches;
+  matches.sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    return b.end - a.end || a.pattern - b.pattern;
+  });
+  const selected: Match[] = [];
+  let lastEnd = 0;
+  for (const match of matches) {
+    if (match.start >= lastEnd) {
+      selected.push(match);
+      lastEnd = match.end;
+    }
+  }
+  return selected;
+};
+
+const publicFields = ({ pattern, start, end, text, name, distance }: Match) => ({
+  pattern,
+  start,
+  end,
+  text,
+  name,
+  distance,
+});
+
 afterEach(() => {
   initEngines(registeredEngines);
   textSearchTestHooks.reset();
@@ -104,21 +131,43 @@ describe("TextSearch", () => {
       const haystack = Array.from({ length: random() % 40 }, () =>
         random() % 3 === 0 ? "b" : "a",
       ).join("");
-      for (const pattern of [/a+/, { pattern: "aaa", distance: 1 }]) {
+      for (const pattern of [/a+/, /a*/, /b*/i, { pattern: "aaa", distance: 1 }]) {
         const direct = new TextSearch([pattern]);
         const routed = new TextSearch([pattern, { pattern: "never", literal: true }]);
-        const publicFields = ({ pattern: patternIndex, start, end, text, name, distance }: Match) => ({
-          pattern: patternIndex,
-          start,
-          end,
-          text,
-          name,
-          distance,
-        });
-        expect(direct.findIter(haystack).map(publicFields)).toEqual(
-          routed.findIter(haystack).map(publicFields),
-        );
+        const candidates = new TextSearch([pattern, { pattern: "never", literal: true }], {
+          overlapStrategy: "all",
+        }).findIter(haystack);
+        const expected = mainMergeAndSelect(candidates).map(publicFields);
+        expect(direct.findIter(haystack).map(publicFields)).toEqual(expected);
+        expect(routed.findIter(haystack).map(publicFields)).toEqual(expected);
       }
+    }
+  });
+
+  test("multiple regex routes preserve main's zero-width merge behavior", () => {
+    const patterns = [/a*/, /b*/i, { pattern: "never", literal: true }] as const;
+    const expectedByHaystack = {
+      "": [
+        { pattern: 0, start: 0, end: 0 },
+        { pattern: 1, start: 0, end: 0 },
+      ],
+      ab: [
+        { pattern: 0, start: 0, end: 1 },
+        { pattern: 1, start: 1, end: 2 },
+        { pattern: 0, start: 2, end: 2 },
+      ],
+    };
+    for (const haystack of ["", "ab"] as const) {
+      const candidates = new TextSearch(patterns, {
+        overlapStrategy: "all",
+        regexChunkSize: 1,
+      }).findIter(haystack);
+      const reference = mainMergeAndSelect(candidates);
+      const actual = new TextSearch(patterns, { regexChunkSize: 1 }).findIter(haystack);
+      expect(actual).toEqual(reference);
+      expect(actual.map(({ pattern, start, end }) => ({ pattern, start, end }))).toEqual(
+        expectedByHaystack[haystack],
+      );
     }
   });
 
