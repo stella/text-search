@@ -1701,6 +1701,25 @@ fn lazy_regex_prefilter_skips_regex_build_when_prefilter_misses() {
 }
 
 #[test]
+fn is_match_short_circuits_multi_engine_overlap_all_searches() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("needle"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::from("needle"), PatternEntry::Regex(regex)],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert!(search.is_match("needle").unwrap());
+  assert!(search.find_iter("needle").is_err());
+}
+
+#[test]
 fn warm_lazy_regex_initializes_without_prefilter_hit() {
   let mut regex = RegexPattern::new("(");
   regex.lazy = true;

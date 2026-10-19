@@ -372,6 +372,45 @@ describe("TextSearch", () => {
     expect(search.isMatch("a bc")).toBe(true);
   });
 
+  test("isMatch short-circuits without match iteration", () => {
+    for (const options of [{}, { overlapStrategy: "all" as const }]) {
+      const search = new TextSearch(["alpha", /omega/], options);
+      const [literal, regex] = Reflect.get(search, "engines");
+      literal.ac.findIter = () => {
+        throw new Error("native iterator should not run");
+      };
+      literal.ac.findOverlappingIter = () => {
+        throw new Error("overlapping iterator should not run");
+      };
+      regex.rs.isMatch = () => {
+        throw new Error("later engine should not run");
+      };
+
+      expect(search.isMatch("alpha")).toBe(true);
+    }
+  });
+
+  test("ASCII whole-word isMatch stops at the first valid candidate", () => {
+    const search = new TextSearch(["alpha", "beta"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+    const { ac } = Reflect.get(search, "engines")[0];
+    let candidatesVisited = 0;
+    const candidates = ac.findOverlappingIter("alpha beta");
+    ac.findOverlappingIter = () =>
+      new Proxy(candidates, {
+        get(target, property, receiver) {
+          if (property === "0" || property === "1") candidatesVisited += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      });
+
+    expect(search.isMatch("alpha beta")).toBe(true);
+    expect(candidatesVisited).toBe(1);
+  });
+
   test("literal fast-path eligibility follows the shared option table", () => {
     const cases = [
       { options: { allLiteral: true }, eligible: true },

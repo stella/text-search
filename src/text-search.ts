@@ -269,9 +269,6 @@ export class TextSearch {
 
   /** Returns true if any pattern matches. */
   isMatch(haystack: string): boolean {
-    if (!isZeroOverheadFindEligible(this.engines, this.overlapAll)) {
-      return this.findIter(haystack).length > 0;
-    }
     for (const engine of this.engines) {
       if (engineIsMatch(engine, haystack)) {
         return true;
@@ -872,6 +869,9 @@ function buildFuzzyEngine(
 function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
   switch (engine.type) {
     case "ac":
+      if (engine.requiresOverlapSelection) {
+        return engine.ac.findOverlappingIter(haystack).some(() => true);
+      }
       return engine.ac.isMatch(haystack);
     case "split-ac":
       return engine.acs.some(({ ac }) => ac.isMatch(haystack));

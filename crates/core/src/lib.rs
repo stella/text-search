@@ -1501,11 +1501,6 @@ impl TextSearch {
   }
 
   pub fn is_match(&self, haystack: &str) -> Result<bool> {
-    if literal_fast_path_slot(&self.engines, self.overlap_strategy).is_none()
-      && zero_overhead_non_literal_slot(&self.engines).is_none()
-    {
-      return Ok(!self.find_iter(haystack)?.is_empty());
-    }
     for engine in &self.engines {
       if engine_is_match(engine, haystack)? {
         return Ok(true);
