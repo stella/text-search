@@ -45,7 +45,7 @@ type AcSlot = {
   containsEmptyLiteral: boolean;
   candidateAc?: OverlapEngine;
   candidatePatternMap: number[];
-  emptyPattern?: number;
+  emptyPatterns: number[];
   emptyWholeWords: boolean;
   emptyUnicodeBoundaries: boolean;
 };
@@ -334,7 +334,7 @@ export class TextSearch {
     // Always use non-overlapping matches for
     // replacement, even if overlapStrategy is "all".
     let matches: Match[];
-    if (isLiteralFastPathEligible(this.engines, this.overlapAll)) {
+    if (isLiteralFastPathEligible(this.engines, false)) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Literal fast path requires a single engine");
@@ -695,12 +695,13 @@ function buildAcEngine(
     caseInsensitive: options.caseInsensitive,
     matchKind: "leftmost-longest",
   });
+  const containsEmptyLiteral = literals.includes("");
   const candidatePatterns = literals.filter((literal) => literal.length > 0);
   const candidatePatternMap = literals.flatMap((literal, index) =>
     literal.length > 0 ? [index] : [],
   );
   const candidateAc =
-    candidatePatterns.length > 0
+    containsEmptyLiteral && candidatePatterns.length > 0
       ? (new AhoCorasick(candidatePatterns, {
           wholeWords: options.wholeWords,
           unicodeBoundaries: options.unicodeBoundaries,
@@ -716,10 +717,10 @@ function buildAcEngine(
     nameMap,
     patternCount: literals.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
-    containsEmptyLiteral: literals.includes(""),
-    candidateAc,
+    containsEmptyLiteral,
+    ...(candidateAc === undefined ? {} : { candidateAc }),
     candidatePatternMap,
-    emptyPattern: literals.findIndex((literal) => literal.length === 0),
+    emptyPatterns: literals.flatMap((literal, index) => (literal.length === 0 ? [index] : [])),
     emptyWholeWords: options.wholeWords,
     emptyUnicodeBoundaries: options.unicodeBoundaries,
   };
@@ -768,6 +769,18 @@ function buildIdentityAcEngine(
     caseInsensitive: options.caseInsensitive,
     matchKind: "leftmost-longest",
   });
+  const containsEmptyLiteral = patterns.includes("");
+  const candidateAc = containsEmptyLiteral
+    ? (new AhoCorasick(
+        patterns.filter((pattern) => pattern.length > 0),
+        {
+          wholeWords: options.wholeWords,
+          unicodeBoundaries: options.unicodeBoundaries,
+          caseInsensitive: options.caseInsensitive,
+          matchKind: "leftmost-longest",
+        },
+      ) as OverlapEngine)
+    : undefined;
 
   return {
     type: "ac",
@@ -777,20 +790,10 @@ function buildIdentityAcEngine(
     identityMap: true,
     patternCount: patterns.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
-    containsEmptyLiteral: patterns.includes(""),
-    candidateAc: patterns.includes("")
-      ? (new AhoCorasick(
-          patterns.filter((pattern) => pattern.length > 0),
-          {
-            wholeWords: options.wholeWords,
-            unicodeBoundaries: options.unicodeBoundaries,
-            caseInsensitive: options.caseInsensitive,
-            matchKind: "leftmost-longest",
-          },
-        ) as OverlapEngine)
-      : undefined,
+    containsEmptyLiteral,
+    ...(candidateAc === undefined ? {} : { candidateAc }),
     candidatePatternMap: patterns.flatMap((pattern, index) => (pattern.length > 0 ? [index] : [])),
-    emptyPattern: patterns.findIndex((pattern) => pattern.length === 0),
+    emptyPatterns: patterns.flatMap((pattern, index) => (pattern.length === 0 ? [index] : [])),
     emptyWholeWords: options.wholeWords,
     emptyUnicodeBoundaries: options.unicodeBoundaries,
   };
@@ -904,14 +907,15 @@ function engineFindCandidates(engine: EngineSlot, haystack: string): Match[] {
       }
       match.pattern = originalPattern;
     }
-    const emptyPattern = engine.emptyPattern;
-    if (emptyPattern !== undefined && emptyPattern >= 0) {
+    if (engine.emptyPatterns.length > 0) {
       for (let offset = 0; offset <= haystack.length;) {
         if (
           !engine.emptyWholeWords ||
           isEmptyWholeWordBoundary(haystack, offset, engine.emptyUnicodeBoundaries)
         ) {
-          matches.push({ pattern: emptyPattern, start: offset, end: offset, text: "" });
+          for (const pattern of engine.emptyPatterns) {
+            matches.push({ pattern, start: offset, end: offset, text: "" });
+          }
         }
         if (offset === haystack.length) break;
         const codePoint = haystack.codePointAt(offset);
@@ -930,9 +934,22 @@ function isEmptyWholeWordBoundary(
 ): boolean {
   if (offset === 0 || offset === haystack.length) return true;
   const wordPattern = unicodeBoundaries ? /^[\p{L}\p{N}_]$/u : /^[A-Za-z0-9_]$/;
-  const before = String.fromCodePoint(haystack.codePointAt(offset - 1) ?? 0);
-  const after = String.fromCodePoint(haystack.codePointAt(offset) ?? 0);
+  const before = codePointBefore(haystack, offset);
+  const after = codePointAfter(haystack, offset);
   return wordPattern.test(before) !== wordPattern.test(after);
+}
+
+function codePointBefore(value: string, offset: number): string {
+  const previous = value.codePointAt(offset - 1);
+  if (previous === undefined) return "";
+  const codePoint =
+    previous >= 0xdc00 && previous <= 0xdfff ? value.codePointAt(offset - 2) : previous;
+  return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
+}
+
+function codePointAfter(value: string, offset: number): string {
+  const codePoint = value.codePointAt(offset);
+  return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
 }
 
 function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
@@ -954,13 +971,16 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
 /** Stable public order for overlapStrategy "all": start, end, pattern. */
 function sortAllMatches(matches: Match[]): Match[] {
   matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
-  return matches.filter(
-    (match, index) =>
+  return matches.filter((match, index) => {
+    const previous = matches[index - 1];
+    return (
       match.start !== match.end ||
-      index === 0 ||
-      matches[index - 1]?.start !== match.start ||
-      matches[index - 1]?.end !== match.end,
-  );
+      previous === undefined ||
+      previous.start !== match.start ||
+      previous.end !== match.end ||
+      previous.pattern !== match.pattern
+    );
+  });
 }
 
 /**

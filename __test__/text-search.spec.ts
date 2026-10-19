@@ -1,6 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import { TextSearch } from "../src";
+import { getEngines, initEngines } from "../src/engines";
+
+const registeredEngines = getEngines();
+afterEach(() => initEngines(registeredEngines));
 
 describe("TextSearch", () => {
   test("basic matching", () => {
@@ -66,22 +70,39 @@ describe("TextSearch", () => {
     expect(nativeCalls).toBe(1);
   });
 
-  test("eligible replaceAll uses the native literal iterator", () => {
-    const search = new TextSearch(["a", "aa"], { allLiteral: true });
-    const engine = Reflect.get(search, "engines")[0];
-    const ac = engine.ac;
-    let nativeCalls = 0;
-    const nativeFindIter = ac.findIter.bind(ac);
-    ac.findIter = (haystack: string) => {
-      nativeCalls += 1;
-      return nativeFindIter(haystack);
-    };
-    ac.findOverlappingIter = () => {
-      throw new Error("overlapping iterator should not run");
-    };
+  test("eligible replaceAll uses the native literal iterator for every overlap strategy", () => {
+    for (const overlapStrategy of ["longest", "all"] as const) {
+      const search = new TextSearch(["a", "aa"], { allLiteral: true, overlapStrategy });
+      const engine = Reflect.get(search, "engines")[0];
+      const ac = engine.ac;
+      let nativeCalls = 0;
+      const nativeFindIter = ac.findIter.bind(ac);
+      ac.findIter = (haystack: string) => {
+        nativeCalls += 1;
+        return nativeFindIter(haystack);
+      };
+      ac.findOverlappingIter = () => {
+        throw new Error("overlapping iterator should not run");
+      };
 
-    expect(search.replaceAll("aaa", ["A", "AA"])).toBe("AAA");
-    expect(nativeCalls).toBe(1);
+      expect(search.replaceAll("aaa", ["A", "AA"])).toBe("AAA");
+      expect(nativeCalls).toBe(1);
+    }
+  });
+
+  test("literal groups without empty patterns build one automaton", () => {
+    let constructions = 0;
+    const NativeAhoCorasick = registeredEngines.AhoCorasick;
+    class CountingAhoCorasick extends NativeAhoCorasick {
+      constructor(...args: ConstructorParameters<typeof NativeAhoCorasick>) {
+        super(...args);
+        constructions += 1;
+      }
+    }
+    initEngines({ ...registeredEngines, AhoCorasick: CountingAhoCorasick });
+
+    new TextSearch([{ pattern: "alpha", literal: true }]);
+    expect(constructions).toBe(1);
   });
 
   test("eligible replaceAll matches global selection on a generated corpus", () => {
@@ -110,6 +131,28 @@ describe("TextSearch", () => {
     ]);
     expect(named.findIter("")).toEqual([{ pattern: 0, start: 0, end: 0, text: "", name: "first" }]);
     expect(named.replaceAll("", ["first", "second"])).toBe("first");
+  });
+
+  test('overlap "all" keeps every duplicate empty literal', () => {
+    expect(
+      new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" }).findIter(""),
+    ).toEqual([
+      { pattern: 0, start: 0, end: 0, text: "" },
+      { pattern: 1, start: 0, end: 0, text: "" },
+    ]);
+  });
+
+  test("Unicode whole-word empty literals do not split supplementary letters", () => {
+    const search = new TextSearch([""], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: true,
+      overlapStrategy: "all",
+    });
+    expect(search.findIter("𐐀a")).toEqual([
+      { pattern: 0, start: 0, end: 0, text: "" },
+      { pattern: 0, start: 3, end: 3, text: "" },
+    ]);
   });
 
   test("empty literals use global selection on every literal route", () => {
@@ -195,11 +238,20 @@ describe("TextSearch", () => {
         options: { allLiteral: true, wholeWords: true, unicodeBoundaries: false },
         eligible: false,
       },
-      { options: { allLiteral: true, overlapStrategy: "all" as const }, eligible: false },
+      {
+        options: { allLiteral: true, overlapStrategy: "all" as const },
+        eligible: false,
+        replacementEligible: true,
+      },
       { options: { allLiteral: true }, patterns: ["", "a"], eligible: false },
     ];
 
-    for (const { options, eligible, patterns = ["a", "a b"] } of cases) {
+    for (const {
+      options,
+      eligible,
+      replacementEligible = eligible,
+      patterns = ["a", "a b"],
+    } of cases) {
       const search = new TextSearch(patterns, options);
       const slot = Reflect.get(search, "engines")[0];
       const ac = slot.candidateAc ?? slot.ac;
@@ -219,6 +271,15 @@ describe("TextSearch", () => {
       search.findIter("a bc");
       expect(nativeCalls > 0).toBe(eligible);
       expect(overlappingCalls > 0).toBe(!eligible);
+
+      nativeCalls = 0;
+      overlappingCalls = 0;
+      search.replaceAll(
+        "a bc",
+        patterns.map(() => "x"),
+      );
+      expect(nativeCalls > 0).toBe(replacementEligible);
+      expect(overlappingCalls > 0).toBe(!replacementEligible);
     }
   });
 

@@ -1217,6 +1217,28 @@ fn duplicate_empty_literals_select_the_lowest_pattern_index() {
 }
 
 #[test]
+fn overlap_all_keeps_every_duplicate_empty_literal() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from(""), PatternEntry::from("")],
+    TextSearchOptions {
+      all_literal: true,
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  assert_eq!(
+    search
+      .find_iter("")
+      .unwrap()
+      .iter()
+      .map(|found| (found.pattern, found.start, found.end))
+      .collect::<Vec<_>>(),
+    vec![(0, 0, 0), (1, 0, 0)]
+  );
+}
+
+#[test]
 fn empty_literals_use_global_selection_on_every_literal_route() {
   let patterns = vec![PatternEntry::from(""), PatternEntry::from("a")];
   let direct = TextSearch::new(
@@ -1323,6 +1345,8 @@ proptest::proptest! {
         proptest::strategy::Just('é'),
         proptest::strategy::Just('界'),
         proptest::strategy::Just('😀'),
+        proptest::strategy::Just('𐐀'),
+        proptest::strategy::Just('🜁'),
       ],
       1..96,
     ),

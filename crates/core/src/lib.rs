@@ -719,6 +719,7 @@ struct LiteralSlot {
   identity_map: bool,
   requires_overlap_selection: bool,
   contains_empty_literal: bool,
+  empty_patterns: Vec<(u32, Option<String>)>,
 }
 
 struct SplitLiteralSlot {
@@ -1586,11 +1587,17 @@ impl TextSearch {
       });
     }
 
-    let mut matches = Vec::new();
-    for engine in &self.engines {
-      matches.extend(engine_find_iter(engine, haystack)?);
-    }
-    let matches = merge_and_select(matches);
+    let matches = if let Some(slot) =
+      literal_fast_path_slot(&self.engines, OverlapStrategy::Longest)
+    {
+      literal_find_iter(slot, haystack)?
+    } else {
+      let mut matches = Vec::new();
+      for engine in &self.engines {
+        matches.extend(engine_find_iter(engine, haystack)?);
+      }
+      merge_and_select(matches)
+    };
 
     let mut result = String::with_capacity(haystack.len());
     let mut last_byte = 0;
@@ -2286,6 +2293,12 @@ fn build_identity_literal_engine(
   }
 
   let contains_empty_literal = pattern_strings.iter().any(String::is_empty);
+  let empty_patterns = pattern_strings
+    .iter()
+    .enumerate()
+    .filter(|(_, pattern)| pattern.is_empty())
+    .map(|(index, _)| Ok((pattern_index(index)?, None)))
+    .collect::<Result<Vec<_>>>()?;
   Ok(EngineSlot::Literal(LiteralSlot {
     engine: build_aho(pattern_strings, options.into(), true, aho_mode)?,
     index_map: Vec::new(),
@@ -2294,6 +2307,7 @@ fn build_identity_literal_engine(
     requires_overlap_selection: options.whole_words
       && !options.unicode_boundaries,
     contains_empty_literal,
+    empty_patterns,
   }))
 }
 
@@ -2360,6 +2374,7 @@ fn load_identity_literal_engine(
       // Prepared all-literal artifacts do not retain their source strings.
       // Conservatively keep them on the globally selected route.
       contains_empty_literal: true,
+      empty_patterns: Vec::new(),
     },
     pattern_count,
   ))
@@ -2380,6 +2395,12 @@ fn build_literal_engine(
   }
 
   let contains_empty_literal = values.iter().any(String::is_empty);
+  let empty_patterns = values
+    .iter()
+    .zip(index_map.iter().copied().zip(name_map.iter().cloned()))
+    .filter(|(pattern, _)| pattern.is_empty())
+    .map(|(_, metadata)| metadata)
+    .collect();
   Ok(LiteralSlot {
     engine: build_aho(values, options, false, aho_mode)?,
     index_map,
@@ -2388,6 +2409,7 @@ fn build_literal_engine(
     requires_overlap_selection: options.whole_words
       && !options.unicode_boundaries,
     contains_empty_literal,
+    empty_patterns,
   })
 }
 
@@ -3308,7 +3330,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
         .engine
         .find_overlapping_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-      extend_triple_matches(
+      let mut matches = extend_triple_matches(
         SearchEngine::Literal,
         haystack,
         &packed,
@@ -3317,7 +3339,23 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
           name_map: &slot.name_map,
           identity: slot.identity_map,
         },
-      )
+      )?;
+      if slot.empty_patterns.len() > 1 {
+        let empty_matches = matches
+          .iter()
+          .filter(|found| found.start == found.end)
+          .cloned()
+          .collect::<Vec<_>>();
+        for found in empty_matches {
+          for (pattern, name) in slot.empty_patterns.iter().skip(1) {
+            let mut duplicate = found.clone();
+            duplicate.pattern = *pattern;
+            duplicate.name.clone_from(name);
+            matches.push(duplicate);
+          }
+        }
+      }
+      Ok(matches)
     }
     EngineSlot::SplitLiteral(slot) => split_literal_find_iter(slot, haystack),
     EngineSlot::Regex(slot) => regex_slot_find_iter(slot, haystack),
@@ -3715,11 +3753,11 @@ mod scheduler_tests {
   #[test]
   fn literal_fast_path_eligibility_follows_shared_option_table() -> Result<()> {
     let cases = [
-      (false, true, OverlapStrategy::Longest, false, true),
-      (true, true, OverlapStrategy::Longest, false, true),
-      (true, false, OverlapStrategy::Longest, false, false),
-      (false, true, OverlapStrategy::All, false, false),
-      (false, true, OverlapStrategy::Longest, true, false),
+      (false, true, OverlapStrategy::Longest, false, true, true),
+      (true, true, OverlapStrategy::Longest, false, true, true),
+      (true, false, OverlapStrategy::Longest, false, false, false),
+      (false, true, OverlapStrategy::All, false, false, true),
+      (false, true, OverlapStrategy::Longest, true, false, false),
     ];
 
     for (
@@ -3728,6 +3766,7 @@ mod scheduler_tests {
       overlap_strategy,
       contains_empty,
       eligible,
+      replacement_eligible,
     ) in cases
     {
       let options = TextSearchOptions {
@@ -3745,6 +3784,11 @@ mod scheduler_tests {
       assert_eq!(
         literal_fast_path_slot(&search.engines, overlap_strategy).is_some(),
         eligible
+      );
+      assert_eq!(
+        literal_fast_path_slot(&search.engines, OverlapStrategy::Longest)
+          .is_some(),
+        replacement_eligible
       );
     }
     Ok(())
@@ -4271,6 +4315,7 @@ fn finalize_find_matches(
       right.start == right.end
         && left.start == left.end
         && right.start == left.start
+        && right.pattern == left.pattern
     });
     return;
   }
