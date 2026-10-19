@@ -1089,6 +1089,95 @@ fn literal_longest_selection_matches_typescript_api() {
 }
 
 #[test]
+fn single_literal_engine_matches_global_selection_on_generated_corpus() {
+  let literals = (1..=24)
+    .map(|length| "a".repeat(length))
+    .collect::<Vec<_>>();
+  let haystack = (0..40)
+    .map(|index| format!("{}b", "a".repeat((index * 7) % 31)))
+    .collect::<String>();
+  let direct = TextSearch::new(
+    literals.iter().cloned().map(PatternEntry::from),
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  let mut mixed_patterns = literals
+    .into_iter()
+    .map(PatternEntry::from)
+    .collect::<Vec<_>>();
+  mixed_patterns.push(PatternEntry::Regex(RegexPattern::new("z+")));
+  let globally_selected =
+    TextSearch::new(mixed_patterns, TextSearchOptions::default()).unwrap();
+
+  assert_eq!(
+    direct.find_iter(&haystack).unwrap(),
+    globally_selected.find_iter(&haystack).unwrap()
+  );
+}
+
+#[test]
+fn single_literal_engine_reports_only_native_iterator_matches() {
+  let search = TextSearch::new(
+    (1..=24).map(|length| PatternEntry::from("a".repeat(length))),
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let result = search.find_iter_with_stats(&"a".repeat(100)).unwrap();
+  assert_eq!(result.stats.len(), 1);
+  assert_eq!(result.stats[0].match_count, result.matches.len());
+  assert_eq!(result.matches.len(), 5);
+}
+
+#[test]
+fn duplicate_empty_literals_select_the_lowest_pattern_index() {
+  let unnamed = TextSearch::new(
+    vec![PatternEntry::from(""), PatternEntry::from("")],
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  assert_eq!(unnamed.find_iter("").unwrap()[0].pattern, 0);
+  assert_eq!(unnamed.find_iter("").unwrap().len(), 1);
+  assert_eq!(
+    unnamed
+      .replace_all("", &[String::from("first"), String::from("second")])
+      .unwrap(),
+    "first"
+  );
+
+  let mut first = LiteralPattern::new("");
+  first.name = Some(String::from("first"));
+  let mut second = LiteralPattern::new("");
+  second.name = Some(String::from("second"));
+  let named = TextSearch::new(
+    vec![PatternEntry::Literal(first), PatternEntry::Literal(second)],
+    TextSearchOptions::default(),
+  )
+  .unwrap();
+  let matches = named.find_iter("").unwrap();
+  assert_eq!(matches.len(), 1);
+  assert_eq!(
+    (matches[0].pattern, matches[0].name.as_deref()),
+    (0, Some("first"))
+  );
+  assert_eq!(
+    named
+      .replace_all("", &[String::from("first"), String::from("second")])
+      .unwrap(),
+    "first"
+  );
+}
+
+#[test]
 fn which_match_keeps_cross_engine_overlaps() {
   let search = TextSearch::new(
     vec![

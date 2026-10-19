@@ -277,7 +277,12 @@ export class TextSearch {
       if (engine === undefined) {
         throw new Error("Expected single engine after length check");
       }
-      const matches = remapMatches(engineFindCandidates(engine, haystack), engine);
+      const matches = remapMatches(
+        !this.overlapAll && engine.type === "ac" && !engine.requiresOverlapSelection
+          ? engineFindIter(engine, haystack)
+          : engineFindCandidates(engine, haystack),
+        engine,
+      );
       return this.overlapAll ? sortAllMatches(matches) : mergeAndSelect(matches);
     }
 

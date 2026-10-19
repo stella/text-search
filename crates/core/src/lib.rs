@@ -1495,6 +1495,11 @@ impl TextSearch {
   }
 
   pub fn find_iter(&self, haystack: &str) -> Result<Vec<Match>> {
+    if self.overlap_strategy == OverlapStrategy::Longest
+      && let [EngineSlot::Literal(slot)] = self.engines.as_slice()
+    {
+      return literal_find_iter(slot, haystack);
+    }
     let ready = self.lazy_regex_ready.get().is_some();
     let mut matches = find_iter_engines(&self.engines, haystack, ready)?;
     if !ready && !self.engines.iter().any(engine_has_uninitialized_lazy_regex) {
@@ -1508,6 +1513,22 @@ impl TextSearch {
     &self,
     haystack: &str,
   ) -> Result<TextSearchFindResult> {
+    if self.overlap_strategy == OverlapStrategy::Longest
+      && let [EngineSlot::Literal(slot)] = self.engines.as_slice()
+    {
+      let start = Instant::now();
+      let matches = literal_find_iter(slot, haystack)?;
+      let stats = vec![find_stats_for_engine(
+        0,
+        None,
+        EngineKind::Literal,
+        engine_pattern_count(&self.engines[0]),
+        engine_pattern_bounds(&self.engines[0]),
+        matches.len(),
+        start,
+      )];
+      return Ok(TextSearchFindResult { matches, stats });
+    }
     let mut result = find_iter_engines_with_stats(&self.engines, haystack)?;
     finalize_find_matches(&mut result.matches, self.overlap_strategy);
     Ok(result)
@@ -3283,6 +3304,23 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
   }
 }
 
+fn literal_find_iter(slot: &LiteralSlot, haystack: &str) -> Result<Vec<Match>> {
+  let packed = slot
+    .engine
+    .find_iter_packed_bytes(haystack)
+    .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+  extend_triple_matches(
+    SearchEngine::Literal,
+    haystack,
+    &packed,
+    &Remap::Mapped {
+      index_map: &slot.index_map,
+      name_map: &slot.name_map,
+      identity: slot.identity_map,
+    },
+  )
+}
+
 fn engine_find_iter_with_stats(
   engine: &EngineSlot,
   haystack: &str,
@@ -4477,7 +4515,13 @@ fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
 
   let mut selected = Vec::new();
   let mut last_end = 0;
+  let mut previous_span = None;
   for found in matches {
+    let span = (found.start, found.end);
+    if previous_span == Some(span) {
+      continue;
+    }
+    previous_span = Some(span);
     if found.start >= last_end {
       last_end = found.end;
       selected.push(found);

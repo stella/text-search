@@ -36,6 +36,54 @@ describe("TextSearch", () => {
     }
   });
 
+  test("single literal engine matches global selection on a generated corpus", () => {
+    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const haystack = Array.from({ length: 40 }, (_, index) =>
+      `${"a".repeat((index * 7) % 31)}b`,
+    ).join("");
+    const direct = new TextSearch(patterns, { allLiteral: true });
+    const globallySelected = new TextSearch([...patterns, /z+/], { allLiteral: false });
+
+    expect(globallySelected.findIter(haystack)).toEqual(direct.findIter(haystack));
+  });
+
+  test("single literal engine uses its native iterator", () => {
+    const search = new TextSearch([{ pattern: "a", literal: true, name: "letter" }]);
+    const engine = Reflect.get(search, "engines")[0];
+    const ac = engine.ac;
+    let nativeCalls = 0;
+    const nativeFindIter = ac.findIter.bind(ac);
+    ac.findIter = (haystack: string) => {
+      nativeCalls += 1;
+      return nativeFindIter(haystack);
+    };
+    ac.findOverlappingIter = () => {
+      throw new Error("overlapping iterator should not run");
+    };
+
+    expect(search.findIter("aaa").map(({ name }) => name)).toEqual([
+      "letter",
+      "letter",
+      "letter",
+    ]);
+    expect(nativeCalls).toBe(1);
+  });
+
+  test("duplicate empty literals select the lowest pattern index", () => {
+    const unnamed = new TextSearch(["", ""], { allLiteral: true });
+    expect(unnamed.findIter("")).toEqual([{ pattern: 0, start: 0, end: 0, text: "" }]);
+    expect(unnamed.replaceAll("", ["first", "second"])).toBe("first");
+
+    const named = new TextSearch([
+      { pattern: "", literal: true, name: "first" },
+      { pattern: "", literal: true, name: "second" },
+    ]);
+    expect(named.findIter("")).toEqual([
+      { pattern: 0, start: 0, end: 0, text: "", name: "first" },
+    ]);
+    expect(named.replaceAll("", ["first", "second"])).toBe("first");
+  });
+
   test("ASCII whole-word filtering precedes longest selection", () => {
     const search = new TextSearch(["a", "aa"], {
       allLiteral: true,
