@@ -19,10 +19,11 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 8;
+const PREPARED_ARTIFACTS_VERSION: u32 = 9;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
+  + std::mem::size_of::<u32>()
   + std::mem::size_of::<u32>();
 const AHO_FINGERPRINT_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const AHO_FINGERPRINT_PRIME: u64 = 0x0100_0000_01b3;
@@ -475,14 +476,16 @@ pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
   pub options: LiteralOptions,
   pub identity: bool,
+  pub empty_pattern_indices: Vec<u32>,
   pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PreparedAhoArtifactView<'a> {
   pub fingerprint: u64,
   pub options: LiteralOptions,
   pub identity: bool,
+  pub empty_pattern_indices: Vec<u32>,
   pub bytes: &'a [u8],
 }
 
@@ -509,6 +512,16 @@ impl PreparedTextSearchArtifacts {
       write_u64(&mut bytes, artifact.fingerprint);
       write_u8(&mut bytes, literal_options_to_flags(artifact.options));
       write_u8(&mut bytes, u8::from(artifact.identity));
+      write_u32(
+        &mut bytes,
+        checked_len_u32(
+          artifact.empty_pattern_indices.len(),
+          "aho_automata.empty_pattern_indices",
+        )?,
+      );
+      for index in &artifact.empty_pattern_indices {
+        write_u32(&mut bytes, *index);
+      }
       write_u32(
         &mut bytes,
         checked_len_u32(artifact.bytes.len(), "aho_automata.bytes")?,
@@ -575,11 +588,27 @@ impl<'a> PreparedTextSearchArtifactsView<'a> {
       let fingerprint = reader.read_u64()?;
       let options = literal_options_from_flags(reader.read_u8()?)?;
       let identity = read_identity_flag(reader.read_u8()?)?;
+      let empty_pattern_count = reader.read_usize()?;
+      let empty_pattern_bytes = empty_pattern_count
+        .checked_mul(std::mem::size_of::<u32>())
+        .ok_or_else(|| {
+          invalid_prepared_artifact("empty pattern count overflow")
+        })?;
+      if empty_pattern_bytes > reader.remaining_len() {
+        return Err(invalid_prepared_artifact(
+          "empty pattern count exceeds payload length",
+        ));
+      }
+      let mut empty_pattern_indices = Vec::with_capacity(empty_pattern_count);
+      for _ in 0..empty_pattern_count {
+        empty_pattern_indices.push(reader.read_u32()?);
+      }
       let automaton = reader.read_len_prefixed_bytes()?;
       aho_automata.push(PreparedAhoArtifactView {
         fingerprint,
         options,
         identity,
+        empty_pattern_indices,
         bytes: automaton,
       });
     }
@@ -630,6 +659,7 @@ impl<'a> From<&'a PreparedAhoArtifact> for PreparedAhoArtifactView<'a> {
       fingerprint: artifact.fingerprint,
       options: artifact.options,
       identity: artifact.identity,
+      empty_pattern_indices: artifact.empty_pattern_indices.clone(),
       bytes: &artifact.bytes,
     }
   }
@@ -641,6 +671,7 @@ impl From<PreparedAhoArtifactView<'_>> for PreparedAhoArtifact {
       fingerprint: artifact.fingerprint,
       options: artifact.options,
       identity: artifact.identity,
+      empty_pattern_indices: artifact.empty_pattern_indices,
       bytes: artifact.bytes.to_vec(),
     }
   }
@@ -729,6 +760,7 @@ struct SplitLiteralSlot {
 struct SplitLiteralEngine {
   engine: aho_core::AhoCorasick,
   pattern_offset: u32,
+  empty_pattern_indices: Vec<u32>,
 }
 
 struct RegexSlot {
@@ -777,6 +809,18 @@ enum AhoBuildMode<'a> {
     index: usize,
   },
 }
+
+type PreparedAhoParts<'a> =
+  (usize, LiteralOptions, bool, u64, Vec<u32>, &'a [u8]);
+type LoadedPreparedAho = (
+  usize,
+  LiteralOptions,
+  bool,
+  u64,
+  Vec<u32>,
+  aho_core::AhoCorasick,
+  u32,
+);
 
 enum RegexBuildMode<'a> {
   Build,
@@ -878,9 +922,7 @@ impl AhoBuildMode<'_> {
     Ok(automata.len())
   }
 
-  fn next_prepared_aho(
-    &mut self,
-  ) -> Result<(usize, LiteralOptions, bool, u64, &[u8])> {
+  fn next_prepared_aho(&mut self) -> Result<PreparedAhoParts<'_>> {
     let Self::Load { automata, index } = self else {
       return Err(Error::BuildLiteral(String::from(
         "Prepared Aho artifact requested outside load mode",
@@ -896,6 +938,7 @@ impl AhoBuildMode<'_> {
       artifact.options,
       artifact.identity,
       artifact.fingerprint,
+      artifact.empty_pattern_indices.clone(),
       artifact.bytes,
     ))
   }
@@ -1270,12 +1313,20 @@ impl TextSearch {
         && options.unicode_boundaries
         && pattern_count >= SPLIT_IDENTITY_AC_MIN_PATTERNS
       {
-        let LiteralSlot { engine, .. } = slot;
+        let LiteralSlot {
+          engine,
+          empty_patterns,
+          ..
+        } = slot;
         (
           EngineSlot::SplitLiteral(SplitLiteralSlot {
             engines: vec![SplitLiteralEngine {
               engine,
               pattern_offset: 0,
+              empty_pattern_indices: empty_patterns
+                .into_iter()
+                .map(|(pattern, _)| pattern)
+                .collect(),
             }],
           }),
           pattern_count,
@@ -2318,9 +2369,16 @@ fn push_split_literal_engine(
   options: TextSearchOptions,
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<()> {
+  let empty_pattern_indices = patterns
+    .iter()
+    .enumerate()
+    .filter(|(_, pattern)| pattern.is_empty())
+    .map(|(index, _)| pattern_index(index))
+    .collect::<Result<Vec<_>>>()?;
   engines.push(SplitLiteralEngine {
     engine: build_aho(patterns, options.into(), true, aho_mode)?,
     pattern_offset: pattern_index(offset)?,
+    empty_pattern_indices,
   });
   Ok(())
 }
@@ -2334,13 +2392,21 @@ fn load_split_literal_engines(
   let mut engines = Vec::with_capacity(automata_count);
   let mut offset = 0usize;
   for _ in 0..automata_count {
-    let (artifact, actual_options, actual_identity, _, engine, count) =
-      load_prepared_aho_any(aho_mode)?;
+    let (
+      artifact,
+      actual_options,
+      actual_identity,
+      _,
+      empty_pattern_indices,
+      engine,
+      count,
+    ) = load_prepared_aho_any(aho_mode)?;
     validate_prepared_aho_options(artifact, actual_options, expected_options)?;
     validate_prepared_aho_identity(artifact, actual_identity, true)?;
     engines.push(SplitLiteralEngine {
       engine,
       pattern_offset: pattern_index(offset)?,
+      empty_pattern_indices,
     });
     let count = usize::try_from(count)
       .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
@@ -2357,8 +2423,15 @@ fn load_identity_literal_engine(
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<(LiteralSlot, usize)> {
   let expected_options = options.into();
-  let (artifact, actual_options, actual_identity, _, engine, pattern_count) =
-    load_prepared_aho_any(aho_mode)?;
+  let (
+    artifact,
+    actual_options,
+    actual_identity,
+    _,
+    empty_pattern_indices,
+    engine,
+    pattern_count,
+  ) = load_prepared_aho_any(aho_mode)?;
   validate_prepared_aho_options(artifact, actual_options, expected_options)?;
   validate_prepared_aho_identity(artifact, actual_identity, true)?;
   let pattern_count = usize::try_from(pattern_count)
@@ -2371,10 +2444,11 @@ fn load_identity_literal_engine(
       identity_map: true,
       requires_overlap_selection: options.whole_words
         && !options.unicode_boundaries,
-      // Prepared all-literal artifacts do not retain their source strings.
-      // Conservatively keep them on the globally selected route.
-      contains_empty_literal: true,
-      empty_patterns: Vec::new(),
+      contains_empty_literal: !empty_pattern_indices.is_empty(),
+      empty_patterns: empty_pattern_indices
+        .into_iter()
+        .map(|index| (index, None))
+        .collect(),
     },
     pattern_count,
   ))
@@ -3039,6 +3113,12 @@ fn build_aho(
       index: patterns.len(),
     }
   })?;
+  let empty_pattern_indices = patterns
+    .iter()
+    .enumerate()
+    .filter(|(_, pattern)| pattern.is_empty())
+    .map(|(index, _)| pattern_index(index))
+    .collect::<Result<Vec<_>>>()?;
   let build_options = aho_core::Options {
     match_kind: aho_core::MatchKind::LeftmostLongest,
     case_insensitive: options.case_insensitive,
@@ -3061,6 +3141,7 @@ fn build_aho(
         fingerprint,
         options,
         identity,
+        empty_pattern_indices,
         bytes,
       });
       Ok(engine)
@@ -3069,7 +3150,13 @@ fn build_aho(
       let fingerprint = aho_fingerprint(&patterns, options)?;
       let expected = usize::try_from(expected)
         .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
-      load_prepared_aho(aho_mode, expected, fingerprint, identity)
+      load_prepared_aho(
+        aho_mode,
+        expected,
+        fingerprint,
+        identity,
+        &empty_pattern_indices,
+      )
     }
   }
 }
@@ -3079,11 +3166,19 @@ fn load_prepared_aho(
   expected: usize,
   fingerprint: u64,
   identity: bool,
+  expected_empty_pattern_indices: &[u32],
 ) -> Result<aho_core::AhoCorasick> {
   let expected = u32::try_from(expected)
     .map_err(|_| Error::PatternIndexOutOfRange { index: expected })?;
-  let (artifact, _, actual_identity, actual_fingerprint, engine, actual) =
-    load_prepared_aho_any(aho_mode)?;
+  let (
+    artifact,
+    _,
+    actual_identity,
+    actual_fingerprint,
+    actual_empty_pattern_indices,
+    engine,
+    actual,
+  ) = load_prepared_aho_any(aho_mode)?;
   if actual != expected {
     return Err(Error::PreparedAhoPatternCountMismatch {
       artifact,
@@ -3094,19 +3189,50 @@ fn load_prepared_aho(
   if actual_fingerprint != fingerprint {
     return Err(Error::PreparedAhoFingerprintMismatch { artifact });
   }
+  if actual_empty_pattern_indices != expected_empty_pattern_indices {
+    return Err(invalid_prepared_artifact(
+      "empty pattern metadata does not match source patterns",
+    ));
+  }
   validate_prepared_aho_identity(artifact, actual_identity, identity)?;
   Ok(engine)
 }
 
 fn load_prepared_aho_any(
   aho_mode: &mut AhoBuildMode<'_>,
-) -> Result<(usize, LiteralOptions, bool, u64, aho_core::AhoCorasick, u32)> {
-  let (artifact, options, identity, fingerprint, bytes) =
+) -> Result<LoadedPreparedAho> {
+  let (artifact, options, identity, fingerprint, empty_pattern_indices, bytes) =
     aho_mode.next_prepared_aho()?;
   let engine = aho_core::AhoCorasick::from_prepared(bytes)
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
   let actual = engine.pattern_count();
-  Ok((artifact, options, identity, fingerprint, engine, actual))
+  validate_empty_pattern_indices(&empty_pattern_indices, actual)?;
+  Ok((
+    artifact,
+    options,
+    identity,
+    fingerprint,
+    empty_pattern_indices,
+    engine,
+    actual,
+  ))
+}
+
+fn validate_empty_pattern_indices(
+  indices: &[u32],
+  pattern_count: u32,
+) -> Result<()> {
+  let mut previous = None;
+  for index in indices {
+    if *index >= pattern_count || previous.is_some_and(|value| value >= *index)
+    {
+      return Err(invalid_prepared_artifact(
+        "empty pattern indices must be ordered, unique, and in range",
+      ));
+    }
+    previous = Some(*index);
+  }
+  Ok(())
 }
 
 fn validate_prepared_aho_options(
@@ -4033,14 +4159,29 @@ fn split_literal_engine_find_iter(
     .engine
     .find_overlapping_iter_packed_bytes(haystack)
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-  extend_triple_matches(
+  let mut matches = extend_triple_matches(
     SearchEngine::Literal,
     haystack,
     &packed,
     &Remap::Offset {
       pattern_offset: engine.pattern_offset,
     },
-  )
+  )?;
+  if engine.empty_pattern_indices.len() > 1 {
+    let empty_matches = matches
+      .iter()
+      .filter(|found| found.start == found.end)
+      .cloned()
+      .collect::<Vec<_>>();
+    for found in empty_matches {
+      for pattern in engine.empty_pattern_indices.iter().skip(1) {
+        let mut duplicate = found.clone();
+        duplicate.pattern = engine.pattern_offset.saturating_add(*pattern);
+        matches.push(duplicate);
+      }
+    }
+  }
+  Ok(matches)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

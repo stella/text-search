@@ -547,6 +547,135 @@ fn prepared_artifacts_roundtrip_bytes() {
 }
 
 #[test]
+fn prepared_all_literal_artifacts_restore_duplicate_empty_patterns() {
+  let patterns = vec![PatternEntry::from(""), PatternEntry::from("")];
+  let options = TextSearchOptions {
+    all_literal: true,
+    overlap_strategy: OverlapStrategy::All,
+    ..TextSearchOptions::default()
+  };
+  let bytes = TextSearch::prepare_artifacts(patterns, options)
+    .unwrap()
+    .to_bytes()
+    .unwrap();
+  let artifacts = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
+  let loaded =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .unwrap();
+
+  assert_eq!(
+    loaded
+      .find_iter("")
+      .unwrap()
+      .iter()
+      .map(|found| found.pattern)
+      .collect::<Vec<_>>(),
+    vec![0, 1]
+  );
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(96))]
+
+  #[test]
+  fn prepared_artifact_roundtrip_matches_fresh_search(
+    pattern_kinds in proptest::collection::vec(0_u8..8, 0..10),
+    haystack_chars in proptest::collection::vec(
+      proptest::prop_oneof![
+        Just('a'),
+        Just('b'),
+        Just(' '),
+        Just('é'),
+        Just('界'),
+        Just('😀'),
+      ],
+      0..32,
+    ),
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
+    whole_words in proptest::prop_oneof![Just(false), Just(true)],
+    unicode_boundaries in proptest::prop_oneof![Just(false), Just(true)],
+  ) {
+    let patterns = pattern_kinds
+      .iter()
+      .map(|kind| match kind {
+        0 | 1 => PatternEntry::Literal(LiteralPattern::new("")),
+        2 => PatternEntry::Literal(LiteralPattern::new("a")),
+        3 => PatternEntry::Literal(LiteralPattern::new("é")),
+        4 => PatternEntry::Literal(LiteralPattern::new("界")),
+        5 => PatternEntry::Regex(RegexPattern::new("a+")),
+        6 => PatternEntry::Regex(RegexPattern::new("(?:é|界)")),
+        _ => PatternEntry::Literal(LiteralPattern::new("😀")),
+      })
+      .collect::<Vec<_>>();
+    let all_literal = pattern_kinds.iter().all(|kind| !matches!(kind, 5 | 6));
+    let haystack = haystack_chars.iter().collect::<String>();
+    let overlap_strategy = if overlap_all {
+      OverlapStrategy::All
+    } else {
+      OverlapStrategy::Longest
+    };
+    let options = TextSearchOptions {
+      overlap_strategy,
+      whole_words,
+      unicode_boundaries,
+      ..TextSearchOptions::default()
+    };
+    let fresh = TextSearch::new(patterns.clone(), options).unwrap();
+    let bytes = TextSearch::prepare_artifacts(patterns.clone(), options)
+      .unwrap()
+      .to_bytes()
+      .unwrap();
+    let artifacts = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
+    let loaded =
+      TextSearch::with_prepared_artifacts(patterns, options, &artifacts)
+        .unwrap();
+    let replacements = pattern_kinds
+      .iter()
+      .enumerate()
+      .map(|(index, _)| format!("<{index}>"))
+      .collect::<Vec<_>>();
+
+    proptest::prop_assert_eq!(
+      loaded.find_iter(&haystack).unwrap(),
+      fresh.find_iter(&haystack).unwrap(),
+    );
+    proptest::prop_assert_eq!(
+      loaded.replace_all(&haystack, &replacements).unwrap(),
+      fresh.replace_all(&haystack, &replacements).unwrap(),
+    );
+    if all_literal {
+      let all_literal_options = TextSearchOptions { all_literal: true, ..options };
+      let identity_patterns = pattern_kinds
+        .iter()
+        .map(|kind| match kind {
+          0 | 1 => PatternEntry::from(""),
+          2 => PatternEntry::from("a"),
+          3 => PatternEntry::from("é"),
+          4 => PatternEntry::from("界"),
+          _ => PatternEntry::from("😀"),
+        })
+        .collect::<Vec<_>>();
+      let all_literal_artifacts = TextSearch::prepare_artifacts(
+        identity_patterns,
+        all_literal_options,
+      ).unwrap();
+      let loaded_without_patterns = TextSearch::with_prepared_all_literal_artifacts(
+        all_literal_options,
+        &all_literal_artifacts,
+      ).unwrap();
+      proptest::prop_assert_eq!(
+        loaded_without_patterns.find_iter(&haystack).unwrap(),
+        fresh.find_iter(&haystack).unwrap(),
+      );
+      proptest::prop_assert_eq!(
+        loaded_without_patterns.replace_all(&haystack, &replacements).unwrap(),
+        fresh.replace_all(&haystack, &replacements).unwrap(),
+      );
+    }
+  }
+}
+
+#[test]
 fn prepared_regex_artifacts_roundtrip_bytes() {
   let options = TextSearchOptions {
     case_insensitive: true,
