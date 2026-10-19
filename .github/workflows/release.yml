@@ -26,7 +26,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
       && inputs.publish_to_npm
       && github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -53,7 +53,7 @@ jobs:
     name: Verify
     needs: preflight
     if: needs.preflight.outputs.already-released != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -83,7 +83,7 @@ jobs:
     name: Pack
     needs: [preflight, verify]
     if: needs.preflight.outputs.already-released != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:

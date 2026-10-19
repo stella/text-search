@@ -20,7 +20,7 @@ jobs:
       always() && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
@@ -80,7 +80,7 @@ jobs:
 
   trust-check:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -110,7 +110,7 @@ jobs:
       github.event_name == 'pull_request'
       && needs.trust-check.outputs.trusted == 'true'
     needs: [trust-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -151,7 +151,7 @@ jobs:
       always() && !cancelled()
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
@@ -181,7 +181,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [trust-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -199,7 +199,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, workflow-lint, version-sync]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -228,7 +228,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -253,7 +253,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -286,7 +286,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
@@ -344,7 +344,7 @@ jobs:
       ${{
         needs.check-changes.outputs.code-changed == 'true'
         && matrix.os
-        || 'ubuntu-latest'
+        || 'ubuntu-24.04'
       }}
     permissions:
       contents: read
@@ -352,9 +352,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             runtime: bun
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             runtime: node
           - os: macos-15
             runtime: bun
@@ -396,7 +396,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check, version-sync]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -444,7 +444,7 @@ jobs:
       && (github.event_name != 'pull_request'
           || needs.trust-check.outputs.trusted == 'true')
     needs: [check-changes, trust-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -479,7 +479,7 @@ jobs:
       - runtime-compat
       - pack
       - provenance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
