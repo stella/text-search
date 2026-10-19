@@ -8,8 +8,10 @@ const AUTO_REGEX_CHUNK_MAX_SIZE = 16;
 const AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET = 6;
 const AUTO_REGEX_ISOLATE_COMPLEXITY = 7;
 const SPLIT_IDENTITY_AC_CHUNK_SIZE = 20_000;
+const ASCII_WHOLE_WORD_WINDOW_SIZE = 64 * 1024;
 let identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 let identityAcTestRoute: "production" | "ordinary" | "split" = "production";
+let asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
 
 /** Test-only route control. Not re-exported by the package entry point. */
 export const textSearchTestHooks = {
@@ -19,9 +21,16 @@ export const textSearchTestHooks = {
   forceIdentityAcRoute(route: "ordinary" | "split"): void {
     identityAcTestRoute = route;
   },
+  setAsciiWholeWordWindowSize(size: number): void {
+    if (!Number.isSafeInteger(size) || size < 1) {
+      throw new RangeError("ASCII whole-word window size must be a positive integer");
+    }
+    asciiWholeWordWindowSize = size;
+  },
   reset(): void {
     identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
     identityAcTestRoute = "production";
+    asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
   },
 };
 
@@ -57,6 +66,7 @@ type AcSlot = {
   identityMap?: true;
   patternCount?: number;
   requiresOverlapSelection: boolean;
+  longestLiteralLength: number;
 };
 
 type SplitAcSlot = {
@@ -750,6 +760,7 @@ function buildAcEngine(
     nameMap,
     patternCount: literals.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    longestLiteralLength: getLongestLiteralLength(literals),
   };
 }
 
@@ -808,6 +819,7 @@ function buildIdentityAcEngine(
     identityMap: true,
     patternCount: patterns.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    longestLiteralLength: getLongestLiteralLength(patterns),
   };
 }
 
@@ -870,7 +882,7 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
   switch (engine.type) {
     case "ac":
       if (engine.requiresOverlapSelection) {
-        return engine.ac.findOverlappingIter(haystack).some(() => true);
+        return asciiWholeWordIsMatch(engine, haystack);
       }
       return engine.ac.isMatch(haystack);
     case "split-ac":
@@ -884,6 +896,51 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
       return getRegexSlotEngine(engine).isMatch(haystack);
   }
   throw new Error("Unsupported engine type");
+}
+
+function asciiWholeWordIsMatch(engine: AcSlot, haystack: string): boolean {
+  let coreStart = 0;
+  while (coreStart < haystack.length) {
+    const coreEnd = safeSliceEnd(
+      haystack,
+      Math.min(haystack.length, coreStart + asciiWholeWordWindowSize),
+    );
+    const windowStart = safeSliceStart(haystack, Math.max(0, coreStart - 1));
+    const windowEnd = safeSliceEnd(
+      haystack,
+      Math.min(haystack.length, coreEnd + engine.longestLiteralLength),
+    );
+    const matches = engine.ac.findOverlappingIter(haystack.slice(windowStart, windowEnd));
+    for (const { start } of matches) {
+      const haystackStart = windowStart + start;
+      if (haystackStart >= coreStart && haystackStart < coreEnd) return true;
+    }
+    coreStart = coreEnd;
+  }
+  return false;
+}
+
+function getLongestLiteralLength(patterns: readonly string[]): number {
+  let longest = 0;
+  for (const pattern of patterns) {
+    longest = Math.max(longest, pattern.length);
+  }
+  return longest;
+}
+
+function safeSliceStart(value: string, index: number): number {
+  return splitsSurrogatePair(value, index) ? index - 1 : index;
+}
+
+function safeSliceEnd(value: string, index: number): number {
+  return splitsSurrogatePair(value, index) ? index + 1 : index;
+}
+
+function splitsSurrogatePair(value: string, index: number): boolean {
+  if (index <= 0 || index >= value.length) return false;
+  const before = value.charCodeAt(index - 1);
+  const after = value.charCodeAt(index);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
 }
 
 /**

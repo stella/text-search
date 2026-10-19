@@ -259,8 +259,8 @@ describe("TextSearch", () => {
       state = (state * 1_664_525 + 1_013_904_223) >>> 0;
       return (state >>> 8) % upperBound;
     };
-    const atoms = ["a", "ab", "é", "𐐀", "_", " "];
-    const haystackAtoms = ["a", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
+    const atoms = ["a", "A", "ab", "é", "𐐀", "_", " "];
+    const haystackAtoms = ["a", "A", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
     const optionCombinations = [
       { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false },
       { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true },
@@ -270,14 +270,23 @@ describe("TextSearch", () => {
       { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true },
       { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false },
       { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: false, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: true, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: false, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false, caseInsensitive: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true, caseInsensitive: true },
     ] as const;
-    const expectedCombinationCount = 8;
+    const expectedCombinationCount = 16;
     const casesPerCombination = 15;
     const exercisedCombinations = new Map<string, number>();
 
     for (const options of optionCombinations) {
-      const combination = `${options.overlapStrategy}/${options.wholeWords}/${options.unicodeBoundaries}`;
+      const combination = `${options.overlapStrategy}/${options.wholeWords}/${options.unicodeBoundaries}/${"caseInsensitive" in options}`;
       for (let iteration = 0; iteration < casesPerCombination; iteration += 1) {
+        textSearchTestHooks.setAsciiWholeWordWindowSize(3);
         const patterns = Array.from(
           { length: 2 + randomInt(7) },
           () => atoms[randomInt(atoms.length)],
@@ -397,18 +406,27 @@ describe("TextSearch", () => {
       unicodeBoundaries: false,
     });
     const { ac } = Reflect.get(search, "engines")[0];
-    let candidatesVisited = 0;
-    const candidates = ac.findOverlappingIter("alpha beta");
-    ac.findOverlappingIter = () =>
-      new Proxy(candidates, {
-        get(target, property, receiver) {
-          if (property === "0" || property === "1") candidatesVisited += 1;
-          return Reflect.get(target, property, receiver);
-        },
-      });
+    const nativeFindOverlappingIter = ac.findOverlappingIter.bind(ac);
+    let nativeCalls = 0;
+    ac.findOverlappingIter = (haystack: string) => {
+      nativeCalls += 1;
+      return nativeFindOverlappingIter(haystack);
+    };
+    textSearchTestHooks.setAsciiWholeWordWindowSize(16);
 
-    expect(search.isMatch("alpha beta")).toBe(true);
-    expect(candidatesVisited).toBe(1);
+    expect(search.isMatch(`alpha beta ${"missing ".repeat(100)}`)).toBe(true);
+    expect(nativeCalls).toBe(1);
+  });
+
+  test("ASCII whole-word isMatch finds a candidate across a window boundary", () => {
+    textSearchTestHooks.setAsciiWholeWordWindowSize(8);
+    const search = new TextSearch(["alpha"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+
+    expect(search.isMatch("123456 alpha omega")).toBe(true);
   });
 
   test("literal fast-path eligibility follows the shared option table", () => {
