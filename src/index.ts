@@ -16,7 +16,7 @@ initEngines({
   EntityIndexBuilder: UnavailableEntityIndexBuilder,
 });
 
-export { TextSearch } from "./text-search";
+export { EmptyPatternError, TextSearch } from "./text-search";
 export type { Match, PatternEntry, TextSearchOptions } from "./types";
 
 export { EntityIndex, EntityIndexBuilder } from "./entity-index";

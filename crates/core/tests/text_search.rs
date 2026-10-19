@@ -8,7 +8,7 @@ use proptest::strategy::Just;
 use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
   EngineKind, Error, FuzzyDistance, FuzzyMetric, FuzzyPattern, LiteralPattern,
-  OverlapStrategy, PatternEntry, PreparedArtifactPolicy,
+  OverlapStrategy, PatternEntry, PreparedAhoArtifact, PreparedArtifactPolicy,
   PreparedTextSearchArtifacts, RegexArtifactPolicy, RegexPattern, TextSearch,
   TextSearchOptions, classify_patterns, count_alternations,
 };
@@ -547,30 +547,61 @@ fn prepared_artifacts_roundtrip_bytes() {
 }
 
 #[test]
-fn prepared_all_literal_artifacts_restore_duplicate_empty_patterns() {
-  let patterns = vec![PatternEntry::from(""), PatternEntry::from("")];
+fn prepared_artifacts_reject_empty_literal_patterns() {
+  let error = TextSearch::prepare_artifacts(
+    vec![PatternEntry::from("")],
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap_err();
+  assert_eq!(
+    error,
+    Error::EmptyPattern {
+      index: 0,
+      name: None
+    }
+  );
+}
+
+#[test]
+fn loading_prepared_empty_literal_artifacts_returns_typed_error() {
   let options = TextSearchOptions {
     all_literal: true,
-    overlap_strategy: OverlapStrategy::All,
     ..TextSearchOptions::default()
   };
-  let bytes = TextSearch::prepare_artifacts(patterns, options)
-    .unwrap()
-    .to_bytes()
-    .unwrap();
-  let artifacts = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
-  let loaded =
-    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
-      .unwrap();
+  let engine = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::new()],
+    stella_aho_corasick_core::Options {
+      match_kind: stella_aho_corasick_core::MatchKind::LeftmostLongest,
+      case_insensitive: false,
+      dfa: false,
+      whole_words: false,
+      unicode_boundaries: true,
+    },
+  )
+  .unwrap();
+  let artifacts = PreparedTextSearchArtifacts {
+    aho_automata: vec![PreparedAhoArtifact {
+      fingerprint: 0,
+      options: options.into(),
+      identity: true,
+      bytes: engine.to_prepared().unwrap(),
+    }],
+    regex_sets: Vec::new(),
+  };
 
+  let error =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .err()
+      .unwrap();
   assert_eq!(
-    loaded
-      .find_iter("")
-      .unwrap()
-      .iter()
-      .map(|found| found.pattern)
-      .collect::<Vec<_>>(),
-    vec![0, 1]
+    error,
+    Error::EmptyPattern {
+      index: 0,
+      name: None
+    }
   );
 }
 
@@ -598,7 +629,7 @@ proptest::proptest! {
     let patterns = pattern_kinds
       .iter()
       .map(|kind| match kind {
-        0 | 1 => PatternEntry::Literal(LiteralPattern::new("")),
+        0 | 1 => PatternEntry::Literal(LiteralPattern::new("b")),
         2 => PatternEntry::Literal(LiteralPattern::new("a")),
         3 => PatternEntry::Literal(LiteralPattern::new("é")),
         4 => PatternEntry::Literal(LiteralPattern::new("界")),
@@ -648,7 +679,7 @@ proptest::proptest! {
       let identity_patterns = pattern_kinds
         .iter()
         .map(|kind| match kind {
-          0 | 1 => PatternEntry::from(""),
+          0 | 1 => PatternEntry::from("b"),
           2 => PatternEntry::from("a"),
           3 => PatternEntry::from("é"),
           4 => PatternEntry::from("界"),
@@ -1301,165 +1332,49 @@ fn single_literal_engine_reports_only_native_iterator_matches() {
 }
 
 #[test]
-fn duplicate_empty_literals_select_the_lowest_pattern_index() {
-  let unnamed = TextSearch::new(
-    vec![PatternEntry::from(""), PatternEntry::from("")],
-    TextSearchOptions {
-      all_literal: true,
-      ..TextSearchOptions::default()
-    },
-  )
-  .unwrap();
-  let unnamed_matches = unnamed.find_iter("").unwrap();
-  assert_eq!(unnamed_matches.first().map(|found| found.pattern), Some(0));
-  assert_eq!(unnamed_matches.len(), 1);
-  assert_eq!(
-    unnamed
-      .replace_all("", &[String::from("first"), String::from("second")])
-      .unwrap(),
-    "first"
-  );
+fn every_literal_entry_form_rejects_an_empty_pattern() {
+  let mut named = LiteralPattern::new("");
+  named.name = Some(String::from("named"));
+  let cases = [
+    (
+      vec![PatternEntry::from("")],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+    (
+      vec![PatternEntry::Literal(LiteralPattern::new(""))],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+    (
+      vec![PatternEntry::Literal(named)],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: Some(String::from("named")),
+      },
+    ),
+    (
+      vec![PatternEntry::from("")],
+      TextSearchOptions {
+        all_literal: true,
+        ..TextSearchOptions::default()
+      },
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+  ];
 
-  let mut first = LiteralPattern::new("");
-  first.name = Some(String::from("first"));
-  let mut second = LiteralPattern::new("");
-  second.name = Some(String::from("second"));
-  let named = TextSearch::new(
-    vec![PatternEntry::Literal(first), PatternEntry::Literal(second)],
-    TextSearchOptions::default(),
-  )
-  .unwrap();
-  let matches = named.find_iter("").unwrap();
-  assert_eq!(matches.len(), 1);
-  assert_eq!(
-    matches
-      .first()
-      .map(|found| (found.pattern, found.name.as_deref())),
-    Some((0, Some("first")))
-  );
-  assert_eq!(
-    named
-      .replace_all("", &[String::from("first"), String::from("second")])
-      .unwrap(),
-    "first"
-  );
-}
-
-#[test]
-fn overlap_all_keeps_every_duplicate_empty_literal() {
-  let search = TextSearch::new(
-    vec![PatternEntry::from(""), PatternEntry::from("")],
-    TextSearchOptions {
-      all_literal: true,
-      overlap_strategy: OverlapStrategy::All,
-      ..TextSearchOptions::default()
-    },
-  )
-  .unwrap();
-  assert_eq!(
-    search
-      .find_iter("")
-      .unwrap()
-      .iter()
-      .map(|found| (found.pattern, found.start, found.end))
-      .collect::<Vec<_>>(),
-    vec![(0, 0, 0), (1, 0, 0)]
-  );
-}
-
-#[test]
-fn empty_literals_use_global_selection_on_every_literal_route() {
-  let patterns = vec![PatternEntry::from(""), PatternEntry::from("a")];
-  let direct = TextSearch::new(
-    patterns.clone(),
-    TextSearchOptions {
-      all_literal: true,
-      ..TextSearchOptions::default()
-    },
-  )
-  .unwrap();
-  let routed = TextSearch::new(
-    vec![
-      PatternEntry::from(""),
-      PatternEntry::from("a"),
-      PatternEntry::Regex(RegexPattern::new("z+")),
-    ],
-    TextSearchOptions::default(),
-  )
-  .unwrap();
-
-  let direct_matches = direct.find_iter("aa").unwrap();
-  assert_eq!(direct_matches, routed.find_iter("aa").unwrap());
-  assert_eq!(
-    direct_matches
-      .iter()
-      .map(|found| (found.pattern, found.start, found.end))
-      .collect::<Vec<_>>(),
-    vec![(1, 0, 1), (1, 1, 2), (0, 2, 2)]
-  );
-  assert_eq!(
-    direct
-      .replace_all("aa", &[String::from("E"), String::from("A")])
-      .unwrap(),
-    "AAE"
-  );
-
-  let overlap = TextSearch::new(
-    patterns,
-    TextSearchOptions {
-      all_literal: true,
-      overlap_strategy: OverlapStrategy::All,
-      ..TextSearchOptions::default()
-    },
-  )
-  .unwrap();
-  assert_eq!(
-    overlap
-      .find_iter("aa")
-      .unwrap()
-      .iter()
-      .map(|found| (found.pattern, found.start, found.end))
-      .collect::<Vec<_>>(),
-    vec![(0, 0, 0), (1, 0, 1), (0, 1, 1), (1, 1, 2), (0, 2, 2)]
-  );
-}
-
-#[test]
-fn empty_literals_on_non_ascii_haystacks_stay_on_character_boundaries() {
-  for whole_words in [false, true] {
-    for overlap_strategy in [OverlapStrategy::Longest, OverlapStrategy::All] {
-      let search = TextSearch::new(
-        vec![
-          PatternEntry::from(""),
-          PatternEntry::Regex(RegexPattern::new("Z")),
-        ],
-        TextSearchOptions {
-          whole_words,
-          overlap_strategy,
-          ..TextSearchOptions::default()
-        },
-      )
-      .unwrap();
-      let matches = search.find_iter("éa").unwrap();
-      let expected = if whole_words {
-        vec![(0, 0, 0), (0, 3, 3)]
-      } else {
-        vec![(0, 0, 0), (0, 2, 2), (0, 3, 3)]
-      };
-      assert_eq!(
-        matches
-          .iter()
-          .map(|found| (found.pattern, found.start, found.end))
-          .collect::<Vec<_>>(),
-        expected
-      );
-      assert_eq!(
-        search
-          .replace_all("éa", &[String::from("E"), String::from("Z")])
-          .unwrap(),
-        if whole_words { "EéaE" } else { "EéEaE" }
-      );
-    }
+  for (patterns, options, expected) in cases {
+    assert_eq!(TextSearch::new(patterns, options).err().unwrap(), expected);
   }
 }
 
@@ -1467,61 +1382,31 @@ proptest::proptest! {
   #![proptest_config(ProptestConfig::with_cases(64))]
 
   #[test]
-  fn empty_literal_offsets_are_boundaries_and_routes_agree(
-    characters in proptest::collection::vec(
-      proptest::prop_oneof![
-        proptest::strategy::Just('a'),
-        proptest::strategy::Just('é'),
-        proptest::strategy::Just('界'),
-        proptest::strategy::Just('😀'),
-        proptest::strategy::Just('𐐀'),
-        proptest::strategy::Just('🜁'),
-      ],
-      1..96,
-    ),
-    whole_words in proptest::prop_oneof![
-      proptest::strategy::Just(false),
-      proptest::strategy::Just(true),
-    ],
-    overlap_all in proptest::prop_oneof![
-      proptest::strategy::Just(false),
-      proptest::strategy::Just(true),
-    ],
+  fn empty_literal_entry_forms_are_always_rejected(
+    prefix in proptest::collection::vec("[a-z]{1,8}", 0..8),
+    named in proptest::prop_oneof![Just(false), Just(true)],
+    all_literal in proptest::prop_oneof![Just(false), Just(true)],
   ) {
-    let haystack = characters.into_iter().collect::<String>();
-    let overlap_strategy = if overlap_all {
-      OverlapStrategy::All
+    let index = prefix.len();
+    let mut patterns = prefix.into_iter().map(PatternEntry::from).collect::<Vec<_>>();
+    if named {
+      let mut literal = LiteralPattern::new("");
+      literal.name = Some(String::from("empty"));
+      patterns.push(PatternEntry::Literal(literal));
     } else {
-      OverlapStrategy::Longest
-    };
-    let options = TextSearchOptions {
-      whole_words,
-      overlap_strategy,
-      ..TextSearchOptions::default()
-    };
-    let direct = TextSearch::new(
-      vec![
-        PatternEntry::from(""),
-        PatternEntry::Regex(RegexPattern::new("q")),
-      ],
-      options,
-    ).unwrap();
-    let routed = TextSearch::new(
-      vec![
-        PatternEntry::from(""),
-        PatternEntry::Regex(RegexPattern::new("q")),
-        PatternEntry::Regex(RegexPattern::new("r")),
-      ],
-      options,
-    ).unwrap();
-    let direct_matches = direct.find_iter(&haystack).unwrap();
-    let routed_matches = routed.find_iter(&haystack).unwrap();
-
-    proptest::prop_assert_eq!(&direct_matches, &routed_matches);
-    for found in direct_matches {
-      proptest::prop_assert!(haystack.is_char_boundary(usize::try_from(found.start).unwrap()));
-      proptest::prop_assert!(haystack.is_char_boundary(usize::try_from(found.end).unwrap()));
+      patterns.push(PatternEntry::from(""));
     }
+    let error = TextSearch::new(
+      patterns,
+      TextSearchOptions { all_literal, ..TextSearchOptions::default() },
+    ).err().unwrap();
+    proptest::prop_assert_eq!(
+      error,
+      Error::EmptyPattern {
+        index,
+        name: named.then(|| String::from("empty")),
+      },
+    );
   }
 }
 

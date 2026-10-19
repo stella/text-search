@@ -19,11 +19,10 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 9;
+const PREPARED_ARTIFACTS_VERSION: u32 = 10;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
-  + std::mem::size_of::<u32>()
   + std::mem::size_of::<u32>();
 const AHO_FINGERPRINT_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const AHO_FINGERPRINT_PRIME: u64 = 0x0100_0000_01b3;
@@ -44,6 +43,10 @@ const INLINE_LITERAL_PREFILTER_MAX_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
+  EmptyPattern {
+    index: usize,
+    name: Option<String>,
+  },
   BuildLiteral(String),
   BuildRegex(String),
   BuildFuzzy(String),
@@ -108,6 +111,13 @@ pub enum Error {
 impl fmt::Display for Error {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Self::EmptyPattern { index, name } => {
+        write!(formatter, "Literal pattern at index {index}")?;
+        if let Some(name) = name {
+          write!(formatter, " ({name})")?;
+        }
+        formatter.write_str(" must not be empty")
+      }
       Self::BuildLiteral(reason) => {
         write!(formatter, "Failed to build literal engine: {reason}")
       }
@@ -476,7 +486,6 @@ pub struct PreparedAhoArtifact {
   pub fingerprint: u64,
   pub options: LiteralOptions,
   pub identity: bool,
-  pub empty_pattern_indices: Vec<u32>,
   pub bytes: Vec<u8>,
 }
 
@@ -485,7 +494,6 @@ pub struct PreparedAhoArtifactView<'a> {
   pub fingerprint: u64,
   pub options: LiteralOptions,
   pub identity: bool,
-  pub empty_pattern_indices: Vec<u32>,
   pub bytes: &'a [u8],
 }
 
@@ -512,16 +520,6 @@ impl PreparedTextSearchArtifacts {
       write_u64(&mut bytes, artifact.fingerprint);
       write_u8(&mut bytes, literal_options_to_flags(artifact.options));
       write_u8(&mut bytes, u8::from(artifact.identity));
-      write_u32(
-        &mut bytes,
-        checked_len_u32(
-          artifact.empty_pattern_indices.len(),
-          "aho_automata.empty_pattern_indices",
-        )?,
-      );
-      for index in &artifact.empty_pattern_indices {
-        write_u32(&mut bytes, *index);
-      }
       write_u32(
         &mut bytes,
         checked_len_u32(artifact.bytes.len(), "aho_automata.bytes")?,
@@ -588,27 +586,11 @@ impl<'a> PreparedTextSearchArtifactsView<'a> {
       let fingerprint = reader.read_u64()?;
       let options = literal_options_from_flags(reader.read_u8()?)?;
       let identity = read_identity_flag(reader.read_u8()?)?;
-      let empty_pattern_count = reader.read_usize()?;
-      let empty_pattern_bytes = empty_pattern_count
-        .checked_mul(std::mem::size_of::<u32>())
-        .ok_or_else(|| {
-          invalid_prepared_artifact("empty pattern count overflow")
-        })?;
-      if empty_pattern_bytes > reader.remaining_len() {
-        return Err(invalid_prepared_artifact(
-          "empty pattern count exceeds payload length",
-        ));
-      }
-      let mut empty_pattern_indices = Vec::with_capacity(empty_pattern_count);
-      for _ in 0..empty_pattern_count {
-        empty_pattern_indices.push(reader.read_u32()?);
-      }
       let automaton = reader.read_len_prefixed_bytes()?;
       aho_automata.push(PreparedAhoArtifactView {
         fingerprint,
         options,
         identity,
-        empty_pattern_indices,
         bytes: automaton,
       });
     }
@@ -659,7 +641,6 @@ impl<'a> From<&'a PreparedAhoArtifact> for PreparedAhoArtifactView<'a> {
       fingerprint: artifact.fingerprint,
       options: artifact.options,
       identity: artifact.identity,
-      empty_pattern_indices: artifact.empty_pattern_indices.clone(),
       bytes: &artifact.bytes,
     }
   }
@@ -671,7 +652,6 @@ impl From<PreparedAhoArtifactView<'_>> for PreparedAhoArtifact {
       fingerprint: artifact.fingerprint,
       options: artifact.options,
       identity: artifact.identity,
-      empty_pattern_indices: artifact.empty_pattern_indices,
       bytes: artifact.bytes.to_vec(),
     }
   }
@@ -749,8 +729,6 @@ struct LiteralSlot {
   name_map: Vec<Option<String>>,
   identity_map: bool,
   requires_overlap_selection: bool,
-  contains_empty_literal: bool,
-  empty_patterns: Vec<(u32, Option<String>)>,
 }
 
 struct SplitLiteralSlot {
@@ -760,7 +738,6 @@ struct SplitLiteralSlot {
 struct SplitLiteralEngine {
   engine: aho_core::AhoCorasick,
   pattern_offset: u32,
-  empty_pattern_indices: Vec<u32>,
 }
 
 struct RegexSlot {
@@ -810,17 +787,9 @@ enum AhoBuildMode<'a> {
   },
 }
 
-type PreparedAhoParts<'a> =
-  (usize, LiteralOptions, bool, u64, Vec<u32>, &'a [u8]);
-type LoadedPreparedAho = (
-  usize,
-  LiteralOptions,
-  bool,
-  u64,
-  Vec<u32>,
-  aho_core::AhoCorasick,
-  u32,
-);
+type PreparedAhoParts<'a> = (usize, LiteralOptions, bool, u64, &'a [u8]);
+type LoadedPreparedAho =
+  (usize, LiteralOptions, bool, u64, aho_core::AhoCorasick, u32);
 
 enum RegexBuildMode<'a> {
   Build,
@@ -938,7 +907,6 @@ impl AhoBuildMode<'_> {
       artifact.options,
       artifact.identity,
       artifact.fingerprint,
-      artifact.empty_pattern_indices.clone(),
       artifact.bytes,
     ))
   }
@@ -1313,20 +1281,12 @@ impl TextSearch {
         && options.unicode_boundaries
         && pattern_count >= SPLIT_IDENTITY_AC_MIN_PATTERNS
       {
-        let LiteralSlot {
-          engine,
-          empty_patterns,
-          ..
-        } = slot;
+        let LiteralSlot { engine, .. } = slot;
         (
           EngineSlot::SplitLiteral(SplitLiteralSlot {
             engines: vec![SplitLiteralEngine {
               engine,
               pattern_offset: 0,
-              empty_pattern_indices: empty_patterns
-                .into_iter()
-                .map(|(pattern, _)| pattern)
-                .collect(),
             }],
           }),
           pattern_count,
@@ -1382,6 +1342,7 @@ impl TextSearch {
     mut stats: Option<&mut Vec<BuildStats>>,
   ) -> Result<TextSearchBuildResult> {
     let patterns = patterns.into_iter().collect::<Vec<_>>();
+    reject_empty_literal_patterns(&patterns)?;
     let total_pattern_count = patterns.len();
     let mut engines = Vec::new();
 
@@ -1999,7 +1960,27 @@ pub fn classify_patterns(
   entries: &[PatternEntry],
   all_literal: bool,
 ) -> Result<Vec<ClassifiedPattern>> {
+  reject_empty_literal_patterns(entries)?;
   classify_pattern_entries(entries.to_vec(), all_literal)
+}
+
+fn reject_empty_literal_patterns(entries: &[PatternEntry]) -> Result<()> {
+  for (index, entry) in entries.iter().enumerate() {
+    let name = match entry {
+      PatternEntry::Auto(pattern) if pattern.is_empty() => None,
+      PatternEntry::Literal(pattern) if pattern.pattern.is_empty() => {
+        pattern.name.clone()
+      }
+      PatternEntry::Regex(_)
+      | PatternEntry::Fuzzy(_)
+      | PatternEntry::Literal(_) => {
+        continue;
+      }
+      PatternEntry::Auto(_) => continue,
+    };
+    return Err(Error::EmptyPattern { index, name });
+  }
+  Ok(())
 }
 
 fn classify_pattern_entries(
@@ -2353,13 +2334,6 @@ fn build_identity_literal_engine(
     pattern_strings.push(value);
   }
 
-  let contains_empty_literal = pattern_strings.iter().any(String::is_empty);
-  let empty_patterns = pattern_strings
-    .iter()
-    .enumerate()
-    .filter(|(_, pattern)| pattern.is_empty())
-    .map(|(index, _)| Ok((pattern_index(index)?, None)))
-    .collect::<Result<Vec<_>>>()?;
   Ok(EngineSlot::Literal(LiteralSlot {
     engine: build_aho(pattern_strings, options.into(), true, aho_mode)?,
     index_map: Vec::new(),
@@ -2367,8 +2341,6 @@ fn build_identity_literal_engine(
     identity_map: true,
     requires_overlap_selection: options.whole_words
       && !options.unicode_boundaries,
-    contains_empty_literal,
-    empty_patterns,
   }))
 }
 
@@ -2379,16 +2351,9 @@ fn push_split_literal_engine(
   options: TextSearchOptions,
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<()> {
-  let empty_pattern_indices = patterns
-    .iter()
-    .enumerate()
-    .filter(|(_, pattern)| pattern.is_empty())
-    .map(|(index, _)| pattern_index(index))
-    .collect::<Result<Vec<_>>>()?;
   engines.push(SplitLiteralEngine {
     engine: build_aho(patterns, options.into(), true, aho_mode)?,
     pattern_offset: pattern_index(offset)?,
-    empty_pattern_indices,
   });
   Ok(())
 }
@@ -2402,21 +2367,13 @@ fn load_split_literal_engines(
   let mut engines = Vec::with_capacity(automata_count);
   let mut offset = 0usize;
   for _ in 0..automata_count {
-    let (
-      artifact,
-      actual_options,
-      actual_identity,
-      _,
-      empty_pattern_indices,
-      engine,
-      count,
-    ) = load_prepared_aho_any(aho_mode)?;
+    let (artifact, actual_options, actual_identity, _, engine, count) =
+      load_prepared_aho_any(aho_mode)?;
     validate_prepared_aho_options(artifact, actual_options, expected_options)?;
     validate_prepared_aho_identity(artifact, actual_identity, true)?;
     engines.push(SplitLiteralEngine {
       engine,
       pattern_offset: pattern_index(offset)?,
-      empty_pattern_indices,
     });
     let count = usize::try_from(count)
       .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
@@ -2433,15 +2390,8 @@ fn load_identity_literal_engine(
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<(LiteralSlot, usize)> {
   let expected_options = options.into();
-  let (
-    artifact,
-    actual_options,
-    actual_identity,
-    _,
-    empty_pattern_indices,
-    engine,
-    pattern_count,
-  ) = load_prepared_aho_any(aho_mode)?;
+  let (artifact, actual_options, actual_identity, _, engine, pattern_count) =
+    load_prepared_aho_any(aho_mode)?;
   validate_prepared_aho_options(artifact, actual_options, expected_options)?;
   validate_prepared_aho_identity(artifact, actual_identity, true)?;
   let pattern_count = usize::try_from(pattern_count)
@@ -2454,11 +2404,6 @@ fn load_identity_literal_engine(
       identity_map: true,
       requires_overlap_selection: options.whole_words
         && !options.unicode_boundaries,
-      contains_empty_literal: !empty_pattern_indices.is_empty(),
-      empty_patterns: empty_pattern_indices
-        .into_iter()
-        .map(|index| (index, None))
-        .collect(),
     },
     pattern_count,
   ))
@@ -2478,13 +2423,6 @@ fn build_literal_engine(
     name_map.push(pattern.name);
   }
 
-  let contains_empty_literal = values.iter().any(String::is_empty);
-  let empty_patterns = values
-    .iter()
-    .zip(index_map.iter().copied().zip(name_map.iter().cloned()))
-    .filter(|(pattern, _)| pattern.is_empty())
-    .map(|(_, metadata)| metadata)
-    .collect();
   Ok(LiteralSlot {
     engine: build_aho(values, options, false, aho_mode)?,
     index_map,
@@ -2492,8 +2430,6 @@ fn build_literal_engine(
     identity_map: false,
     requires_overlap_selection: options.whole_words
       && !options.unicode_boundaries,
-    contains_empty_literal,
-    empty_patterns,
   })
 }
 
@@ -2507,8 +2443,7 @@ fn literal_fast_path_slot(
   let [EngineSlot::Literal(slot)] = engines else {
     return None;
   };
-  (!slot.requires_overlap_selection && !slot.contains_empty_literal)
-    .then_some(slot)
+  (!slot.requires_overlap_selection).then_some(slot)
 }
 
 fn zero_overhead_non_literal_slot(
@@ -3141,12 +3076,6 @@ fn build_aho(
       index: patterns.len(),
     }
   })?;
-  let empty_pattern_indices = patterns
-    .iter()
-    .enumerate()
-    .filter(|(_, pattern)| pattern.is_empty())
-    .map(|(index, _)| pattern_index(index))
-    .collect::<Result<Vec<_>>>()?;
   let build_options = aho_core::Options {
     match_kind: aho_core::MatchKind::LeftmostLongest,
     case_insensitive: options.case_insensitive,
@@ -3169,7 +3098,6 @@ fn build_aho(
         fingerprint,
         options,
         identity,
-        empty_pattern_indices,
         bytes,
       });
       Ok(engine)
@@ -3178,13 +3106,7 @@ fn build_aho(
       let fingerprint = aho_fingerprint(&patterns, options)?;
       let expected = usize::try_from(expected)
         .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
-      load_prepared_aho(
-        aho_mode,
-        expected,
-        fingerprint,
-        identity,
-        &empty_pattern_indices,
-      )
+      load_prepared_aho(aho_mode, expected, fingerprint, identity)
     }
   }
 }
@@ -3194,19 +3116,11 @@ fn load_prepared_aho(
   expected: usize,
   fingerprint: u64,
   identity: bool,
-  expected_empty_pattern_indices: &[u32],
 ) -> Result<aho_core::AhoCorasick> {
   let expected = u32::try_from(expected)
     .map_err(|_| Error::PatternIndexOutOfRange { index: expected })?;
-  let (
-    artifact,
-    _,
-    actual_identity,
-    actual_fingerprint,
-    actual_empty_pattern_indices,
-    engine,
-    actual,
-  ) = load_prepared_aho_any(aho_mode)?;
+  let (artifact, _, actual_identity, actual_fingerprint, engine, actual) =
+    load_prepared_aho_any(aho_mode)?;
   if actual != expected {
     return Err(Error::PreparedAhoPatternCountMismatch {
       artifact,
@@ -3217,11 +3131,6 @@ fn load_prepared_aho(
   if actual_fingerprint != fingerprint {
     return Err(Error::PreparedAhoFingerprintMismatch { artifact });
   }
-  if actual_empty_pattern_indices != expected_empty_pattern_indices {
-    return Err(invalid_prepared_artifact(
-      "empty pattern metadata does not match source patterns",
-    ));
-  }
   validate_prepared_aho_identity(artifact, actual_identity, identity)?;
   Ok(engine)
 }
@@ -3229,38 +3138,22 @@ fn load_prepared_aho(
 fn load_prepared_aho_any(
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<LoadedPreparedAho> {
-  let (artifact, options, identity, fingerprint, empty_pattern_indices, bytes) =
+  let (artifact, options, identity, fingerprint, bytes) =
     aho_mode.next_prepared_aho()?;
   let engine = aho_core::AhoCorasick::from_prepared(bytes)
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-  let actual = engine.pattern_count();
-  validate_empty_pattern_indices(&empty_pattern_indices, actual)?;
-  Ok((
-    artifact,
-    options,
-    identity,
-    fingerprint,
-    empty_pattern_indices,
-    engine,
-    actual,
-  ))
-}
-
-fn validate_empty_pattern_indices(
-  indices: &[u32],
-  pattern_count: u32,
-) -> Result<()> {
-  let mut previous = None;
-  for index in indices {
-    if *index >= pattern_count || previous.is_some_and(|value| value >= *index)
-    {
-      return Err(invalid_prepared_artifact(
-        "empty pattern indices must be ordered, unique, and in range",
-      ));
-    }
-    previous = Some(*index);
+  let empty_matches = engine
+    .find_overlapping_iter_packed_bytes("")
+    .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+  if let Some(pattern) = empty_matches.first() {
+    return Err(Error::EmptyPattern {
+      index: usize::try_from(*pattern)
+        .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?,
+      name: None,
+    });
   }
-  Ok(())
+  let actual = engine.pattern_count();
+  Ok((artifact, options, identity, fingerprint, engine, actual))
 }
 
 fn validate_prepared_aho_options(
@@ -3484,7 +3377,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
         .engine
         .find_overlapping_iter_packed_bytes(haystack)
         .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-      let mut matches = extend_triple_matches(
+      extend_triple_matches(
         SearchEngine::Literal,
         haystack,
         &packed,
@@ -3493,23 +3386,7 @@ fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
           name_map: &slot.name_map,
           identity: slot.identity_map,
         },
-      )?;
-      if slot.empty_patterns.len() > 1 {
-        let empty_matches = matches
-          .iter()
-          .filter(|found| found.start == found.end)
-          .cloned()
-          .collect::<Vec<_>>();
-        for found in empty_matches {
-          for (pattern, name) in slot.empty_patterns.iter().skip(1) {
-            let mut duplicate = found.clone();
-            duplicate.pattern = *pattern;
-            duplicate.name.clone_from(name);
-            matches.push(duplicate);
-          }
-        }
-      }
-      Ok(matches)
+      )
     }
     EngineSlot::SplitLiteral(slot) => split_literal_find_iter(slot, haystack),
     EngineSlot::Regex(slot) => regex_slot_find_iter(slot, haystack),
@@ -3907,18 +3784,16 @@ mod scheduler_tests {
   #[test]
   fn literal_fast_path_eligibility_follows_shared_option_table() -> Result<()> {
     let cases = [
-      (false, true, OverlapStrategy::Longest, false, true, true),
-      (true, true, OverlapStrategy::Longest, false, true, true),
-      (true, false, OverlapStrategy::Longest, false, false, false),
-      (false, true, OverlapStrategy::All, false, false, true),
-      (false, true, OverlapStrategy::Longest, true, false, false),
+      (false, true, OverlapStrategy::Longest, true, true),
+      (true, true, OverlapStrategy::Longest, true, true),
+      (true, false, OverlapStrategy::Longest, false, false),
+      (false, true, OverlapStrategy::All, false, true),
     ];
 
     for (
       whole_words,
       unicode_boundaries,
       overlap_strategy,
-      contains_empty,
       eligible,
       replacement_eligible,
     ) in cases
@@ -3930,9 +3805,8 @@ mod scheduler_tests {
         overlap_strategy,
         ..TextSearchOptions::default()
       };
-      let first = if contains_empty { "" } else { "a" };
       let search = TextSearch::new(
-        vec![PatternEntry::from(first), PatternEntry::from("a b")],
+        vec![PatternEntry::from("a"), PatternEntry::from("a b")],
         options,
       )?;
       assert_eq!(
@@ -4187,29 +4061,14 @@ fn split_literal_engine_find_iter(
     .engine
     .find_overlapping_iter_packed_bytes(haystack)
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-  let mut matches = extend_triple_matches(
+  extend_triple_matches(
     SearchEngine::Literal,
     haystack,
     &packed,
     &Remap::Offset {
       pattern_offset: engine.pattern_offset,
     },
-  )?;
-  if engine.empty_pattern_indices.len() > 1 {
-    let empty_matches = matches
-      .iter()
-      .filter(|found| found.start == found.end)
-      .cloned()
-      .collect::<Vec<_>>();
-    for found in empty_matches {
-      for pattern in engine.empty_pattern_indices.iter().skip(1) {
-        let mut duplicate = found.clone();
-        duplicate.pattern = engine.pattern_offset.saturating_add(*pattern);
-        matches.push(duplicate);
-      }
-    }
-  }
-  Ok(matches)
+  )
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4479,12 +4338,6 @@ fn finalize_find_matches(
         .cmp(&right.start)
         .then_with(|| left.end.cmp(&right.end))
         .then_with(|| left.pattern.cmp(&right.pattern))
-    });
-    matches.dedup_by(|right, left| {
-      right.start == right.end
-        && left.start == left.end
-        && right.start == left.start
-        && right.pattern == left.pattern
     });
     return;
   }
