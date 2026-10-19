@@ -167,6 +167,12 @@ new TextSearch(patterns, {
 });
 ```
 
+The default `overlapStrategy: "longest"` selects literal candidates once,
+globally, after all engine routes have reported their matches. With `"all"`,
+every literal occurrence is retained and ordered by start offset, end offset,
+then pattern index. Regex and fuzzy engines expose native non-overlapping
+iteration, so `"all"` cannot add overlaps those engines do not report.
+
 ## API
 
 | Method                           | Returns    | Description                   |

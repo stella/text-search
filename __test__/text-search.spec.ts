@@ -19,6 +19,56 @@ describe("TextSearch", () => {
     expect(texts).toContain("bar");
   });
 
+  test("literal longest selection matches the core regardless of insertion order", () => {
+    for (const patterns of [
+      ["a", "aa", "aaa"],
+      ["aaa", "aa", "a"],
+      ["aa", "a", "aaa"],
+    ]) {
+      const search = new TextSearch(patterns, { allLiteral: true });
+      expect(search.findIter("aaaa").map(({ text }) => text)).toEqual(["aaa", "a"]);
+      expect(
+        search.replaceAll(
+          "aaaa",
+          patterns.map((pattern) => `[${pattern}]`),
+        ),
+      ).toBe("[aaa][a]");
+    }
+  });
+
+  test("ASCII whole-word filtering precedes longest selection", () => {
+    const search = new TextSearch(["a", "aa"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+    expect(search.findIter("aa").map(({ text }) => text)).toEqual(["aa"]);
+  });
+
+  test("selects literal candidates globally across engine routes", () => {
+    const first = new TextSearch([/ab/, "b", "bcdef", "fg"]);
+    expect(
+      first.findIter("abcdefg").map(({ pattern, start, end }) => ({ pattern, start, end })),
+    ).toEqual([
+      { pattern: 0, start: 0, end: 2 },
+      { pattern: 3, start: 5, end: 7 },
+    ]);
+    expect(first.replaceAll("abcdefg", ["<AB>", "<B>", "<BCDEF>", "<FG>"])).toBe("<AB>cde<FG>");
+
+    const second = new TextSearch(["a", "abcd", "dEF", /zab/]);
+    expect(
+      second.findIter("zabcdEF").map(({ pattern, start, end }) => ({ pattern, start, end })),
+    ).toEqual([
+      { pattern: 3, start: 0, end: 3 },
+      { pattern: 2, start: 4, end: 7 },
+    ]);
+    expect(second.replaceAll("zabcdEF", ["<A>", "<ABCD>", "<DEF>", "<ZAB>"])).toBe("<ZAB>c<DEF>");
+  });
+
+  test("whichMatch reports overlapping literal patterns", () => {
+    expect(new TextSearch(["a", "aa"], { allLiteral: true }).whichMatch("aa")).toEqual([0, 1]);
+  });
+
   test("named patterns", () => {
     const ts = new TextSearch([
       { pattern: "\\d+", name: "number" },
@@ -263,6 +313,12 @@ describe("auto-optimization", () => {
     expect(engines).toHaveLength(1);
     expect(engines[0]!.type).toBe("split-ac");
     expect(ts.findIter("alpha beta")).toEqual([
+      {
+        pattern: 0,
+        start: 0,
+        end: 5,
+        text: "alpha",
+      },
       {
         pattern: 40_000,
         start: 0,

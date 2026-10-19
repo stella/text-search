@@ -9,12 +9,13 @@ import type { Match } from "./types";
 export function mergeAndSelect(matches: Match[]): Match[] {
   if (matches.length <= 1) return matches;
 
-  // Sort: start ascending, longest first at ties
+  // Sort: start ascending, longest first at ties,
+  // then original pattern order.
   matches.sort((a, b) => {
     if (a.start !== b.start) {
       return a.start - b.start;
     }
-    return b.end - b.start - (a.end - a.start);
+    return b.end - a.end || a.pattern - b.pattern;
   });
 
   // Greedily select non-overlapping

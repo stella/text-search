@@ -19,7 +19,7 @@ const SPLIT_IDENTITY_AC_MIN_PATTERNS: usize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 const MATCH_FIELDS: usize = 3;
 const FUZZY_MATCH_FIELDS: usize = 4;
 const PREPARED_ARTIFACTS_MAGIC: &[u8; 8] = b"TXSRCH01";
-const PREPARED_ARTIFACTS_VERSION: u32 = 7;
+const PREPARED_ARTIFACTS_VERSION: u32 = 8;
 const PREPARED_AHO_ARTIFACT_MIN_BYTES: usize = std::mem::size_of::<u64>()
   + std::mem::size_of::<u8>()
   + std::mem::size_of::<u8>()
@@ -717,12 +717,10 @@ struct LiteralSlot {
   index_map: Vec<u32>,
   name_map: Vec<Option<String>>,
   identity_map: bool,
-  overlap_strategy: OverlapStrategy,
 }
 
 struct SplitLiteralSlot {
   engines: Vec<SplitLiteralEngine>,
-  overlap_strategy: OverlapStrategy,
 }
 
 struct SplitLiteralEngine {
@@ -1276,7 +1274,6 @@ impl TextSearch {
               engine,
               pattern_offset: 0,
             }],
-            overlap_strategy: options.overlap_strategy,
           }),
           pattern_count,
         )
@@ -1704,7 +1701,6 @@ fn push_literal_engines(
         Ok(EngineSlot::Literal(build_literal_engine(
           group,
           literal_options,
-          options.overlap_strategy,
           aho_mode,
         )?))
       },
@@ -2253,10 +2249,7 @@ fn build_identity_literal_engine(
       )?;
     }
 
-    return Ok(EngineSlot::SplitLiteral(SplitLiteralSlot {
-      engines,
-      overlap_strategy: options.overlap_strategy,
-    }));
+    return Ok(EngineSlot::SplitLiteral(SplitLiteralSlot { engines }));
   }
 
   let mut pattern_strings = Vec::with_capacity(pattern_count);
@@ -2274,7 +2267,6 @@ fn build_identity_literal_engine(
     index_map: Vec::new(),
     name_map: Vec::new(),
     identity_map: true,
-    overlap_strategy: options.overlap_strategy,
   }))
 }
 
@@ -2316,13 +2308,7 @@ fn load_split_literal_engines(
       .ok_or(Error::PatternIndexOutOfRange { index: usize::MAX })?;
   }
 
-  Ok((
-    SplitLiteralSlot {
-      engines,
-      overlap_strategy: options.overlap_strategy,
-    },
-    offset,
-  ))
+  Ok((SplitLiteralSlot { engines }, offset))
 }
 
 fn load_identity_literal_engine(
@@ -2342,7 +2328,6 @@ fn load_identity_literal_engine(
       index_map: Vec::new(),
       name_map: Vec::new(),
       identity_map: true,
-      overlap_strategy: options.overlap_strategy,
     },
     pattern_count,
   ))
@@ -2351,7 +2336,6 @@ fn load_identity_literal_engine(
 fn build_literal_engine(
   patterns: Vec<ClassifiedPattern>,
   options: LiteralOptions,
-  overlap_strategy: OverlapStrategy,
   aho_mode: &mut AhoBuildMode<'_>,
 ) -> Result<LiteralSlot> {
   let mut values = Vec::with_capacity(patterns.len());
@@ -2368,7 +2352,6 @@ fn build_literal_engine(
     index_map,
     name_map,
     identity_map: false,
-    overlap_strategy,
   })
 }
 
@@ -2985,7 +2968,7 @@ fn build_aho(
     }
   })?;
   let build_options = aho_core::Options {
-    match_kind: aho_core::MatchKind::LeftmostFirst,
+    match_kind: aho_core::MatchKind::LeftmostLongest,
     case_insensitive: options.case_insensitive,
     dfa: false,
     whole_words: options.whole_words,
@@ -3269,12 +3252,12 @@ fn engine_is_match(engine: &EngineSlot, haystack: &str) -> Result<bool> {
 fn engine_find_iter(engine: &EngineSlot, haystack: &str) -> Result<Vec<Match>> {
   match engine {
     EngineSlot::Literal(slot) => {
-      let packed = if slot.overlap_strategy == OverlapStrategy::All {
-        slot.engine.find_overlapping_iter_packed_bytes(haystack)
-      } else {
-        slot.engine.find_iter_packed_bytes(haystack)
-      }
-      .map_err(|error| Error::BuildLiteral(error.to_string()))?;
+      // Literal candidates must remain intact until the global cross-engine
+      // selection pass. Regex and fuzzy engines expose only native iteration.
+      let packed = slot
+        .engine
+        .find_overlapping_iter_packed_bytes(haystack)
+        .map_err(|error| Error::BuildLiteral(error.to_string()))?;
       extend_triple_matches(
         SearchEngine::Literal,
         haystack,
@@ -3755,11 +3738,7 @@ fn split_literal_find_iter(
     split_literal_find_iter_sequential(&slot.engines, haystack)?
   };
 
-  if slot.overlap_strategy == OverlapStrategy::All {
-    return Ok(matches);
-  }
-
-  Ok(select_leftmost_longest_matches(matches))
+  Ok(matches)
 }
 
 fn split_literal_find_iter_with_stats(
@@ -3767,25 +3746,21 @@ fn split_literal_find_iter_with_stats(
   haystack: &str,
   slot_index: usize,
 ) -> Result<TextSearchFindResult> {
-  let mut result =
-    if should_parallel_split_literal_find(&slot.engines, haystack) {
-      split_literal_find_iter_parallel_with_stats(
-        &slot.engines,
-        haystack,
-        slot_index,
-      )?
-    } else {
-      split_literal_find_iter_sequential_with_stats(
-        &slot.engines,
-        haystack,
-        slot_index,
-        0,
-      )?
-    };
+  let result = if should_parallel_split_literal_find(&slot.engines, haystack) {
+    split_literal_find_iter_parallel_with_stats(
+      &slot.engines,
+      haystack,
+      slot_index,
+    )?
+  } else {
+    split_literal_find_iter_sequential_with_stats(
+      &slot.engines,
+      haystack,
+      slot_index,
+      0,
+    )?
+  };
 
-  if slot.overlap_strategy != OverlapStrategy::All {
-    result.matches = select_leftmost_longest_matches(result.matches);
-  }
   Ok(result)
 }
 
@@ -4179,7 +4154,13 @@ fn finalize_find_matches(
     return;
   }
   if overlap_strategy == OverlapStrategy::All {
-    matches.sort_by_key(|found| found.start);
+    matches.sort_by(|left, right| {
+      left
+        .start
+        .cmp(&right.start)
+        .then_with(|| left.end.cmp(&right.end))
+        .then_with(|| left.pattern.cmp(&right.pattern))
+    });
     return;
   }
 
@@ -4501,56 +4482,6 @@ fn merge_and_select(mut matches: Vec<Match>) -> Vec<Match> {
       last_end = found.end;
       selected.push(found);
     }
-  }
-  selected
-}
-
-fn select_leftmost_longest_matches(mut matches: Vec<Match>) -> Vec<Match> {
-  if matches.is_empty() {
-    return Vec::new();
-  }
-  matches.sort_by(|left, right| {
-    left
-      .start
-      .cmp(&right.start)
-      .then_with(|| {
-        let left_len = left.end.saturating_sub(left.start);
-        let right_len = right.end.saturating_sub(right.start);
-        right_len.cmp(&left_len)
-      })
-      .then_with(|| left.pattern.cmp(&right.pattern))
-  });
-
-  let mut selected = Vec::new();
-  let mut cursor = 0;
-  let mut index = 0;
-  while index < matches.len() {
-    let Some(found) = matches.get(index) else {
-      break;
-    };
-    let start = found.start;
-    if start < cursor {
-      index = index.saturating_add(1);
-      continue;
-    }
-
-    let mut best = found;
-    index = index.saturating_add(1);
-    while let Some(candidate) = matches
-      .get(index)
-      .filter(|candidate| candidate.start == start)
-    {
-      let candidate_len = candidate.end.saturating_sub(candidate.start);
-      let best_len = best.end.saturating_sub(best.start);
-      if candidate_len > best_len
-        || (candidate_len == best_len && candidate.pattern < best.pattern)
-      {
-        best = candidate;
-      }
-      index = index.saturating_add(1);
-    }
-    cursor = best.end;
-    selected.push(best.clone());
   }
   selected
 }

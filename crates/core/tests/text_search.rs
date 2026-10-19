@@ -1074,6 +1074,21 @@ fn literal_pattern_options_fall_back_to_global_options() {
 }
 
 #[test]
+fn literal_longest_selection_matches_typescript_api() {
+  for patterns in [vec!["a", "aa"], vec!["aa", "a"]] {
+    let search = TextSearch::new(
+      patterns.into_iter().map(PatternEntry::from),
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+    let matches = search.find_iter("aa").unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].text, "aa");
+    assert_eq!((matches[0].start, matches[0].end), (0, 2));
+  }
+}
+
+#[test]
 fn which_match_keeps_cross_engine_overlaps() {
   let search = TextSearch::new(
     vec![
