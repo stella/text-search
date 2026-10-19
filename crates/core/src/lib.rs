@@ -2368,7 +2368,7 @@ fn load_split_literal_engines(
   let mut offset = 0usize;
   for _ in 0..automata_count {
     let (artifact, actual_options, actual_identity, _, engine, count) =
-      load_prepared_aho_any(aho_mode)?;
+      load_prepared_aho_any(aho_mode, offset)?;
     validate_prepared_aho_options(artifact, actual_options, expected_options)?;
     validate_prepared_aho_identity(artifact, actual_identity, true)?;
     engines.push(SplitLiteralEngine {
@@ -2391,7 +2391,7 @@ fn load_identity_literal_engine(
 ) -> Result<(LiteralSlot, usize)> {
   let expected_options = options.into();
   let (artifact, actual_options, actual_identity, _, engine, pattern_count) =
-    load_prepared_aho_any(aho_mode)?;
+    load_prepared_aho_any(aho_mode, 0)?;
   validate_prepared_aho_options(artifact, actual_options, expected_options)?;
   validate_prepared_aho_identity(artifact, actual_identity, true)?;
   let pattern_count = usize::try_from(pattern_count)
@@ -3120,7 +3120,7 @@ fn load_prepared_aho(
   let expected = u32::try_from(expected)
     .map_err(|_| Error::PatternIndexOutOfRange { index: expected })?;
   let (artifact, _, actual_identity, actual_fingerprint, engine, actual) =
-    load_prepared_aho_any(aho_mode)?;
+    load_prepared_aho_any(aho_mode, 0)?;
   if actual != expected {
     return Err(Error::PreparedAhoPatternCountMismatch {
       artifact,
@@ -3137,6 +3137,7 @@ fn load_prepared_aho(
 
 fn load_prepared_aho_any(
   aho_mode: &mut AhoBuildMode<'_>,
+  pattern_offset: usize,
 ) -> Result<LoadedPreparedAho> {
   let (artifact, options, identity, fingerprint, bytes) =
     aho_mode.next_prepared_aho()?;
@@ -3146,9 +3147,12 @@ fn load_prepared_aho_any(
     .find_overlapping_iter_packed_bytes("")
     .map_err(|error| Error::BuildLiteral(error.to_string()))?;
   if let Some(pattern) = empty_matches.first() {
+    let local_index = usize::try_from(*pattern)
+      .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
     return Err(Error::EmptyPattern {
-      index: usize::try_from(*pattern)
-        .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?,
+      index: pattern_offset
+        .checked_add(local_index)
+        .ok_or(Error::PatternIndexOutOfRange { index: usize::MAX })?,
       name: None,
     });
   }

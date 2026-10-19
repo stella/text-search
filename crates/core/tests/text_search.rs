@@ -635,6 +635,56 @@ fn loading_prepared_empty_literal_artifacts_returns_typed_error() {
   );
 }
 
+#[test]
+fn loading_split_prepared_empty_literal_artifact_reports_original_index() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let engine_options = stella_aho_corasick_core::Options {
+    match_kind: stella_aho_corasick_core::MatchKind::LeftmostLongest,
+    case_insensitive: false,
+    dfa: false,
+    whole_words: true,
+    unicode_boundaries: true,
+  };
+  let first = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::from("a"); SPLIT_LITERAL_FIXTURE_CHUNK_SIZE],
+    engine_options,
+  )
+  .unwrap();
+  let second = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::new()],
+    engine_options,
+  )
+  .unwrap();
+  let artifacts = PreparedTextSearchArtifacts {
+    aho_automata: [first, second]
+      .into_iter()
+      .map(|engine| PreparedAhoArtifact {
+        fingerprint: 0,
+        options: options.into(),
+        identity: true,
+        bytes: engine.to_prepared().unwrap(),
+      })
+      .collect(),
+    regex_sets: Vec::new(),
+  };
+
+  let error =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .err()
+      .unwrap();
+  assert_eq!(
+    error,
+    Error::EmptyPattern {
+      index: SPLIT_LITERAL_FIXTURE_CHUNK_SIZE,
+      name: None,
+    }
+  );
+}
+
 proptest::proptest! {
   #![proptest_config(ProptestConfig::with_cases(96))]
 
