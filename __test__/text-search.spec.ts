@@ -262,9 +262,7 @@ describe("TextSearch", () => {
   });
 
   test("duplicate empty literals are rejected with their index and name", () => {
-    expect(() => new TextSearch(["", ""], { allLiteral: true })).toThrow(
-      new EmptyPatternError(0),
-    );
+    expect(() => new TextSearch(["", ""], { allLiteral: true })).toThrow(new EmptyPatternError(0));
     expect(
       () =>
         new TextSearch([
@@ -275,9 +273,9 @@ describe("TextSearch", () => {
   });
 
   test('overlap "all" rejects duplicate empty literals', () => {
-    expect(
-      () => new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" }),
-    ).toThrow(EmptyPatternError);
+    expect(() => new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" })).toThrow(
+      EmptyPatternError,
+    );
   });
 
   test("split literal route rejects duplicate empty literals", () => {
@@ -310,14 +308,62 @@ describe("TextSearch", () => {
       { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true },
       { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false },
       { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: false, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: true, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: false, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false, caseInsensitive: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true, caseInsensitive: true },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
     ] as const;
     const expectedCombinationCount = 16;
     const casesPerCombination = 15;
@@ -326,7 +372,7 @@ describe("TextSearch", () => {
     for (const options of optionCombinations) {
       const combination = `${options.overlapStrategy}/${options.wholeWords}/${options.unicodeBoundaries}/${"caseInsensitive" in options}`;
       for (let iteration = 0; iteration < casesPerCombination; iteration += 1) {
-        textSearchTestHooks.setAsciiWholeWordWindowSize(3);
+        textSearchTestHooks.setAsciiWholeWordMatchBudget(3);
         const patterns = Array.from(
           { length: 2 + randomInt(7) },
           () => atoms[randomInt(atoms.length)],
@@ -377,7 +423,11 @@ describe("TextSearch", () => {
   });
 
   test("every literal entry form rejects an empty pattern", () => {
-    const cases: Array<{ patterns: ConstructorParameters<typeof TextSearch>[0]; options?: ConstructorParameters<typeof TextSearch>[1]; name?: string }> = [
+    const cases: Array<{
+      patterns: ConstructorParameters<typeof TextSearch>[0];
+      options?: ConstructorParameters<typeof TextSearch>[1];
+      name?: string;
+    }> = [
       { patterns: [""] },
       { patterns: [{ pattern: "", literal: true }] },
       { patterns: [{ pattern: "", literal: true, name: "named" }], name: "named" },
@@ -391,7 +441,10 @@ describe("TextSearch", () => {
         throw new Error("Expected empty literal construction to fail");
       } catch (error) {
         expect(error).toBeInstanceOf(EmptyPatternError);
-        expect(error).toMatchObject({ index: 0, ...(name === undefined ? {} : { patternName: name }) });
+        expect(error).toMatchObject({
+          index: 0,
+          ...(name === undefined ? {} : { patternName: name }),
+        });
       }
     }
   });
@@ -445,21 +498,44 @@ describe("TextSearch", () => {
       wholeWords: true,
       unicodeBoundaries: false,
     });
-    const { ac } = Reflect.get(search, "engines")[0];
-    const nativeFindOverlappingIter = ac.findOverlappingIter.bind(ac);
-    let nativeCalls = 0;
-    ac.findOverlappingIter = (haystack: string) => {
-      nativeCalls += 1;
-      return nativeFindOverlappingIter(haystack);
-    };
-    textSearchTestHooks.setAsciiWholeWordWindowSize(16);
+    textSearchTestHooks.setAsciiWholeWordMatchBudget(16);
 
     expect(search.isMatch(`alpha beta ${"missing ".repeat(100)}`)).toBe(true);
-    expect(nativeCalls).toBe(1);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBe(1);
+  });
+
+  test("ASCII whole-word isMatch deduplicates literals before collecting candidates", () => {
+    const search = new TextSearch(
+      Array.from({ length: 2_000 }, () => "a"),
+      {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+    );
+
+    expect(search.isMatch("a ".repeat(5_000))).toBe(true);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBe(1);
+    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
+  });
+
+  test("ASCII whole-word isMatch bounds distinct-heavy candidate windows", () => {
+    const search = new TextSearch(
+      Array.from({ length: 200 }, (_, index) => "a".repeat(index + 1)),
+      {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+    );
+
+    expect(search.isMatch("a".repeat(20_000))).toBe(false);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBeGreaterThan(1);
+    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
   });
 
   test("ASCII whole-word isMatch finds a candidate across a window boundary", () => {
-    textSearchTestHooks.setAsciiWholeWordWindowSize(8);
+    textSearchTestHooks.setAsciiWholeWordMatchBudget(8);
     const search = new TextSearch(["alpha"], {
       allLiteral: true,
       wholeWords: true,

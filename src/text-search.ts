@@ -8,11 +8,14 @@ const AUTO_REGEX_CHUNK_MAX_SIZE = 16;
 const AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET = 6;
 const AUTO_REGEX_ISOLATE_COMPLEXITY = 7;
 const SPLIT_IDENTITY_AC_CHUNK_SIZE = 20_000;
-const ASCII_WHOLE_WORD_WINDOW_SIZE = 64 * 1024;
+const ASCII_WHOLE_WORD_MATCH_BUDGET = 1_000_000;
+const ASCII_WHOLE_WORD_BOUNDARY_CONTEXT = 2;
 let identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
 let identityAcTestRoute: "production" | "ordinary" | "split" = "production";
-let asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
+let asciiWholeWordMatchBudget = ASCII_WHOLE_WORD_MATCH_BUDGET;
 let selectionPassCount = 0;
+let asciiWholeWordNativeCallCount = 0;
+let asciiWholeWordMaxCandidateCount = 0;
 
 /** Test-only route control. Not re-exported by the package entry point. */
 export const textSearchTestHooks = {
@@ -22,11 +25,17 @@ export const textSearchTestHooks = {
   forceIdentityAcRoute(route: "ordinary" | "split"): void {
     identityAcTestRoute = route;
   },
-  setAsciiWholeWordWindowSize(size: number): void {
-    if (!Number.isSafeInteger(size) || size < 1) {
-      throw new RangeError("ASCII whole-word window size must be a positive integer");
+  setAsciiWholeWordMatchBudget(budget: number): void {
+    if (!Number.isSafeInteger(budget) || budget < 1) {
+      throw new RangeError("ASCII whole-word match budget must be a positive integer");
     }
-    asciiWholeWordWindowSize = size;
+    asciiWholeWordMatchBudget = budget;
+  },
+  getAsciiWholeWordNativeCallCount(): number {
+    return asciiWholeWordNativeCallCount;
+  },
+  getAsciiWholeWordMaxCandidateCount(): number {
+    return asciiWholeWordMaxCandidateCount;
   },
   getSelectionPassCount(): number {
     return selectionPassCount;
@@ -34,8 +43,10 @@ export const textSearchTestHooks = {
   reset(): void {
     identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
     identityAcTestRoute = "production";
-    asciiWholeWordWindowSize = ASCII_WHOLE_WORD_WINDOW_SIZE;
+    asciiWholeWordMatchBudget = ASCII_WHOLE_WORD_MATCH_BUDGET;
     selectionPassCount = 0;
+    asciiWholeWordNativeCallCount = 0;
+    asciiWholeWordMaxCandidateCount = 0;
   },
 };
 
@@ -72,6 +83,9 @@ type AcSlot = {
   patternCount?: number;
   requiresOverlapSelection: boolean;
   longestLiteralLength: number;
+  distinctLiteralCount: number;
+  isMatchAc?: OverlapEngine;
+  buildIsMatchAc: () => OverlapEngine;
 };
 
 type SplitAcSlot = {
@@ -409,11 +423,7 @@ export class TextSearch {
 
 function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
   const engine = engines.length === 1 ? engines[0] : undefined;
-  return (
-    !overlapAll &&
-    engine?.type === "ac" &&
-    !engine.requiresOverlapSelection
-  );
+  return !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection;
 }
 
 function isZeroOverheadFindEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
@@ -758,6 +768,7 @@ function buildAcEngine(
   }
 
   const { AhoCorasick } = getEngines();
+  const distinctLiterals = [...new Set(literals)];
   const ac = new AhoCorasick(literals, {
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
@@ -773,6 +784,14 @@ function buildAcEngine(
     patternCount: literals.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
     longestLiteralLength: getLongestLiteralLength(literals),
+    distinctLiteralCount: distinctLiterals.length,
+    buildIsMatchAc: () =>
+      new AhoCorasick(distinctLiterals, {
+        wholeWords: options.wholeWords,
+        unicodeBoundaries: options.unicodeBoundaries,
+        caseInsensitive: options.caseInsensitive,
+        matchKind: "leftmost-longest",
+      }) as OverlapEngine,
   };
 }
 
@@ -823,6 +842,7 @@ function buildIdentityAcEngine(
     matchKind: "leftmost-longest",
   });
 
+  const distinctPatterns = [...new Set(patterns)];
   return {
     type: "ac",
     ac,
@@ -832,6 +852,14 @@ function buildIdentityAcEngine(
     patternCount: patterns.length,
     requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
     longestLiteralLength: getLongestLiteralLength(patterns),
+    distinctLiteralCount: distinctPatterns.length,
+    buildIsMatchAc: () =>
+      new AhoCorasick(distinctPatterns, {
+        wholeWords: options.wholeWords,
+        unicodeBoundaries: options.unicodeBoundaries,
+        caseInsensitive: options.caseInsensitive,
+        matchKind: "leftmost-longest",
+      }) as OverlapEngine,
   };
 }
 
@@ -911,18 +939,26 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
 }
 
 function asciiWholeWordIsMatch(engine: AcSlot, haystack: string): boolean {
+  engine.isMatchAc ??= engine.buildIsMatchAc();
+  const windowLength = Math.max(
+    2 * engine.longestLiteralLength + ASCII_WHOLE_WORD_BOUNDARY_CONTEXT,
+    Math.floor(asciiWholeWordMatchBudget / engine.distinctLiteralCount),
+  );
+  const coreLength = Math.max(
+    1,
+    windowLength - engine.longestLiteralLength - ASCII_WHOLE_WORD_BOUNDARY_CONTEXT / 2,
+  );
   let coreStart = 0;
   while (coreStart < haystack.length) {
-    const coreEnd = safeSliceEnd(
-      haystack,
-      Math.min(haystack.length, coreStart + asciiWholeWordWindowSize),
-    );
+    const coreEnd = safeSliceEnd(haystack, Math.min(haystack.length, coreStart + coreLength));
     const windowStart = safeSliceStart(haystack, Math.max(0, coreStart - 1));
     const windowEnd = safeSliceEnd(
       haystack,
       Math.min(haystack.length, coreEnd + engine.longestLiteralLength),
     );
-    const matches = engine.ac.findOverlappingIter(haystack.slice(windowStart, windowEnd));
+    const matches = engine.isMatchAc.findOverlappingIter(haystack.slice(windowStart, windowEnd));
+    asciiWholeWordNativeCallCount += 1;
+    asciiWholeWordMaxCandidateCount = Math.max(asciiWholeWordMaxCandidateCount, matches.length);
     for (const { start } of matches) {
       const haystackStart = windowStart + start;
       if (haystackStart >= coreStart && haystackStart < coreEnd) return true;
