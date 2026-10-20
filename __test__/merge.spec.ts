@@ -36,6 +36,14 @@ describe("mergeAndSelect", () => {
     expect(result[0]!.end).toBe(5);
   });
 
+  test("equal spans use original pattern order", () => {
+    expect(mergeAndSelect([m(3, 0, 3), m(1, 0, 3)])).toEqual([m(1, 0, 3)]);
+  });
+
+  test("equal zero-width spans are preserved", () => {
+    expect(mergeAndSelect([m(3, 0, 0), m(1, 0, 0)])).toEqual([m(1, 0, 0), m(3, 0, 0)]);
+  });
+
   test("sorts by position", () => {
     const matches = [m(1, 5, 8), m(0, 0, 3)];
     const result = mergeAndSelect(matches);

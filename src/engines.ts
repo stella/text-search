@@ -24,8 +24,12 @@ type Engine = {
   findIter: (haystack: string) => Match[];
 };
 
+type AhoEngine = Engine & {
+  findOverlappingIter: (haystack: string) => Match[];
+};
+
 type Engines = {
-  AhoCorasick: new (patterns: AhoPatternEntry[], options?: AhoOptions) => Engine;
+  AhoCorasick: new (patterns: AhoPatternEntry[], options?: AhoOptions) => AhoEngine;
   FuzzySearch: new (patterns: FuzzyPatternEntry[], options?: FuzzyOptions) => Engine;
   RegexSet: new (patterns: RegexPatternEntry[], options?: RegexOptions) => Engine;
   EntityIndexBuilder: new (options: EntityIndexOptions) => EntityIndexBuilderEngine;

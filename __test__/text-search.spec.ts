@@ -1,6 +1,42 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
-import { TextSearch } from "../src";
+import { EmptyPatternError, TextSearch } from "../src";
+import { getEngines, initEngines } from "../src/engines";
+import { textSearchTestHooks } from "../src/text-search";
+import type { Match, PatternEntry } from "../src/types";
+
+const registeredEngines = getEngines();
+// The merge behavior from main before equal non-empty spans were collapsed.
+const mainMergeAndSelect = (matches: Match[]): Match[] => {
+  if (matches.length <= 1) return matches;
+  matches.sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    return b.end - a.end || a.pattern - b.pattern;
+  });
+  const selected: Match[] = [];
+  let lastEnd = 0;
+  for (const match of matches) {
+    if (match.start >= lastEnd) {
+      selected.push(match);
+      lastEnd = match.end;
+    }
+  }
+  return selected;
+};
+
+const publicFields = ({ pattern, start, end, text, name, distance }: Match) => ({
+  pattern,
+  start,
+  end,
+  text,
+  name,
+  distance,
+});
+
+afterEach(() => {
+  initEngines(registeredEngines);
+  textSearchTestHooks.reset();
+});
 
 describe("TextSearch", () => {
   test("basic matching", () => {
@@ -17,6 +53,572 @@ describe("TextSearch", () => {
     const texts = matches.map((m) => m.text);
     expect(texts).toContain("foo");
     expect(texts).toContain("bar");
+  });
+
+  test("literal longest selection matches the core regardless of insertion order", () => {
+    for (const patterns of [
+      ["a", "aa", "aaa"],
+      ["aaa", "aa", "a"],
+      ["aa", "a", "aaa"],
+    ]) {
+      const search = new TextSearch(patterns, { allLiteral: true });
+      expect(search.findIter("aaaa").map(({ text }) => text)).toEqual(["aaa", "a"]);
+      expect(
+        search.replaceAll(
+          "aaaa",
+          patterns.map((pattern) => `[${pattern}]`),
+        ),
+      ).toBe("[aaa][a]");
+    }
+  });
+
+  test("single literal engine matches global selection on a generated corpus", () => {
+    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const haystack = Array.from(
+      { length: 40 },
+      (_, index) => `${"a".repeat((index * 7) % 31)}b`,
+    ).join("");
+    const direct = new TextSearch(patterns, { allLiteral: true });
+    const globallySelected = new TextSearch([...patterns, /z+/], { allLiteral: false });
+
+    expect(globallySelected.findIter(haystack)).toEqual(direct.findIter(haystack));
+  });
+
+  test("single literal engine uses its native iterator", () => {
+    const search = new TextSearch([{ pattern: "a", literal: true, name: "letter" }]);
+    const engine = Reflect.get(search, "engines")[0];
+    const ac = engine.ac;
+    let nativeCalls = 0;
+    const nativeFindIter = ac.findIter.bind(ac);
+    ac.findIter = (haystack: string) => {
+      nativeCalls += 1;
+      return nativeFindIter(haystack);
+    };
+    ac.findOverlappingIter = () => {
+      throw new Error("overlapping iterator should not run");
+    };
+
+    expect(search.findIter("aaa").map(({ name }) => name)).toEqual(["letter", "letter", "letter"]);
+    expect(nativeCalls).toBe(1);
+  });
+
+  test("single regex and fuzzy engines return their native result arrays", () => {
+    for (const search of [
+      new TextSearch([/a+/]),
+      new TextSearch([{ pattern: "alpha", distance: 1 }]),
+    ]) {
+      const slot = Reflect.get(search, "engines")[0];
+      const engine = slot.type === "regex" ? slot.rs : slot.fs;
+      const expected = engine.findIter("alpha");
+      let calls = 0;
+      engine.findIter = () => {
+        calls += 1;
+        return expected;
+      };
+
+      expect(search.findIter("alpha")).toBe(expected);
+      expect(calls).toBe(1);
+    }
+  });
+
+  test("single-engine routes skip selection whenever native iteration is final", () => {
+    const cases: { label: string; pattern: PatternEntry; expectedName?: string }[] = [
+      { label: "unnamed literal", pattern: "aa" },
+      {
+        label: "named literal",
+        pattern: { pattern: "aa", literal: true, name: "literal" },
+        expectedName: "literal",
+      },
+      { label: "unnamed regex", pattern: /a+/ },
+      {
+        label: "named regex",
+        pattern: { pattern: /a+/, name: "regex" },
+        expectedName: "regex",
+      },
+      { label: "fuzzy", pattern: { pattern: "aaaa", distance: 1 } },
+      {
+        label: "named fuzzy",
+        pattern: { pattern: "aaaa", distance: 1, name: "fuzzy" },
+        expectedName: "fuzzy",
+      },
+    ];
+
+    for (const { label, pattern, expectedName } of cases) {
+      for (const overlapStrategy of ["longest", "all"] as const) {
+        textSearchTestHooks.reset();
+        const matches = new TextSearch([pattern], { overlapStrategy }).findIter("aaaa");
+        const nativeResultIsFinal = !label.includes("literal") || overlapStrategy === "longest";
+
+        expect(textSearchTestHooks.getSelectionPassCount(), `${label}: ${overlapStrategy}`).toBe(
+          nativeResultIsFinal ? 0 : 1,
+        );
+        expect(matches.length, `${label}: ${overlapStrategy}`).toBeGreaterThan(0);
+        expect(
+          matches.every(({ pattern: index, name }) => index === 0 && name === expectedName),
+          `${label}: ${overlapStrategy}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  test("single non-literal routes match global routing on a generated corpus", () => {
+    let state = 0x169;
+    const random = () => {
+      state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+      return state;
+    };
+    for (let iteration = 0; iteration < 64; iteration += 1) {
+      const haystack = Array.from({ length: random() % 40 }, () =>
+        random() % 3 === 0 ? "b" : "a",
+      ).join("");
+      for (const pattern of [/a+/, /a*/, /b*/i, { pattern: "aaa", distance: 1 }]) {
+        const direct = new TextSearch([pattern]);
+        const routed = new TextSearch([pattern, { pattern: "never", literal: true }]);
+        const candidates = new TextSearch([pattern, { pattern: "never", literal: true }], {
+          overlapStrategy: "all",
+        }).findIter(haystack);
+        const expected = mainMergeAndSelect(candidates).map(publicFields);
+        expect(direct.findIter(haystack).map(publicFields)).toEqual(expected);
+        expect(routed.findIter(haystack).map(publicFields)).toEqual(expected);
+      }
+    }
+  });
+
+  test("multiple regex routes preserve main's zero-width merge behavior", () => {
+    const patterns = [/a*/, /b*/i, { pattern: "never", literal: true }] as const;
+    const expectedByHaystack = {
+      "": [
+        { pattern: 0, start: 0, end: 0 },
+        { pattern: 1, start: 0, end: 0 },
+      ],
+      ab: [
+        { pattern: 0, start: 0, end: 1 },
+        { pattern: 1, start: 1, end: 2 },
+        { pattern: 0, start: 2, end: 2 },
+      ],
+    };
+    for (const haystack of ["", "ab"] as const) {
+      const candidates = new TextSearch(patterns, {
+        overlapStrategy: "all",
+        regexChunkSize: 1,
+      }).findIter(haystack);
+      const reference = mainMergeAndSelect(candidates);
+      const actual = new TextSearch(patterns, { regexChunkSize: 1 }).findIter(haystack);
+      expect(actual).toEqual(reference);
+      expect(actual.map(({ pattern, start, end }) => ({ pattern, start, end }))).toEqual(
+        expectedByHaystack[haystack],
+      );
+    }
+  });
+
+  test("eligible replaceAll uses the native literal iterator for every overlap strategy", () => {
+    for (const overlapStrategy of ["longest", "all"] as const) {
+      const search = new TextSearch(["a", "aa"], { allLiteral: true, overlapStrategy });
+      const engine = Reflect.get(search, "engines")[0];
+      const ac = engine.ac;
+      let nativeCalls = 0;
+      const nativeFindIter = ac.findIter.bind(ac);
+      ac.findIter = (haystack: string) => {
+        nativeCalls += 1;
+        return nativeFindIter(haystack);
+      };
+      ac.findOverlappingIter = () => {
+        throw new Error("overlapping iterator should not run");
+      };
+
+      expect(search.replaceAll("aaa", ["A", "AA"])).toBe("AAA");
+      expect(nativeCalls).toBe(1);
+    }
+  });
+
+  test("literal groups without empty patterns build one automaton", () => {
+    let constructions = 0;
+    const NativeAhoCorasick = registeredEngines.AhoCorasick;
+    class CountingAhoCorasick extends NativeAhoCorasick {
+      constructor(...args: ConstructorParameters<typeof NativeAhoCorasick>) {
+        super(...args);
+        constructions += 1;
+      }
+    }
+    initEngines({ ...registeredEngines, AhoCorasick: CountingAhoCorasick });
+
+    new TextSearch([{ pattern: "alpha", literal: true }]);
+    expect(constructions).toBe(1);
+  });
+
+  test("eligible replaceAll matches global selection on a generated corpus", () => {
+    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const replacements = patterns.map((_, index) => `[${index}]`);
+    const haystack = Array.from(
+      { length: 40 },
+      (_, index) => `${"a".repeat((index * 7) % 31)}b`,
+    ).join("");
+    const direct = new TextSearch(patterns, { allLiteral: true });
+    const globallySelected = new TextSearch([...patterns, /z+/]);
+
+    expect(direct.replaceAll(haystack, replacements)).toBe(
+      globallySelected.replaceAll(haystack, [...replacements, "unused"]),
+    );
+  });
+
+  test("duplicate empty literals are rejected with their index and name", () => {
+    expect(() => new TextSearch(["", ""], { allLiteral: true })).toThrow(new EmptyPatternError(0));
+    expect(
+      () =>
+        new TextSearch([
+          { pattern: "", literal: true, name: "first" },
+          { pattern: "", literal: true, name: "second" },
+        ]),
+    ).toThrow(new EmptyPatternError(0, "first"));
+  });
+
+  test('overlap "all" rejects duplicate empty literals', () => {
+    expect(() => new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" })).toThrow(
+      EmptyPatternError,
+    );
+  });
+
+  test("split literal route rejects duplicate empty literals", () => {
+    const patterns = ["", "", ...Array.from({ length: 19_998 }, (_, index) => `missing-${index}`)];
+    expect(
+      () =>
+        new TextSearch(patterns, {
+          allLiteral: true,
+          wholeWords: true,
+          unicodeBoundaries: true,
+          overlapStrategy: "all",
+        }),
+    ).toThrow(new EmptyPatternError(0));
+  });
+
+  test("forced literal routes have identical randomized results", () => {
+    let state = 0x169;
+    const randomInt = (upperBound: number) => {
+      state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+      return (state >>> 8) % upperBound;
+    };
+    const atoms = ["a", "A", "ab", "é", "𐐀", "_", " "];
+    const haystackAtoms = ["a", "A", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
+    const optionCombinations = [
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false },
+      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: false,
+        caseInsensitive: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: true,
+        caseInsensitive: true,
+      },
+    ] as const;
+    const expectedCombinationCount = 16;
+    const casesPerCombination = 15;
+    const exercisedCombinations = new Map<string, number>();
+
+    for (const options of optionCombinations) {
+      const combination = `${options.overlapStrategy}/${options.wholeWords}/${options.unicodeBoundaries}/${"caseInsensitive" in options}`;
+      for (let iteration = 0; iteration < casesPerCombination; iteration += 1) {
+        textSearchTestHooks.setAsciiWholeWordMatchBudget(3);
+        const patterns = Array.from(
+          { length: 2 + randomInt(7) },
+          () => atoms[randomInt(atoms.length)],
+        );
+        const haystack = Array.from(
+          { length: randomInt(14) },
+          () => haystackAtoms[randomInt(haystackAtoms.length)],
+        ).join("");
+        const replacements = patterns.map((_, index) => `<${index}>`);
+
+        textSearchTestHooks.forceIdentityAcRoute("ordinary");
+        const ordinary = new TextSearch(patterns, options);
+        textSearchTestHooks.setIdentityAcChunkSize(2);
+        textSearchTestHooks.forceIdentityAcRoute("split");
+        const split = new TextSearch(patterns, options);
+
+        const ordinaryMatches = ordinary.findIter(haystack);
+        const splitMatches = split.findIter(haystack);
+        expect(splitMatches).toEqual(ordinaryMatches);
+        expect(ordinary.isMatch(haystack)).toBe(ordinaryMatches.length > 0);
+        expect(split.isMatch(haystack)).toBe(splitMatches.length > 0);
+        expect(split.replaceAll(haystack, replacements)).toBe(
+          ordinary.replaceAll(haystack, replacements),
+        );
+        exercisedCombinations.set(combination, (exercisedCombinations.get(combination) ?? 0) + 1);
+      }
+    }
+
+    expect(exercisedCombinations.size).toBe(expectedCombinationCount);
+    for (const count of exercisedCombinations.values()) {
+      expect(count).toBeGreaterThanOrEqual(casesPerCombination);
+    }
+  });
+
+  test("empty literals are rejected for Unicode whole-word inputs", () => {
+    for (const haystack of ["𐐀a", "a\uDC00a", "a\uD800a"]) {
+      expect(
+        () =>
+          new TextSearch([""], {
+            allLiteral: true,
+            wholeWords: true,
+            unicodeBoundaries: true,
+            overlapStrategy: "all",
+          }),
+      ).toThrow(new EmptyPatternError(0));
+      expect(haystack.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("every literal entry form rejects an empty pattern", () => {
+    const cases: Array<{
+      patterns: ConstructorParameters<typeof TextSearch>[0];
+      options?: ConstructorParameters<typeof TextSearch>[1];
+      name?: string;
+    }> = [
+      { patterns: [""] },
+      { patterns: [{ pattern: "", literal: true }] },
+      { patterns: [{ pattern: "", literal: true, name: "named" }], name: "named" },
+      { patterns: [""], options: { allLiteral: true } },
+      { patterns: [{ pattern: "", name: "named" }], options: { allLiteral: true }, name: "named" },
+    ];
+
+    for (const { patterns, options, name } of cases) {
+      try {
+        new TextSearch(patterns, options);
+        throw new Error("Expected empty literal construction to fail");
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmptyPatternError);
+        expect(error).toMatchObject({
+          index: 0,
+          ...(name === undefined ? {} : { patternName: name }),
+        });
+      }
+    }
+  });
+
+  test("non-ASCII empty-literal regression throws without aborting its process", () => {
+    const child = Bun.spawnSync([
+      process.execPath,
+      "-e",
+      `import { EmptyPatternError, TextSearch } from "./src/index.ts";
+       try {
+         new TextSearch([{ pattern: "", literal: true }, /Z/], { wholeWords: true }).isMatch("éa");
+         process.exit(2);
+       } catch (error) {
+         if (!(error instanceof EmptyPatternError)) process.exit(3);
+       }`,
+    ]);
+    expect(child.exitCode).toBe(0);
+  });
+
+  test("ASCII whole-word filtering precedes longest selection", () => {
+    const search = new TextSearch(["a", "a b"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+    expect(search.findIter("a bc").map(({ text }) => text)).toEqual(["a"]);
+    expect(search.isMatch("a bc")).toBe(true);
+  });
+
+  test("isMatch short-circuits without match iteration", () => {
+    for (const options of [{}, { overlapStrategy: "all" as const }]) {
+      const search = new TextSearch(["alpha", /omega/], options);
+      const [literal, regex] = Reflect.get(search, "engines");
+      literal.ac.findIter = () => {
+        throw new Error("native iterator should not run");
+      };
+      literal.ac.findOverlappingIter = () => {
+        throw new Error("overlapping iterator should not run");
+      };
+      regex.rs.isMatch = () => {
+        throw new Error("later engine should not run");
+      };
+
+      expect(search.isMatch("alpha")).toBe(true);
+    }
+  });
+
+  test("ASCII whole-word isMatch stops at the first valid candidate", () => {
+    const search = new TextSearch(["alpha", "beta"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+    textSearchTestHooks.setAsciiWholeWordMatchBudget(16);
+
+    expect(search.isMatch(`alpha beta ${"missing ".repeat(100)}`)).toBe(true);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBe(1);
+  });
+
+  test("ASCII whole-word isMatch deduplicates literals before collecting candidates", () => {
+    const search = new TextSearch(
+      Array.from({ length: 2_000 }, () => "a"),
+      {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+    );
+
+    expect(search.isMatch("a ".repeat(5_000))).toBe(true);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBe(1);
+    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
+  });
+
+  test("ASCII whole-word isMatch bounds distinct-heavy candidate windows", () => {
+    const search = new TextSearch(
+      Array.from({ length: 200 }, (_, index) => "a".repeat(index + 1)),
+      {
+        allLiteral: true,
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+    );
+
+    expect(search.isMatch("a".repeat(20_000))).toBe(false);
+    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBeGreaterThan(1);
+    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
+  });
+
+  test("ASCII whole-word isMatch finds a candidate across a window boundary", () => {
+    textSearchTestHooks.setAsciiWholeWordMatchBudget(8);
+    const search = new TextSearch(["alpha"], {
+      allLiteral: true,
+      wholeWords: true,
+      unicodeBoundaries: false,
+    });
+
+    expect(search.isMatch("123456 alpha omega")).toBe(true);
+  });
+
+  test("literal fast-path eligibility follows the shared option table", () => {
+    const cases = [
+      { options: { allLiteral: true }, eligible: true },
+      { options: { allLiteral: true, wholeWords: true }, eligible: true },
+      {
+        options: { allLiteral: true, wholeWords: true, unicodeBoundaries: false },
+        eligible: false,
+      },
+      {
+        options: { allLiteral: true, overlapStrategy: "all" as const },
+        eligible: false,
+        replacementEligible: true,
+      },
+    ];
+
+    for (const {
+      options,
+      eligible,
+      replacementEligible = eligible,
+      patterns = ["a", "a b"],
+    } of cases) {
+      const search = new TextSearch(patterns, options);
+      const slot = Reflect.get(search, "engines")[0];
+      const ac = slot.ac;
+      let nativeCalls = 0;
+      let overlappingCalls = 0;
+      const nativeFindIter = ac.findIter.bind(ac);
+      const overlappingFindIter = ac.findOverlappingIter.bind(ac);
+      ac.findIter = (haystack: string) => {
+        nativeCalls += 1;
+        return nativeFindIter(haystack);
+      };
+      ac.findOverlappingIter = (haystack: string) => {
+        overlappingCalls += 1;
+        return overlappingFindIter(haystack);
+      };
+
+      search.findIter("a bc");
+      expect(nativeCalls > 0).toBe(eligible);
+      expect(overlappingCalls > 0).toBe(!eligible);
+
+      nativeCalls = 0;
+      overlappingCalls = 0;
+      search.replaceAll(
+        "a bc",
+        patterns.map(() => "x"),
+      );
+      expect(nativeCalls > 0).toBe(replacementEligible);
+      expect(overlappingCalls > 0).toBe(!replacementEligible);
+    }
+  });
+
+  test("selects literal candidates globally across engine routes", () => {
+    const first = new TextSearch([/ab/, "b", "bcdef", "fg"]);
+    expect(
+      first.findIter("abcdefg").map(({ pattern, start, end }) => ({ pattern, start, end })),
+    ).toEqual([
+      { pattern: 0, start: 0, end: 2 },
+      { pattern: 3, start: 5, end: 7 },
+    ]);
+    expect(first.replaceAll("abcdefg", ["<AB>", "<B>", "<BCDEF>", "<FG>"])).toBe("<AB>cde<FG>");
+
+    const second = new TextSearch(["a", "abcd", "dEF", /zab/]);
+    expect(
+      second.findIter("zabcdEF").map(({ pattern, start, end }) => ({ pattern, start, end })),
+    ).toEqual([
+      { pattern: 3, start: 0, end: 3 },
+      { pattern: 2, start: 4, end: 7 },
+    ]);
+    expect(second.replaceAll("zabcdEF", ["<A>", "<ABCD>", "<DEF>", "<ZAB>"])).toBe("<ZAB>c<DEF>");
+  });
+
+  test("whichMatch reports overlapping literal patterns", () => {
+    expect(new TextSearch(["a", "aa"], { allLiteral: true }).whichMatch("aa")).toEqual([0, 1]);
   });
 
   test("named patterns", () => {
@@ -263,6 +865,12 @@ describe("auto-optimization", () => {
     expect(engines).toHaveLength(1);
     expect(engines[0]!.type).toBe("split-ac");
     expect(ts.findIter("alpha beta")).toEqual([
+      {
+        pattern: 0,
+        start: 0,
+        end: 5,
+        text: "alpha",
+      },
       {
         pattern: 40_000,
         start: 0,

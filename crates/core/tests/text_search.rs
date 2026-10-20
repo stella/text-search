@@ -4,10 +4,11 @@
   clippy::unwrap_used
 )]
 
+use proptest::strategy::Just;
 use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
   EngineKind, Error, FuzzyDistance, FuzzyMetric, FuzzyPattern, LiteralPattern,
-  OverlapStrategy, PatternEntry, PreparedArtifactPolicy,
+  OverlapStrategy, PatternEntry, PreparedAhoArtifact, PreparedArtifactPolicy,
   PreparedTextSearchArtifacts, RegexArtifactPolicy, RegexPattern, TextSearch,
   TextSearchOptions, classify_patterns, count_alternations,
 };
@@ -15,6 +16,36 @@ use stella_text_search_core::{
 const SPLIT_LITERAL_FIXTURE_CHUNK_SIZE: usize = 100_000;
 const SPLIT_LITERAL_FIXTURE_SIZE: usize = SPLIT_LITERAL_FIXTURE_CHUNK_SIZE + 1;
 const SPLIT_LITERAL_FIXTURE_CHUNK_PATTERN: u32 = 100_000;
+
+// The merge behavior from main before equal non-empty spans were collapsed.
+fn main_merge_and_select(
+  mut matches: Vec<stella_text_search_core::Match>,
+) -> Vec<stella_text_search_core::Match> {
+  if matches.len() <= 1 {
+    return matches;
+  }
+  matches.sort_by(|left, right| {
+    left
+      .start
+      .cmp(&right.start)
+      .then_with(|| {
+        let left_len = left.end.saturating_sub(left.start);
+        let right_len = right.end.saturating_sub(right.start);
+        right_len.cmp(&left_len)
+      })
+      .then_with(|| left.pattern.cmp(&right.pattern))
+  });
+
+  let mut selected = Vec::new();
+  let mut last_end = 0;
+  for found in matches {
+    if found.start >= last_end {
+      last_end = found.end;
+      selected.push(found);
+    }
+  }
+  selected
+}
 
 #[test]
 fn options_builder_preserves_defaults_and_overrides() {
@@ -40,6 +71,30 @@ fn options_builder_preserves_defaults_and_overrides() {
   assert!(!options.normalize_diacritics);
   assert!(!options.case_insensitive);
   assert!(!options.all_literal);
+}
+
+#[test]
+fn ascii_whole_word_filtering_precedes_longest_selection() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from("a"), PatternEntry::from("a b")],
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      unicode_boundaries: false,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert_eq!(
+    search
+      .find_iter("a bc")
+      .unwrap()
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["a"]
+  );
 }
 
 #[test]
@@ -522,6 +577,232 @@ fn prepared_artifacts_roundtrip_bytes() {
 }
 
 #[test]
+fn prepared_artifacts_reject_empty_literal_patterns() {
+  let error = TextSearch::prepare_artifacts(
+    vec![PatternEntry::from("")],
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap_err();
+  assert_eq!(
+    error,
+    Error::EmptyPattern {
+      index: 0,
+      name: None
+    }
+  );
+}
+
+#[test]
+fn loading_prepared_empty_literal_artifacts_returns_typed_error() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    ..TextSearchOptions::default()
+  };
+  let engine = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::new()],
+    stella_aho_corasick_core::Options {
+      match_kind: stella_aho_corasick_core::MatchKind::LeftmostLongest,
+      case_insensitive: false,
+      dfa: false,
+      whole_words: false,
+      unicode_boundaries: true,
+    },
+  )
+  .unwrap();
+  let artifacts = PreparedTextSearchArtifacts {
+    aho_automata: vec![PreparedAhoArtifact {
+      fingerprint: 0,
+      options: options.into(),
+      identity: true,
+      bytes: engine.to_prepared().unwrap(),
+    }],
+    regex_sets: Vec::new(),
+  };
+
+  let error =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .err()
+      .unwrap();
+  assert_eq!(
+    error,
+    Error::EmptyPattern {
+      index: 0,
+      name: None
+    }
+  );
+}
+
+#[test]
+fn loading_split_prepared_empty_literal_artifact_reports_original_index() {
+  let options = TextSearchOptions {
+    all_literal: true,
+    whole_words: true,
+    ..TextSearchOptions::default()
+  };
+  let engine_options = stella_aho_corasick_core::Options {
+    match_kind: stella_aho_corasick_core::MatchKind::LeftmostLongest,
+    case_insensitive: false,
+    dfa: false,
+    whole_words: true,
+    unicode_boundaries: true,
+  };
+  let first = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::from("a"); SPLIT_LITERAL_FIXTURE_CHUNK_SIZE],
+    engine_options,
+  )
+  .unwrap();
+  let second = stella_aho_corasick_core::AhoCorasick::new(
+    vec![String::new()],
+    engine_options,
+  )
+  .unwrap();
+  let artifacts = PreparedTextSearchArtifacts {
+    aho_automata: [first, second]
+      .into_iter()
+      .map(|engine| PreparedAhoArtifact {
+        fingerprint: 0,
+        options: options.into(),
+        identity: true,
+        bytes: engine.to_prepared().unwrap(),
+      })
+      .collect(),
+    regex_sets: Vec::new(),
+  };
+
+  let error =
+    TextSearch::with_prepared_all_literal_artifacts(options, &artifacts)
+      .err()
+      .unwrap();
+  assert_eq!(
+    error,
+    Error::EmptyPattern {
+      index: SPLIT_LITERAL_FIXTURE_CHUNK_SIZE,
+      name: None,
+    }
+  );
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(96))]
+
+  #[test]
+  fn prepared_artifact_roundtrip_matches_fresh_search(
+    pattern_kinds in proptest::collection::vec(0_u8..8, 0..10),
+    haystack_chars in proptest::collection::vec(
+      proptest::prop_oneof![
+        Just('a'),
+        Just('b'),
+        Just(' '),
+        Just('é'),
+        Just('界'),
+        Just('😀'),
+      ],
+      0..32,
+    ),
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
+    whole_words in proptest::prop_oneof![Just(false), Just(true)],
+    unicode_boundaries in proptest::prop_oneof![Just(false), Just(true)],
+  ) {
+    let patterns = pattern_kinds
+      .iter()
+      .map(|kind| match kind {
+        0 | 1 => PatternEntry::Literal(LiteralPattern::new("b")),
+        2 => PatternEntry::Literal(LiteralPattern::new("a")),
+        3 => PatternEntry::Literal(LiteralPattern::new("é")),
+        4 => PatternEntry::Literal(LiteralPattern::new("界")),
+        5 => PatternEntry::Regex(RegexPattern::new("a+")),
+        6 => PatternEntry::Regex(RegexPattern::new("(?:é|界)")),
+        _ => PatternEntry::Literal(LiteralPattern::new("😀")),
+      })
+      .collect::<Vec<_>>();
+    let all_literal = pattern_kinds.iter().all(|kind| !matches!(kind, 5 | 6));
+    let haystack = haystack_chars.iter().collect::<String>();
+    let overlap_strategy = if overlap_all {
+      OverlapStrategy::All
+    } else {
+      OverlapStrategy::Longest
+    };
+    let options = TextSearchOptions {
+      overlap_strategy,
+      whole_words,
+      unicode_boundaries,
+      ..TextSearchOptions::default()
+    };
+    let fresh = TextSearch::new(patterns.clone(), options).unwrap();
+    let bytes = TextSearch::prepare_artifacts(patterns.clone(), options)
+      .unwrap()
+      .to_bytes()
+      .unwrap();
+    let artifacts = PreparedTextSearchArtifacts::from_bytes(&bytes).unwrap();
+    let loaded =
+      TextSearch::with_prepared_artifacts(patterns, options, &artifacts)
+        .unwrap();
+    let replacements = pattern_kinds
+      .iter()
+      .enumerate()
+      .map(|(index, _)| format!("<{index}>"))
+      .collect::<Vec<_>>();
+    let fresh_matches = fresh.find_iter(&haystack).unwrap();
+    let loaded_matches = loaded.find_iter(&haystack).unwrap();
+
+    proptest::prop_assert_eq!(
+      &loaded_matches,
+      &fresh_matches,
+    );
+    proptest::prop_assert_eq!(
+      fresh.is_match(&haystack).unwrap(),
+      !fresh_matches.is_empty(),
+    );
+    proptest::prop_assert_eq!(
+      loaded.is_match(&haystack).unwrap(),
+      !loaded_matches.is_empty(),
+    );
+    proptest::prop_assert_eq!(
+      loaded.replace_all(&haystack, &replacements).unwrap(),
+      fresh.replace_all(&haystack, &replacements).unwrap(),
+    );
+    if all_literal {
+      let all_literal_options = TextSearchOptions { all_literal: true, ..options };
+      let identity_patterns = pattern_kinds
+        .iter()
+        .map(|kind| match kind {
+          0 | 1 => PatternEntry::from("b"),
+          2 => PatternEntry::from("a"),
+          3 => PatternEntry::from("é"),
+          4 => PatternEntry::from("界"),
+          _ => PatternEntry::from("😀"),
+        })
+        .collect::<Vec<_>>();
+      let all_literal_artifacts = TextSearch::prepare_artifacts(
+        identity_patterns,
+        all_literal_options,
+      ).unwrap();
+      let loaded_without_patterns = TextSearch::with_prepared_all_literal_artifacts(
+        all_literal_options,
+        &all_literal_artifacts,
+      ).unwrap();
+      let loaded_without_patterns_matches =
+        loaded_without_patterns.find_iter(&haystack).unwrap();
+      proptest::prop_assert_eq!(
+        &loaded_without_patterns_matches,
+        &fresh_matches,
+      );
+      proptest::prop_assert_eq!(
+        loaded_without_patterns.is_match(&haystack).unwrap(),
+        !loaded_without_patterns_matches.is_empty(),
+      );
+      proptest::prop_assert_eq!(
+        loaded_without_patterns.replace_all(&haystack, &replacements).unwrap(),
+        fresh.replace_all(&haystack, &replacements).unwrap(),
+      );
+    }
+  }
+}
+
+#[test]
 fn prepared_regex_artifacts_roundtrip_bytes() {
   let options = TextSearchOptions {
     case_insensitive: true,
@@ -851,7 +1132,7 @@ proptest::proptest! {
   #[test]
   fn mixed_artifact_grouping_matches_single_pattern_reference(
     tokens in proptest::collection::vec(0_u8..8, 0..128),
-    overlap_all in proptest::bool::ANY,
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
   ) {
     let patterns = (0..8)
       .map(|index| {
@@ -1074,6 +1355,287 @@ fn literal_pattern_options_fall_back_to_global_options() {
 }
 
 #[test]
+fn literal_longest_selection_matches_typescript_api() {
+  for patterns in [vec!["a", "aa"], vec!["aa", "a"]] {
+    let search = TextSearch::new(
+      patterns.into_iter().map(PatternEntry::from),
+      TextSearchOptions::default(),
+    )
+    .unwrap();
+    let matches = search.find_iter("aa").unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+      matches.first().map(|found| (
+        found.text.as_str(),
+        found.start,
+        found.end
+      )),
+      Some(("aa", 0, 2))
+    );
+  }
+}
+
+#[test]
+fn single_literal_engine_matches_global_selection_on_generated_corpus() {
+  let literals = (1..=24)
+    .map(|length| "a".repeat(length))
+    .collect::<Vec<_>>();
+  let haystack = (0..40).fold(String::new(), |mut haystack, index| {
+    haystack.push_str(&"a".repeat((index * 7) % 31));
+    haystack.push('b');
+    haystack
+  });
+  let direct = TextSearch::new(
+    literals.iter().cloned().map(PatternEntry::from),
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+  let mut mixed_patterns = literals
+    .into_iter()
+    .map(PatternEntry::from)
+    .collect::<Vec<_>>();
+  mixed_patterns.push(PatternEntry::Regex(RegexPattern::new("z+")));
+  let globally_selected =
+    TextSearch::new(mixed_patterns, TextSearchOptions::default()).unwrap();
+
+  assert_eq!(
+    direct.find_iter(&haystack).unwrap(),
+    globally_selected.find_iter(&haystack).unwrap()
+  );
+}
+
+#[test]
+fn ascii_whole_word_is_match_uses_candidate_selection() {
+  let search = TextSearch::new(
+    vec![PatternEntry::from("a"), PatternEntry::from("a b")],
+    TextSearchOptions {
+      all_literal: true,
+      whole_words: true,
+      unicode_boundaries: false,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert_eq!(
+    search
+      .find_iter("a bc")
+      .unwrap()
+      .iter()
+      .map(|found| found.text.as_str())
+      .collect::<Vec<_>>(),
+    vec!["a"]
+  );
+  assert!(search.is_match("a bc").unwrap());
+}
+
+#[test]
+fn single_literal_engine_reports_only_native_iterator_matches() {
+  let search = TextSearch::new(
+    (1..=24).map(|length| PatternEntry::from("a".repeat(length))),
+    TextSearchOptions {
+      all_literal: true,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  let result = search.find_iter_with_stats(&"a".repeat(100)).unwrap();
+  assert_eq!(result.stats.len(), 1);
+  assert_eq!(
+    result.stats.first().map(|stats| stats.match_count),
+    Some(result.matches.len())
+  );
+  assert_eq!(result.matches.len(), 5);
+}
+
+#[test]
+fn every_literal_entry_form_rejects_an_empty_pattern() {
+  let mut named = LiteralPattern::new("");
+  named.name = Some(String::from("named"));
+  let cases = [
+    (
+      vec![PatternEntry::from("")],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+    (
+      vec![PatternEntry::Literal(LiteralPattern::new(""))],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+    (
+      vec![PatternEntry::Literal(named)],
+      TextSearchOptions::default(),
+      Error::EmptyPattern {
+        index: 0,
+        name: Some(String::from("named")),
+      },
+    ),
+    (
+      vec![PatternEntry::from("")],
+      TextSearchOptions {
+        all_literal: true,
+        ..TextSearchOptions::default()
+      },
+      Error::EmptyPattern {
+        index: 0,
+        name: None,
+      },
+    ),
+  ];
+
+  for (patterns, options, expected) in cases {
+    assert_eq!(TextSearch::new(patterns, options).err().unwrap(), expected);
+  }
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(64))]
+
+  #[test]
+  fn empty_literal_entry_forms_are_always_rejected(
+    prefix in proptest::collection::vec("[a-z]{1,8}", 0..8),
+    named in proptest::prop_oneof![Just(false), Just(true)],
+    all_literal in proptest::prop_oneof![Just(false), Just(true)],
+  ) {
+    let index = prefix.len();
+    let mut patterns = prefix.into_iter().map(PatternEntry::from).collect::<Vec<_>>();
+    if named {
+      let mut literal = LiteralPattern::new("");
+      literal.name = Some(String::from("empty"));
+      patterns.push(PatternEntry::Literal(literal));
+    } else {
+      patterns.push(PatternEntry::from(""));
+    }
+    let error = TextSearch::new(
+      patterns,
+      TextSearchOptions { all_literal, ..TextSearchOptions::default() },
+    ).err().unwrap();
+    proptest::prop_assert_eq!(
+      error,
+      Error::EmptyPattern {
+        index,
+        name: named.then(|| String::from("empty")),
+      },
+    );
+  }
+}
+
+proptest::proptest! {
+  #![proptest_config(ProptestConfig::with_cases(64))]
+
+  #[test]
+  fn single_non_literal_routes_match_global_routing(
+    characters in proptest::collection::vec(
+      proptest::prop_oneof![Just('a'), Just('b'), Just(' ')],
+      0..96,
+    ),
+    fuzzy in proptest::prop_oneof![Just(false), Just(true)],
+    named in proptest::prop_oneof![Just(false), Just(true)],
+    overlap_all in proptest::prop_oneof![Just(false), Just(true)],
+    whole_words in proptest::prop_oneof![Just(false), Just(true)],
+    pattern_kind in 0_u8..4,
+  ) {
+    let haystack = characters.into_iter().collect::<String>();
+    let mut pattern = match (fuzzy, pattern_kind) {
+      (true, _) => PatternEntry::Fuzzy(FuzzyPattern::new("aaa", FuzzyDistance::Exact(1))),
+      (false, 0) => PatternEntry::Regex(RegexPattern::new("a+")),
+      (false, 1 | 2) => PatternEntry::Regex(RegexPattern::new("a*")),
+      (false, _) => PatternEntry::Regex(RegexPattern::new("(?i)b*")),
+    };
+    if named {
+      if let PatternEntry::Regex(pattern) = &mut pattern {
+        pattern.name = Some(String::from("regex"));
+      }
+      if let PatternEntry::Fuzzy(pattern) = &mut pattern {
+        pattern.name = Some(String::from("fuzzy"));
+      }
+    }
+    let options = TextSearchOptions {
+      overlap_strategy: if overlap_all {
+        OverlapStrategy::All
+      } else {
+        OverlapStrategy::Longest
+      },
+      whole_words,
+      ..TextSearchOptions::default()
+    };
+    let direct = TextSearch::new(vec![pattern.clone()], options).unwrap();
+    let routed = TextSearch::new(
+      vec![pattern.clone(), PatternEntry::Literal(LiteralPattern::new("never"))],
+      options,
+    ).unwrap();
+
+    let candidates = TextSearch::new(
+      vec![pattern, PatternEntry::Literal(LiteralPattern::new("never"))],
+      TextSearchOptions { overlap_strategy: OverlapStrategy::All, ..options },
+    ).unwrap().find_iter(&haystack).unwrap();
+    let expected = if overlap_all { candidates } else { main_merge_and_select(candidates) };
+
+    proptest::prop_assert_eq!(
+      &direct.find_iter(&haystack).unwrap(),
+      &expected,
+    );
+    proptest::prop_assert_eq!(
+      &routed.find_iter(&haystack).unwrap(),
+      &expected,
+    );
+  }
+}
+
+#[test]
+fn multiple_regex_routes_preserve_main_zero_width_merge_behavior() {
+  let patterns = vec![
+    PatternEntry::Regex(RegexPattern::new("a*")),
+    PatternEntry::Regex(RegexPattern::new("(?i)b*")),
+    PatternEntry::Literal(LiteralPattern::new("never")),
+  ];
+
+  for (haystack, expected) in [
+    ("", vec![(0, 0, 0), (1, 0, 0)]),
+    ("ab", vec![(0, 0, 1), (1, 1, 2), (0, 2, 2)]),
+  ] {
+    let options = TextSearchOptions {
+      regex_chunk_size: Some(1),
+      ..TextSearchOptions::default()
+    };
+    let candidates = TextSearch::new(
+      patterns.clone(),
+      TextSearchOptions {
+        overlap_strategy: OverlapStrategy::All,
+        ..options
+      },
+    )
+    .unwrap()
+    .find_iter(haystack)
+    .unwrap();
+    let reference = main_merge_and_select(candidates);
+    let actual = TextSearch::new(patterns.clone(), options)
+      .unwrap()
+      .find_iter(haystack)
+      .unwrap();
+    assert_eq!(actual, reference);
+    assert_eq!(
+      actual
+        .iter()
+        .map(|found| (found.pattern, found.start, found.end))
+        .collect::<Vec<_>>(),
+      expected,
+    );
+  }
+}
+
+#[test]
 fn which_match_keeps_cross_engine_overlaps() {
   let search = TextSearch::new(
     vec![
@@ -1145,6 +1707,25 @@ fn lazy_regex_prefilter_skips_regex_build_when_prefilter_misses() {
 
   assert!(!search.is_match("haystack").unwrap());
   assert!(search.is_match("needle").is_err());
+}
+
+#[test]
+fn is_match_short_circuits_multi_engine_overlap_all_searches() {
+  let mut regex = RegexPattern::new("(");
+  regex.lazy = true;
+  regex.prefilter_any.push(String::from("needle"));
+
+  let search = TextSearch::new(
+    vec![PatternEntry::from("needle"), PatternEntry::Regex(regex)],
+    TextSearchOptions {
+      overlap_strategy: OverlapStrategy::All,
+      ..TextSearchOptions::default()
+    },
+  )
+  .unwrap();
+
+  assert!(search.is_match("needle").unwrap());
+  assert!(search.find_iter("needle").is_err());
 }
 
 #[test]

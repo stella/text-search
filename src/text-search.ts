@@ -8,7 +8,47 @@ const AUTO_REGEX_CHUNK_MAX_SIZE = 16;
 const AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET = 6;
 const AUTO_REGEX_ISOLATE_COMPLEXITY = 7;
 const SPLIT_IDENTITY_AC_CHUNK_SIZE = 20_000;
-const SPLIT_IDENTITY_AC_MIN_PATTERNS = SPLIT_IDENTITY_AC_CHUNK_SIZE;
+const ASCII_WHOLE_WORD_MATCH_BUDGET = 1_000_000;
+const ASCII_WHOLE_WORD_BOUNDARY_CONTEXT = 2;
+let identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
+let identityAcTestRoute: "production" | "ordinary" | "split" = "production";
+let asciiWholeWordMatchBudget = ASCII_WHOLE_WORD_MATCH_BUDGET;
+let selectionPassCount = 0;
+let asciiWholeWordNativeCallCount = 0;
+let asciiWholeWordMaxCandidateCount = 0;
+
+/** Test-only route control. Not re-exported by the package entry point. */
+export const textSearchTestHooks = {
+  setIdentityAcChunkSize(size: number): void {
+    identityAcChunkSize = size;
+  },
+  forceIdentityAcRoute(route: "ordinary" | "split"): void {
+    identityAcTestRoute = route;
+  },
+  setAsciiWholeWordMatchBudget(budget: number): void {
+    if (!Number.isSafeInteger(budget) || budget < 1) {
+      throw new RangeError("ASCII whole-word match budget must be a positive integer");
+    }
+    asciiWholeWordMatchBudget = budget;
+  },
+  getAsciiWholeWordNativeCallCount(): number {
+    return asciiWholeWordNativeCallCount;
+  },
+  getAsciiWholeWordMaxCandidateCount(): number {
+    return asciiWholeWordMaxCandidateCount;
+  },
+  getSelectionPassCount(): number {
+    return selectionPassCount;
+  },
+  reset(): void {
+    identityAcChunkSize = SPLIT_IDENTITY_AC_CHUNK_SIZE;
+    identityAcTestRoute = "production";
+    asciiWholeWordMatchBudget = ASCII_WHOLE_WORD_MATCH_BUDGET;
+    selectionPassCount = 0;
+    asciiWholeWordNativeCallCount = 0;
+    asciiWholeWordMaxCandidateCount = 0;
+  },
+};
 
 /** Common engine interface for dispatch. */
 type Engine = {
@@ -36,11 +76,16 @@ type RegexSlot = {
 
 type AcSlot = {
   type: "ac";
-  ac: Engine;
+  ac: OverlapEngine;
   indexMap: number[];
   nameMap: (string | undefined)[];
   identityMap?: true;
   patternCount?: number;
+  requiresOverlapSelection: boolean;
+  longestLiteralLength: number;
+  distinctLiteralCount: number;
+  isMatchAc?: OverlapEngine;
+  buildIsMatchAc: () => OverlapEngine;
 };
 
 type SplitAcSlot = {
@@ -54,6 +99,22 @@ type SplitAcSlot = {
   identityMap: true;
   patternCount: number;
 };
+
+/** Raised when a literal pattern is empty. */
+export class EmptyPatternError extends Error {
+  readonly patternIndex: number;
+  readonly index: number;
+  readonly patternName?: string;
+
+  constructor(index: number, patternName?: string) {
+    const suffix = patternName === undefined ? "" : ` (${patternName})`;
+    super(`Literal pattern at index ${index}${suffix} must not be empty`);
+    this.name = "EmptyPatternError";
+    this.patternIndex = index;
+    this.index = index;
+    if (patternName !== undefined) this.patternName = patternName;
+  }
+}
 
 type FuzzySlot = {
   type: "fuzzy";
@@ -91,6 +152,7 @@ export class TextSearch {
   private zeroOverhead: boolean = false;
 
   constructor(patterns: PatternEntry[], options?: TextSearchOptions) {
+    rejectEmptyLiteralPatterns(patterns, options?.allLiteral === true);
     this.patternCount = patterns.length;
     this.overlapAll = options?.overlapStrategy === "all";
     if (patterns.length > 0 && options?.allLiteral === true && allStringPatterns(patterns)) {
@@ -257,7 +319,7 @@ export class TextSearch {
     // Fast path: single engine, identity indexMap,
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
-    if (this.zeroOverhead) {
+    if (this.zeroOverhead && isZeroOverheadFindEligible(this.engines, this.overlapAll)) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Zero-overhead path requires a single engine");
@@ -265,30 +327,33 @@ export class TextSearch {
       return engineFindIter(engine, haystack);
     }
 
-    // Single engine but needs name remapping
+    // A single engine's native iterator has already selected non-overlapping
+    // matches unless the literal route explicitly requires candidates.
     if (this.engines.length === 1) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Expected single engine after length check");
       }
-      return remapMatches(engineFindIter(engine, haystack), engine);
+      if (isNativeResultEligible(this.engines, this.overlapAll)) {
+        return remapMatches(engineFindIter(engine, haystack), engine);
+      }
+      return finalizeMatches(
+        remapMatches(engineFindCandidates(engine, haystack), engine),
+        this.overlapAll,
+      );
     }
 
     // Multi-engine: collect from all, remap in-place
     const all: Match[] = [];
     for (const engine of this.engines) {
-      const matches = engineFindIter(engine, haystack);
+      const matches = engineFindCandidates(engine, haystack);
       // In-place remapping avoids .map() allocation
       for (const m of remapMatches(matches, engine)) {
         all.push(m);
       }
     }
 
-    if (this.overlapAll) {
-      return all.sort((a, b) => a.start - b.start);
-    }
-
-    return mergeAndSelect(all);
+    return finalizeMatches(all, this.overlapAll);
   }
 
   /** Which pattern indices matched (not where). */
@@ -297,7 +362,7 @@ export class TextSearch {
 
     for (const engine of this.engines) {
       // AC doesn't have whichMatch — use findIter
-      const matches = engineFindIter(engine, haystack);
+      const matches = engineFindCandidates(engine, haystack);
       for (const m of matches) {
         const idx = getOriginalPatternIndex(engine, m.pattern);
         seen.add(idx);
@@ -320,14 +385,23 @@ export class TextSearch {
 
     // Always use non-overlapping matches for
     // replacement, even if overlapStrategy is "all".
-    const all: Match[] = [];
-    for (const engine of this.engines) {
-      const matches = engineFindIter(engine, haystack);
-      for (const m of remapMatches(matches, engine)) {
-        all.push(m);
+    let matches: Match[];
+    if (isLiteralFastPathEligible(this.engines, false)) {
+      const engine = this.engines[0];
+      if (engine === undefined) {
+        throw new Error("Literal fast path requires a single engine");
       }
+      matches = remapMatches(engineFindIter(engine, haystack), engine);
+    } else {
+      const all: Match[] = [];
+      for (const engine of this.engines) {
+        const candidates = engineFindCandidates(engine, haystack);
+        for (const m of remapMatches(candidates, engine)) {
+          all.push(m);
+        }
+      }
+      matches = mergeAndSelect(all);
     }
-    const matches = mergeAndSelect(all);
 
     let result = "";
     let last = 0;
@@ -345,6 +419,28 @@ export class TextSearch {
     result += haystack.slice(last);
     return result;
   }
+}
+
+function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines.length === 1 ? engines[0] : undefined;
+  return !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection;
+}
+
+function isZeroOverheadFindEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines[0];
+  if (engines.length !== 1 || engine === undefined) return false;
+  if (engine.type === "regex" || engine.type === "fuzzy") return true;
+  return isLiteralFastPathEligible(engines, overlapAll);
+}
+
+function isNativeResultEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+  const engine = engines.length === 1 ? engines[0] : undefined;
+  if (engine === undefined) return false;
+  return (
+    engine.type === "regex" ||
+    engine.type === "fuzzy" ||
+    isLiteralFastPathEligible(engines, overlapAll)
+  );
 }
 
 function chunkSharedRegexPatterns(
@@ -610,6 +706,21 @@ function allStringPatterns(patterns: PatternEntry[]): patterns is string[] {
   return true;
 }
 
+function rejectEmptyLiteralPatterns(patterns: PatternEntry[], allLiteral: boolean): void {
+  for (const [index, entry] of patterns.entries()) {
+    if (typeof entry === "string") {
+      if (entry.length === 0) throw new EmptyPatternError(index);
+      continue;
+    }
+    if (entry instanceof RegExp || "distance" in entry || typeof entry.pattern !== "string") {
+      continue;
+    }
+    if (entry.pattern.length === 0 && (entry.literal === true || allLiteral)) {
+      throw new EmptyPatternError(index, entry.name);
+    }
+  }
+}
+
 function getRegexSlotEngine(engine: RegexSlot): Engine {
   if (engine.rs !== undefined) {
     return engine.rs;
@@ -657,13 +768,31 @@ function buildAcEngine(
   }
 
   const { AhoCorasick } = getEngines();
+  const distinctLiterals = [...new Set(literals)];
   const ac = new AhoCorasick(literals, {
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
     caseInsensitive: options.caseInsensitive,
+    matchKind: "leftmost-longest",
   });
 
-  return { type: "ac", ac, indexMap, nameMap, patternCount: literals.length };
+  return {
+    type: "ac",
+    ac,
+    indexMap,
+    nameMap,
+    patternCount: literals.length,
+    requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    longestLiteralLength: getLongestLiteralLength(literals),
+    distinctLiteralCount: distinctLiterals.length,
+    buildIsMatchAc: () =>
+      new AhoCorasick(distinctLiterals, {
+        wholeWords: options.wholeWords,
+        unicodeBoundaries: options.unicodeBoundaries,
+        caseInsensitive: options.caseInsensitive,
+        matchKind: "leftmost-longest",
+      }) as OverlapEngine,
+  };
 }
 
 function buildIdentityAcEngine(
@@ -675,18 +804,22 @@ function buildIdentityAcEngine(
   },
 ): AcSlot | SplitAcSlot {
   const { AhoCorasick } = getEngines();
-  if (
-    options.wholeWords &&
-    options.unicodeBoundaries &&
-    patterns.length >= SPLIT_IDENTITY_AC_MIN_PATTERNS
-  ) {
+  const shouldSplit =
+    identityAcTestRoute === "split" ||
+    (identityAcTestRoute === "production" &&
+      options.wholeWords &&
+      options.unicodeBoundaries &&
+      patterns.length >= identityAcChunkSize);
+  if (shouldSplit) {
     const acs: SplitAcSlot["acs"] = [];
-    for (let i = 0; i < patterns.length; i += SPLIT_IDENTITY_AC_CHUNK_SIZE) {
+    for (let i = 0; i < patterns.length; i += identityAcChunkSize) {
+      const chunk = patterns.slice(i, i + identityAcChunkSize);
       acs.push({
-        ac: new AhoCorasick(patterns.slice(i, i + SPLIT_IDENTITY_AC_CHUNK_SIZE), {
+        ac: new AhoCorasick(chunk, {
           wholeWords: options.wholeWords,
           unicodeBoundaries: options.unicodeBoundaries,
           caseInsensitive: options.caseInsensitive,
+          matchKind: "leftmost-longest",
         }) as OverlapEngine,
         patternOffset: i,
       });
@@ -706,8 +839,10 @@ function buildIdentityAcEngine(
     wholeWords: options.wholeWords,
     unicodeBoundaries: options.unicodeBoundaries,
     caseInsensitive: options.caseInsensitive,
+    matchKind: "leftmost-longest",
   });
 
+  const distinctPatterns = [...new Set(patterns)];
   return {
     type: "ac",
     ac,
@@ -715,6 +850,16 @@ function buildIdentityAcEngine(
     nameMap: [],
     identityMap: true,
     patternCount: patterns.length,
+    requiresOverlapSelection: options.wholeWords && !options.unicodeBoundaries,
+    longestLiteralLength: getLongestLiteralLength(patterns),
+    distinctLiteralCount: distinctPatterns.length,
+    buildIsMatchAc: () =>
+      new AhoCorasick(distinctPatterns, {
+        wholeWords: options.wholeWords,
+        unicodeBoundaries: options.unicodeBoundaries,
+        caseInsensitive: options.caseInsensitive,
+        matchKind: "leftmost-longest",
+      }) as OverlapEngine,
   };
 }
 
@@ -776,6 +921,9 @@ function buildFuzzyEngine(
 function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
   switch (engine.type) {
     case "ac":
+      if (engine.requiresOverlapSelection) {
+        return asciiWholeWordIsMatch(engine, haystack);
+      }
       return engine.ac.isMatch(haystack);
     case "split-ac":
       return engine.acs.some(({ ac }) => ac.isMatch(haystack));
@@ -788,6 +936,59 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
       return getRegexSlotEngine(engine).isMatch(haystack);
   }
   throw new Error("Unsupported engine type");
+}
+
+function asciiWholeWordIsMatch(engine: AcSlot, haystack: string): boolean {
+  engine.isMatchAc ??= engine.buildIsMatchAc();
+  const windowLength = Math.max(
+    2 * engine.longestLiteralLength + ASCII_WHOLE_WORD_BOUNDARY_CONTEXT,
+    Math.floor(asciiWholeWordMatchBudget / engine.distinctLiteralCount),
+  );
+  const coreLength = Math.max(
+    1,
+    windowLength - engine.longestLiteralLength - ASCII_WHOLE_WORD_BOUNDARY_CONTEXT / 2,
+  );
+  let coreStart = 0;
+  while (coreStart < haystack.length) {
+    const coreEnd = safeSliceEnd(haystack, Math.min(haystack.length, coreStart + coreLength));
+    const windowStart = safeSliceStart(haystack, Math.max(0, coreStart - 1));
+    const windowEnd = safeSliceEnd(
+      haystack,
+      Math.min(haystack.length, coreEnd + engine.longestLiteralLength),
+    );
+    const matches = engine.isMatchAc.findOverlappingIter(haystack.slice(windowStart, windowEnd));
+    asciiWholeWordNativeCallCount += 1;
+    asciiWholeWordMaxCandidateCount = Math.max(asciiWholeWordMaxCandidateCount, matches.length);
+    for (const { start } of matches) {
+      const haystackStart = windowStart + start;
+      if (haystackStart >= coreStart && haystackStart < coreEnd) return true;
+    }
+    coreStart = coreEnd;
+  }
+  return false;
+}
+
+function getLongestLiteralLength(patterns: readonly string[]): number {
+  let longest = 0;
+  for (const pattern of patterns) {
+    longest = Math.max(longest, pattern.length);
+  }
+  return longest;
+}
+
+function safeSliceStart(value: string, index: number): number {
+  return splitsSurrogatePair(value, index) ? index - 1 : index;
+}
+
+function safeSliceEnd(value: string, index: number): number {
+  return splitsSurrogatePair(value, index) ? index + 1 : index;
+}
+
+function splitsSurrogatePair(value: string, index: number): boolean {
+  if (index <= 0 || index >= value.length) return false;
+  const before = value.charCodeAt(index - 1);
+  const after = value.charCodeAt(index);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
 }
 
 /**
@@ -810,6 +1011,15 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
   throw new Error("Unsupported engine type");
 }
 
+/** Collect every literal candidate before cross-engine selection. Regex and
+ * fuzzy engines expose only their native non-overlapping iterators. */
+function engineFindCandidates(engine: EngineSlot, haystack: string): Match[] {
+  if (engine.type === "ac") {
+    return engine.ac.findOverlappingIter(haystack);
+  }
+  return engineFindIter(engine, haystack);
+}
+
 function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
   const all: Match[] = [];
   for (const { ac, patternOffset } of engine.acs) {
@@ -823,51 +1033,18 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
       });
     }
   }
-  return selectLeftmostLongestMatches(all);
+  return all;
 }
 
-function selectLeftmostLongestMatches(matches: Match[]): Match[] {
-  if (matches.length === 0) {
-    return [];
-  }
+/** Stable public order for overlapStrategy "all": start, end, pattern. */
+function sortAllMatches(matches: Match[]): Match[] {
+  matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
+  return matches;
+}
 
-  matches.sort((a, b) => a.start - b.start || b.end - a.end || a.pattern - b.pattern);
-
-  const selected: Match[] = [];
-  let cursor = 0;
-  let i = 0;
-  while (i < matches.length) {
-    const start = matches[i]?.start;
-    if (start === undefined) {
-      break;
-    }
-    if (start < cursor) {
-      i++;
-      continue;
-    }
-
-    let best = matches[i];
-    if (best === undefined) {
-      break;
-    }
-    i++;
-    while (i < matches.length && matches[i]?.start === start) {
-      const candidate = matches[i];
-      if (
-        candidate !== undefined &&
-        (candidate.end > best.end ||
-          (candidate.end === best.end && candidate.pattern < best.pattern))
-      ) {
-        best = candidate;
-      }
-      i++;
-    }
-
-    selected.push(best);
-    cursor = best.end;
-  }
-
-  return selected;
+function finalizeMatches(matches: Match[], overlapAll: boolean): Match[] {
+  selectionPassCount += 1;
+  return overlapAll ? sortAllMatches(matches) : mergeAndSelect(matches);
 }
 
 /**

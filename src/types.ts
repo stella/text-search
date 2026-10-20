@@ -113,8 +113,10 @@ export type TextSearchOptions = {
    *
    * - "longest": keep longest non-overlapping match
    *   at each position (default).
-   * - "all": return all matches including overlaps.
-   *   Useful when the caller applies its own dedup.
+   * - "all": preserve every literal occurrence, including
+   *   overlaps, ordered by start, end, then pattern index.
+   *   Regex and fuzzy engines retain their native
+   *   non-overlapping iteration behavior.
    *
    * @default "longest"
    */
