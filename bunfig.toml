@@ -47,6 +47,10 @@ ignorePatterns = [
   "**/GEMINI.md",
   "**/CLAUDE.md",
   ".github/dependabot.yml",
+  "**/fixtures/**",
+  "**/__fixtures__/**",
+  "**/testdata/**",
+  "**/__snapshots__/**",
   "provenance/",
 ]
 
