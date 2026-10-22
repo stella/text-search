@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 bon = "3.9.3"
 stella-aho-corasick-core = "=1.0.4"
-stella-fuzzy-search-core = "=1.1.5"
+stella-fuzzy-search-core = "=1.2.0"
 stella-regex-set-core = "=1.0.5"
 web-time = "1.1.0"
 
