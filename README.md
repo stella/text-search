@@ -215,7 +215,7 @@ text-search packages.
 bun install
 bun test
 bun run lint
-bun run format
+bun fmt
 bun run build
 cargo fmt --all --check
 cargo clippy --all-targets --locked
