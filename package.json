@@ -71,6 +71,7 @@
     "@stll/aho-corasick-wasm": "^1.0.4",
     "@stll/fuzzy-search-wasm": "^1.1.5",
     "@stll/oxlint-config": "1.4.0",
+    "@stll/oxlint-plugin": "0.2.2",
     "@stll/regex-set-wasm": "^1.0.5",
     "@stll/typescript-config": "0.8.0",
     "@types/node": "26.6.5",
@@ -81,11 +82,11 @@
     "tsdown": "0.23.1",
     "typescript": "7.0.2",
     "unrun": "^0.3.1",
-    "vite": "8.3.4",
-    "@stll/oxlint-plugin": "0.2.2"
+    "vite": "8.3.4"
   },
   "engines": {
     "node": ">= 18"
   },
-  "packageManager": "bun@1.4.3"
+  "packageManager": "bun@1.4.3",
+  "trustedDependencies": []
 }

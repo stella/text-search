@@ -88,3 +88,65 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
     );
   }
 });
+
+test("delegates package quarantine enforcement with least privilege", () => {
+  const policy = Bun.YAML.parse(read(".github/workflows/quarantine-policy.yml"));
+  expect(policy).toEqual({
+    name: "Package quarantine policy",
+    on: {
+      pull_request: null,
+      merge_group: null,
+      push: { branches: ["main"] },
+    },
+    permissions: { contents: "read" },
+    jobs: {
+      enforce: {
+        name: "Enforce package quarantine",
+        if: "github.repository == 'stella/text-search'",
+        permissions: { contents: "read" },
+        uses: "stella/.github/.github/workflows/quarantine-policy.yml@3df309c9d97e10b0b4290bb9daefdeda50a6f1bf",
+      },
+    },
+  });
+
+  const prune = Bun.YAML.parse(read(".github/workflows/quarantine-prune.yml"));
+  expect(prune).toEqual({
+    name: "Package quarantine prune",
+    on: { schedule: [{ cron: "11 * * * *" }] },
+    permissions: { contents: "read" },
+    jobs: {
+      prune: {
+        name: "Remove expired quarantine exceptions",
+        if: "github.repository == 'stella/text-search'",
+        permissions: { contents: "read" },
+        uses: "stella/.github/.github/workflows/quarantine-prune.yml@3df309c9d97e10b0b4290bb9daefdeda50a6f1bf",
+        secrets: {
+          CHANGELOG_APP_ID: "${{ secrets.CHANGELOG_APP_ID }}",
+          CHANGELOG_APP_PRIVATE_KEY: "${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}",
+        },
+      },
+    },
+  });
+});
+
+test("quarantines Bun scripts and crates.io dependencies", () => {
+  expect(JSON.parse(read("package.json")).trustedDependencies).toEqual([]);
+  expect(read(".cargo/config.toml")).toBe('[registry]\nglobal-min-publish-age = "5 days"\n');
+  const quarantine = read(".cargo/quarantine.toml");
+  for (const [name, timestamp] of [
+    ["stella-aho-corasick-core", "2026-08-12T12:43:23.000Z"],
+    ["stella-fuzzy-search-core", "2026-09-30T17:28:44.000Z"],
+    ["stella-regex-set-core", "2026-08-12T12:43:30.000Z"],
+  ]) {
+    expect(quarantine).toContain(`"${name}", # quarantine-excluded-since: ${timestamp}`);
+  }
+  const manifest = read("crates/core/Cargo.toml");
+  for (const [name, version] of [
+    ["stella-aho-corasick-core", "1.0.4"],
+    ["stella-fuzzy-search-core", "1.1.5"],
+    ["stella-regex-set-core", "1.0.5"],
+  ]) {
+    expect(manifest).toContain(`${name} = "=${version}"`);
+  }
+  expect(manifest).not.toContain('git = "https://github.com/stella/');
+});

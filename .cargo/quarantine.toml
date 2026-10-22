@@ -1,0 +1,6 @@
+# Crate versions admitted before the five-day quarantine.
+excludes = [
+  "stella-aho-corasick-core", # quarantine-excluded-since: 2026-08-12T12:43:23.000Z
+  "stella-fuzzy-search-core", # quarantine-excluded-since: 2026-09-30T17:28:44.000Z
+  "stella-regex-set-core", # quarantine-excluded-since: 2026-08-12T12:43:30.000Z
+]
