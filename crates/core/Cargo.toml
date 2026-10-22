@@ -9,9 +9,9 @@ publish = false
 
 [dependencies]
 bon = "3.9.3"
-stella-aho-corasick-core = { version = "1.0.4", git = "https://github.com/stella/aho-corasick", rev = "38bdcbf11bfbe389c8f2b7b40eb03ac50371e1e1" }
-stella-fuzzy-search-core = { version = "1.1.5", git = "https://github.com/stella/fuzzy-search", rev = "059f8496380e07650db83444930733c6b2614991" }
-stella-regex-set-core = { version = "1.0.5", git = "https://github.com/stella/regex-set", rev = "ed4929465e1a072644c48238f7557ab21037a62c" }
+stella-aho-corasick-core = "=1.0.4"
+stella-fuzzy-search-core = "=1.1.5"
+stella-regex-set-core = "=1.0.5"
 web-time = "1.1.0"
 
 [dev-dependencies]
