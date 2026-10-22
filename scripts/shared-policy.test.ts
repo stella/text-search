@@ -104,7 +104,7 @@ test("delegates package quarantine enforcement with least privilege", () => {
         name: "Enforce package quarantine",
         if: "github.repository == 'stella/text-search'",
         permissions: { contents: "read" },
-        uses: "stella/.github/.github/workflows/quarantine-policy.yml@3df309c9d97e10b0b4290bb9daefdeda50a6f1bf",
+        uses: "stella/.github/.github/workflows/quarantine-policy.yml@df2659b7ccaa9cb69e69a99787fd4e2180db5893",
       },
     },
   });
@@ -112,14 +112,14 @@ test("delegates package quarantine enforcement with least privilege", () => {
   const prune = Bun.YAML.parse(read(".github/workflows/quarantine-prune.yml"));
   expect(prune).toEqual({
     name: "Package quarantine prune",
-    on: { schedule: [{ cron: "11 * * * *" }] },
+    on: { schedule: [{ cron: "11 4 * * *" }] },
     permissions: { contents: "read" },
     jobs: {
       prune: {
         name: "Remove expired quarantine exceptions",
         if: "github.repository == 'stella/text-search'",
         permissions: { contents: "read" },
-        uses: "stella/.github/.github/workflows/quarantine-prune.yml@3df309c9d97e10b0b4290bb9daefdeda50a6f1bf",
+        uses: "stella/.github/.github/workflows/quarantine-prune.yml@df2659b7ccaa9cb69e69a99787fd4e2180db5893",
         secrets: {
           CHANGELOG_APP_ID: "${{ secrets.CHANGELOG_APP_ID }}",
           CHANGELOG_APP_PRIVATE_KEY: "${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}",
