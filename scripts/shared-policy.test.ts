@@ -104,7 +104,9 @@ test("delegates package quarantine enforcement with least privilege", () => {
         name: "Enforce package quarantine",
         if: "github.repository == 'stella/text-search'",
         permissions: { contents: "read" },
-        uses: "stella/.github/.github/workflows/quarantine-policy.yml@df2659b7ccaa9cb69e69a99787fd4e2180db5893",
+        uses: expect.stringMatching(
+          /^stella\/\.github\/\.github\/workflows\/quarantine-policy\.yml@[0-9a-f]{40}$/u,
+        ),
       },
     },
   });
@@ -119,7 +121,9 @@ test("delegates package quarantine enforcement with least privilege", () => {
         name: "Remove expired quarantine exceptions",
         if: "github.repository == 'stella/text-search'",
         permissions: { contents: "read" },
-        uses: "stella/.github/.github/workflows/quarantine-prune.yml@df2659b7ccaa9cb69e69a99787fd4e2180db5893",
+        uses: expect.stringMatching(
+          /^stella\/\.github\/\.github\/workflows\/quarantine-prune\.yml@[0-9a-f]{40}$/u,
+        ),
         secrets: {
           CHANGELOG_APP_ID: "${{ secrets.CHANGELOG_APP_ID }}",
           CHANGELOG_APP_PRIVATE_KEY: "${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}",
@@ -127,6 +131,9 @@ test("delegates package quarantine enforcement with least privilege", () => {
       },
     },
   });
+  expect(policy.jobs.enforce.uses.split("@").at(1)).toBe(
+    prune.jobs.prune.uses.split("@").at(1),
+  );
 });
 
 test("quarantines Bun scripts and crates.io dependencies", () => {
