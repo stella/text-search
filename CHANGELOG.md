@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.0
+
+### Major Changes
+
+- [#169](https://github.com/stella/text-search/pull/169) [`02ab728`](https://github.com/stella/text-search/commit/02ab728c04ac9099a80fec04eb026915365c41e5) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Select literal matches globally across engine routes, preserve every literal occurrence for overlap-all searches, and make longest selection independent of pattern order. Empty literal patterns are rejected with EmptyPatternError.
+
 ## 1.1.0
 
 ### Minor Changes
