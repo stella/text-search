@@ -96,9 +96,10 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
       );
     // First-party exemptions are permanent; a third-party exclusion names
     // the instant the normal quarantine admits it.
-    const marker = name.startsWith("@stll/")
-      ? "quarantine-excluded-since"
-      : "quarantine-expires";
+    const marker =
+      typeof name === "string" && name.startsWith("@stll/")
+        ? "quarantine-excluded-since"
+        : "quarantine-expires";
     expect(line).toMatch(
       new RegExp(
         `^\\s*"[^"]+",?\\s*#\\s*${marker}:\\s*\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\s*$`,
