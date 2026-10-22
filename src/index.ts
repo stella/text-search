@@ -6,7 +6,10 @@ import { FuzzySearch } from "@stll/fuzzy-search";
 import { RegexSet } from "@stll/regex-set";
 
 import { initEngines } from "./engines";
-import { UnavailableEntityIndex, UnavailableEntityIndexBuilder } from "./entity-index-unavailable";
+import {
+  UnavailableEntityIndex,
+  UnavailableEntityIndexBuilder,
+} from "./entity-index-unavailable";
 
 initEngines({
   AhoCorasick,

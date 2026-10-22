@@ -27,7 +27,9 @@ export const textSearchTestHooks = {
   },
   setAsciiWholeWordMatchBudget(budget: number): void {
     if (!Number.isSafeInteger(budget) || budget < 1) {
-      throw new RangeError("ASCII whole-word match budget must be a positive integer");
+      throw new RangeError(
+        "ASCII whole-word match budget must be a positive integer",
+      );
     }
     asciiWholeWordMatchBudget = budget;
   },
@@ -155,7 +157,11 @@ export class TextSearch {
     rejectEmptyLiteralPatterns(patterns, options?.allLiteral === true);
     this.patternCount = patterns.length;
     this.overlapAll = options?.overlapStrategy === "all";
-    if (patterns.length > 0 && options?.allLiteral === true && allStringPatterns(patterns)) {
+    if (
+      patterns.length > 0 &&
+      options?.allLiteral === true &&
+      allStringPatterns(patterns)
+    ) {
       const engine = buildIdentityAcEngine(patterns, {
         unicodeBoundaries: options.unicodeBoundaries ?? true,
         wholeWords: options.wholeWords ?? false,
@@ -205,7 +211,8 @@ export class TextSearch {
         unicodeBoundaries: rsOptions.unicodeBoundaries,
         wholeWords: rsOptions.wholeWords,
       };
-      if (options?.fuzzyMetric !== undefined) fuzzyOpts.metric = options.fuzzyMetric;
+      if (options?.fuzzyMetric !== undefined)
+        fuzzyOpts.metric = options.fuzzyMetric;
       if (options?.normalizeDiacritics !== undefined)
         fuzzyOpts.normalizeDiacritics = options.normalizeDiacritics;
       if (options?.caseInsensitive !== undefined)
@@ -248,7 +255,10 @@ export class TextSearch {
     // homogeneous regexes while isolating complex
     // patterns with lookarounds, Unicode classes,
     // large repeats, or long wildcard spans.
-    for (const chunk of chunkSharedRegexPatterns(shared, options?.regexChunkSize)) {
+    for (const chunk of chunkSharedRegexPatterns(
+      shared,
+      options?.regexChunkSize,
+    )) {
       this.engines.push(buildRegexEngine(chunk, rsOptions));
     }
 
@@ -266,7 +276,8 @@ export class TextSearch {
         lazyOptions.prefilterAny = cp.regexOptions.prefilterAny;
       }
       if (cp.regexOptions?.prefilterCaseInsensitive !== undefined) {
-        lazyOptions.prefilterCaseInsensitive = cp.regexOptions.prefilterCaseInsensitive;
+        lazyOptions.prefilterCaseInsensitive =
+          cp.regexOptions.prefilterCaseInsensitive;
       }
       if (cp.regexOptions?.prefilterRegex !== undefined) {
         lazyOptions.prefilterRegex = cp.regexOptions.prefilterRegex;
@@ -319,7 +330,10 @@ export class TextSearch {
     // Fast path: single engine, identity indexMap,
     // no names → return raw engine output directly.
     // Zero JS overhead: no remapping, no allocation.
-    if (this.zeroOverhead && isZeroOverheadFindEligible(this.engines, this.overlapAll)) {
+    if (
+      this.zeroOverhead &&
+      isZeroOverheadFindEligible(this.engines, this.overlapAll)
+    ) {
       const engine = this.engines[0];
       if (engine === undefined) {
         throw new Error("Zero-overhead path requires a single engine");
@@ -379,7 +393,8 @@ export class TextSearch {
   replaceAll(haystack: string, replacements: string[]): string {
     if (replacements.length !== this.patternCount) {
       throw new Error(
-        `Expected ${this.patternCount} ` + `replacements, got ${replacements.length}`,
+        `Expected ${this.patternCount} ` +
+          `replacements, got ${replacements.length}`,
       );
     }
 
@@ -421,19 +436,30 @@ export class TextSearch {
   }
 }
 
-function isLiteralFastPathEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+function isLiteralFastPathEligible(
+  engines: EngineSlot[],
+  overlapAll: boolean,
+): boolean {
   const engine = engines.length === 1 ? engines[0] : undefined;
-  return !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection;
+  return (
+    !overlapAll && engine?.type === "ac" && !engine.requiresOverlapSelection
+  );
 }
 
-function isZeroOverheadFindEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+function isZeroOverheadFindEligible(
+  engines: EngineSlot[],
+  overlapAll: boolean,
+): boolean {
   const engine = engines[0];
   if (engines.length !== 1 || engine === undefined) return false;
   if (engine.type === "regex" || engine.type === "fuzzy") return true;
   return isLiteralFastPathEligible(engines, overlapAll);
 }
 
-function isNativeResultEligible(engines: EngineSlot[], overlapAll: boolean): boolean {
+function isNativeResultEligible(
+  engines: EngineSlot[],
+  overlapAll: boolean,
+): boolean {
   const engine = engines.length === 1 ? engines[0] : undefined;
   if (engine === undefined) return false;
   return (
@@ -477,7 +503,8 @@ function chunkSharedRegexPatterns(
 
     const wouldExceedSize = current.length >= AUTO_REGEX_CHUNK_MAX_SIZE;
     const wouldExceedComplexity =
-      current.length > 0 && currentComplexity + complexity > AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET;
+      current.length > 0 &&
+      currentComplexity + complexity > AUTO_REGEX_CHUNK_COMPLEXITY_BUDGET;
     if (wouldExceedSize || wouldExceedComplexity) {
       flush();
     }
@@ -541,10 +568,17 @@ function buildRegexEngine(
     const prefilter =
       lazyOptions.prefilterAny && lazyOptions.prefilterAny.length > 0
         ? buildLiteralPrefilter(lazyOptions.prefilterAny, {
-            caseInsensitive: lazyOptions.prefilterCaseInsensitive ?? options.caseInsensitive,
+            caseInsensitive:
+              lazyOptions.prefilterCaseInsensitive ?? options.caseInsensitive,
           })
         : undefined;
-    const slot: RegexSlot = { type: "regex", build, prefilter, indexMap, nameMap };
+    const slot: RegexSlot = {
+      type: "regex",
+      build,
+      prefilter,
+      indexMap,
+      nameMap,
+    };
     if (lazyOptions.prefilterRegex !== undefined) {
       slot.prefilterRegex = lazyOptions.prefilterRegex;
     }
@@ -554,7 +588,8 @@ function buildRegexEngine(
   if (inferredPrefilter !== undefined) {
     const slot: RegexSlot = { type: "regex", rs: build(), indexMap, nameMap };
     slot.prefilter = buildLiteralPrefilter([inferredPrefilter.literal], {
-      caseInsensitive: inferredPrefilter.caseInsensitive || options.caseInsensitive,
+      caseInsensitive:
+        inferredPrefilter.caseInsensitive || options.caseInsensitive,
     });
     return slot;
   }
@@ -706,13 +741,20 @@ function allStringPatterns(patterns: PatternEntry[]): patterns is string[] {
   return true;
 }
 
-function rejectEmptyLiteralPatterns(patterns: PatternEntry[], allLiteral: boolean): void {
+function rejectEmptyLiteralPatterns(
+  patterns: PatternEntry[],
+  allLiteral: boolean,
+): void {
   for (const [index, entry] of patterns.entries()) {
     if (typeof entry === "string") {
       if (entry.length === 0) throw new EmptyPatternError(index);
       continue;
     }
-    if (entry instanceof RegExp || "distance" in entry || typeof entry.pattern !== "string") {
+    if (
+      entry instanceof RegExp ||
+      "distance" in entry ||
+      typeof entry.pattern !== "string"
+    ) {
       continue;
     }
     if (entry.pattern.length === 0 && (entry.literal === true || allLiteral)) {
@@ -733,7 +775,10 @@ function getRegexSlotEngine(engine: RegexSlot): Engine {
   return engine.rs;
 }
 
-function regexSlotPrefilterMatches(engine: RegexSlot, haystack: string): boolean {
+function regexSlotPrefilterMatches(
+  engine: RegexSlot,
+  haystack: string,
+): boolean {
   if (engine.prefilter && !engine.prefilter.isMatch(haystack)) {
     return false;
   }
@@ -908,7 +953,8 @@ function buildFuzzyEngine(
   if (options.metric !== undefined) fsOptions.metric = options.metric;
   if (options.normalizeDiacritics !== undefined)
     fsOptions.normalizeDiacritics = options.normalizeDiacritics;
-  if (options.caseInsensitive !== undefined) fsOptions.caseInsensitive = options.caseInsensitive;
+  if (options.caseInsensitive !== undefined)
+    fsOptions.caseInsensitive = options.caseInsensitive;
   const { FuzzySearch } = getEngines();
   const fs = new FuzzySearch(fsPatterns, fsOptions);
 
@@ -946,19 +992,29 @@ function asciiWholeWordIsMatch(engine: AcSlot, haystack: string): boolean {
   );
   const coreLength = Math.max(
     1,
-    windowLength - engine.longestLiteralLength - ASCII_WHOLE_WORD_BOUNDARY_CONTEXT / 2,
+    windowLength -
+      engine.longestLiteralLength -
+      ASCII_WHOLE_WORD_BOUNDARY_CONTEXT / 2,
   );
   let coreStart = 0;
   while (coreStart < haystack.length) {
-    const coreEnd = safeSliceEnd(haystack, Math.min(haystack.length, coreStart + coreLength));
+    const coreEnd = safeSliceEnd(
+      haystack,
+      Math.min(haystack.length, coreStart + coreLength),
+    );
     const windowStart = safeSliceStart(haystack, Math.max(0, coreStart - 1));
     const windowEnd = safeSliceEnd(
       haystack,
       Math.min(haystack.length, coreEnd + engine.longestLiteralLength),
     );
-    const matches = engine.isMatchAc.findOverlappingIter(haystack.slice(windowStart, windowEnd));
+    const matches = engine.isMatchAc.findOverlappingIter(
+      haystack.slice(windowStart, windowEnd),
+    );
     asciiWholeWordNativeCallCount += 1;
-    asciiWholeWordMaxCandidateCount = Math.max(asciiWholeWordMaxCandidateCount, matches.length);
+    asciiWholeWordMaxCandidateCount = Math.max(
+      asciiWholeWordMaxCandidateCount,
+      matches.length,
+    );
     for (const { start } of matches) {
       const haystackStart = windowStart + start;
       if (haystackStart >= coreStart && haystackStart < coreEnd) return true;
@@ -988,7 +1044,9 @@ function splitsSurrogatePair(value: string, index: number): boolean {
   if (index <= 0 || index >= value.length) return false;
   const before = value.charCodeAt(index - 1);
   const after = value.charCodeAt(index);
-  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
+  return (
+    before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff
+  );
 }
 
 /**
@@ -1038,7 +1096,9 @@ function splitAcFindIter(engine: SplitAcSlot, haystack: string): Match[] {
 
 /** Stable public order for overlapStrategy "all": start, end, pattern. */
 function sortAllMatches(matches: Match[]): Match[] {
-  matches.sort((a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern);
+  matches.sort(
+    (a, b) => a.start - b.start || a.end - b.end || a.pattern - b.pattern,
+  );
   return matches;
 }
 

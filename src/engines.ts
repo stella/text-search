@@ -6,12 +6,19 @@
  * TextSearch instance is created.
  */
 
-import type { Options as AhoOptions, PatternEntry as AhoPatternEntry } from "@stll/aho-corasick";
+import type {
+  Options as AhoOptions,
+  PatternEntry as AhoPatternEntry,
+} from "@stll/aho-corasick";
 import type {
   Options as FuzzyOptions,
   PatternEntry as FuzzyPatternEntry,
 } from "@stll/fuzzy-search";
-import type { Options as RegexOptions, PatternEntry as RegexPatternEntry } from "@stll/regex-set";
+import type {
+  Options as RegexOptions,
+  PatternEntry as RegexPatternEntry,
+} from "@stll/regex-set";
+
 import type {
   EntityIndexBuilderEngine,
   EntityIndexEngine,
@@ -29,10 +36,21 @@ type AhoEngine = Engine & {
 };
 
 type Engines = {
-  AhoCorasick: new (patterns: AhoPatternEntry[], options?: AhoOptions) => AhoEngine;
-  FuzzySearch: new (patterns: FuzzyPatternEntry[], options?: FuzzyOptions) => Engine;
-  RegexSet: new (patterns: RegexPatternEntry[], options?: RegexOptions) => Engine;
-  EntityIndexBuilder: new (options: EntityIndexOptions) => EntityIndexBuilderEngine;
+  AhoCorasick: new (
+    patterns: AhoPatternEntry[],
+    options?: AhoOptions,
+  ) => AhoEngine;
+  FuzzySearch: new (
+    patterns: FuzzyPatternEntry[],
+    options?: FuzzyOptions,
+  ) => Engine;
+  RegexSet: new (
+    patterns: RegexPatternEntry[],
+    options?: RegexOptions,
+  ) => Engine;
+  EntityIndexBuilder: new (
+    options: EntityIndexOptions,
+  ) => EntityIndexBuilderEngine;
   EntityIndex: { fromBytes: (bytes: Uint8Array) => EntityIndexEngine };
 };
 

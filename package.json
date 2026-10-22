@@ -51,7 +51,6 @@
     "check:typecheck-parity": "stll-typecheck-parity",
     "lint": "bun --bun oxlint -c oxlint.config.ts --report-unused-disable-directives-severity=error --deny-warnings --type-aware .",
     "lint:fix": "bun --bun oxlint -c oxlint.config.ts --type-aware --fix .",
-    "format": "oxfmt . \"!provenance/**\" \"!.ai/**\" \"!.agents/**\" \"!.claude/**\" \"!AGENTS.md\" \"!GEMINI.md\"",
     "version:check": "node scripts/version-sync.mjs check",
     "version:sync": "node scripts/version-sync.mjs sync",
     "changeset": "changeset",
@@ -70,13 +69,12 @@
     "@changesets/cli": "3.0.3",
     "@stll/aho-corasick-wasm": "^1.0.4",
     "@stll/fuzzy-search-wasm": "^1.1.5",
-    "@stll/oxlint-config": "1.4.0",
-    "@stll/oxlint-plugin": "0.2.2",
+    "@stll/oxlint-config": "1.7.0",
+    "@stll/oxlint-plugin": "0.6.0",
     "@stll/regex-set-wasm": "^1.0.5",
     "@stll/typescript-config": "0.8.0",
     "@types/node": "26.6.5",
-    "bun-types": "1.4.3",
-    "oxfmt": "0.72.0",
+    "bun-types": "1.4.4",
     "oxlint": "1.87.0",
     "oxlint-tsgolint": "7.0.2003",
     "tsdown": "0.23.1",
@@ -87,6 +85,6 @@
   "engines": {
     "node": ">= 18"
   },
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "trustedDependencies": []
 }

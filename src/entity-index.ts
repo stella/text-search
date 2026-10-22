@@ -56,8 +56,13 @@ export class EntityIndexBuilder {
     return EntityIndex._fromEngine(await this.inner.finishAsync(tokenWeights));
   }
 
-  *finishSteps(tokenWeights: Float64Array[], maxUnits?: number): Generator<void, EntityIndex> {
-    return EntityIndex._fromEngine(yield* this.inner.finishSteps(tokenWeights, maxUnits));
+  *finishSteps(
+    tokenWeights: Float64Array[],
+    maxUnits?: number,
+  ): Generator<void, EntityIndex> {
+    return EntityIndex._fromEngine(
+      yield* this.inner.finishSteps(tokenWeights, maxUnits),
+    );
   }
 }
 
@@ -101,7 +106,11 @@ export class EntityIndex {
     if (!Number.isFinite(cutoff) || cutoff < 0 || cutoff > 1) {
       throw new RangeError("cutoff must be finite and between 0 and 1");
     }
-    if (!Number.isFinite(boostProduct) || boostProduct < 0 || boostProduct > 1) {
+    if (
+      !Number.isFinite(boostProduct) ||
+      boostProduct < 0 ||
+      boostProduct > 1
+    ) {
       throw new RangeError("boostProduct must be finite and between 0 and 1");
     }
     if (!Number.isSafeInteger(maxCost) || maxCost < 0) {
@@ -111,7 +120,12 @@ export class EntityIndex {
     const tau =
       boostProduct === 0
         ? 0
-        : Math.max(0, 1 - (1 - cutoff + BOOST_ROUNDING_MARGIN) / boostProduct - THRESHOLD_MARGIN);
+        : Math.max(
+            0,
+            1 -
+              (1 - cutoff + BOOST_ROUNDING_MARGIN) / boostProduct -
+              THRESHOLD_MARGIN,
+          );
     return this.inner.search(query, { tau, quality: 1, maxCost });
   }
 }

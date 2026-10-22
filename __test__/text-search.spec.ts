@@ -24,7 +24,14 @@ const mainMergeAndSelect = (matches: Match[]): Match[] => {
   return selected;
 };
 
-const publicFields = ({ pattern, start, end, text, name, distance }: Match) => ({
+const publicFields = ({
+  pattern,
+  start,
+  end,
+  text,
+  name,
+  distance,
+}: Match) => ({
   pattern,
   start,
   end,
@@ -62,7 +69,10 @@ describe("TextSearch", () => {
       ["aa", "a", "aaa"],
     ]) {
       const search = new TextSearch(patterns, { allLiteral: true });
-      expect(search.findIter("aaaa").map(({ text }) => text)).toEqual(["aaa", "a"]);
+      expect(search.findIter("aaaa").map(({ text }) => text)).toEqual([
+        "aaa",
+        "a",
+      ]);
       expect(
         search.replaceAll(
           "aaaa",
@@ -73,19 +83,27 @@ describe("TextSearch", () => {
   });
 
   test("single literal engine matches global selection on a generated corpus", () => {
-    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const patterns = Array.from({ length: 24 }, (_, index) =>
+      "a".repeat(index + 1),
+    );
     const haystack = Array.from(
       { length: 40 },
       (_, index) => `${"a".repeat((index * 7) % 31)}b`,
     ).join("");
     const direct = new TextSearch(patterns, { allLiteral: true });
-    const globallySelected = new TextSearch([...patterns, /z+/], { allLiteral: false });
+    const globallySelected = new TextSearch([...patterns, /z+/], {
+      allLiteral: false,
+    });
 
-    expect(globallySelected.findIter(haystack)).toEqual(direct.findIter(haystack));
+    expect(globallySelected.findIter(haystack)).toEqual(
+      direct.findIter(haystack),
+    );
   });
 
   test("single literal engine uses its native iterator", () => {
-    const search = new TextSearch([{ pattern: "a", literal: true, name: "letter" }]);
+    const search = new TextSearch([
+      { pattern: "a", literal: true, name: "letter" },
+    ]);
     const engine = Reflect.get(search, "engines")[0];
     const ac = engine.ac;
     let nativeCalls = 0;
@@ -98,7 +116,11 @@ describe("TextSearch", () => {
       throw new Error("overlapping iterator should not run");
     };
 
-    expect(search.findIter("aaa").map(({ name }) => name)).toEqual(["letter", "letter", "letter"]);
+    expect(search.findIter("aaa").map(({ name }) => name)).toEqual([
+      "letter",
+      "letter",
+      "letter",
+    ]);
     expect(nativeCalls).toBe(1);
   });
 
@@ -122,7 +144,11 @@ describe("TextSearch", () => {
   });
 
   test("single-engine routes skip selection whenever native iteration is final", () => {
-    const cases: { label: string; pattern: PatternEntry; expectedName?: string }[] = [
+    const cases: {
+      label: string;
+      pattern: PatternEntry;
+      expectedName?: string;
+    }[] = [
       { label: "unnamed literal", pattern: "aa" },
       {
         label: "named literal",
@@ -146,15 +172,23 @@ describe("TextSearch", () => {
     for (const { label, pattern, expectedName } of cases) {
       for (const overlapStrategy of ["longest", "all"] as const) {
         textSearchTestHooks.reset();
-        const matches = new TextSearch([pattern], { overlapStrategy }).findIter("aaaa");
-        const nativeResultIsFinal = !label.includes("literal") || overlapStrategy === "longest";
-
-        expect(textSearchTestHooks.getSelectionPassCount(), `${label}: ${overlapStrategy}`).toBe(
-          nativeResultIsFinal ? 0 : 1,
+        const matches = new TextSearch([pattern], { overlapStrategy }).findIter(
+          "aaaa",
         );
-        expect(matches.length, `${label}: ${overlapStrategy}`).toBeGreaterThan(0);
+        const nativeResultIsFinal =
+          !label.includes("literal") || overlapStrategy === "longest";
+
         expect(
-          matches.every(({ pattern: index, name }) => index === 0 && name === expectedName),
+          textSearchTestHooks.getSelectionPassCount(),
+          `${label}: ${overlapStrategy}`,
+        ).toBe(nativeResultIsFinal ? 0 : 1);
+        expect(matches.length, `${label}: ${overlapStrategy}`).toBeGreaterThan(
+          0,
+        );
+        expect(
+          matches.every(
+            ({ pattern: index, name }) => index === 0 && name === expectedName,
+          ),
           `${label}: ${overlapStrategy}`,
         ).toBe(true);
       }
@@ -171,12 +205,23 @@ describe("TextSearch", () => {
       const haystack = Array.from({ length: random() % 40 }, () =>
         random() % 3 === 0 ? "b" : "a",
       ).join("");
-      for (const pattern of [/a+/, /a*/, /b*/i, { pattern: "aaa", distance: 1 }]) {
+      for (const pattern of [
+        /a+/,
+        /a*/,
+        /b*/i,
+        { pattern: "aaa", distance: 1 },
+      ]) {
         const direct = new TextSearch([pattern]);
-        const routed = new TextSearch([pattern, { pattern: "never", literal: true }]);
-        const candidates = new TextSearch([pattern, { pattern: "never", literal: true }], {
-          overlapStrategy: "all",
-        }).findIter(haystack);
+        const routed = new TextSearch([
+          pattern,
+          { pattern: "never", literal: true },
+        ]);
+        const candidates = new TextSearch(
+          [pattern, { pattern: "never", literal: true }],
+          {
+            overlapStrategy: "all",
+          },
+        ).findIter(haystack);
         const expected = mainMergeAndSelect(candidates).map(publicFields);
         expect(direct.findIter(haystack).map(publicFields)).toEqual(expected);
         expect(routed.findIter(haystack).map(publicFields)).toEqual(expected);
@@ -185,7 +230,11 @@ describe("TextSearch", () => {
   });
 
   test("multiple regex routes preserve main's zero-width merge behavior", () => {
-    const patterns = [/a*/, /b*/i, { pattern: "never", literal: true }] as const;
+    const patterns = [
+      /a*/,
+      /b*/i,
+      { pattern: "never", literal: true },
+    ] as const;
     const expectedByHaystack = {
       "": [
         { pattern: 0, start: 0, end: 0 },
@@ -203,17 +252,22 @@ describe("TextSearch", () => {
         regexChunkSize: 1,
       }).findIter(haystack);
       const reference = mainMergeAndSelect(candidates);
-      const actual = new TextSearch(patterns, { regexChunkSize: 1 }).findIter(haystack);
-      expect(actual).toEqual(reference);
-      expect(actual.map(({ pattern, start, end }) => ({ pattern, start, end }))).toEqual(
-        expectedByHaystack[haystack],
+      const actual = new TextSearch(patterns, { regexChunkSize: 1 }).findIter(
+        haystack,
       );
+      expect(actual).toEqual(reference);
+      expect(
+        actual.map(({ pattern, start, end }) => ({ pattern, start, end })),
+      ).toEqual(expectedByHaystack[haystack]);
     }
   });
 
   test("eligible replaceAll uses the native literal iterator for every overlap strategy", () => {
     for (const overlapStrategy of ["longest", "all"] as const) {
-      const search = new TextSearch(["a", "aa"], { allLiteral: true, overlapStrategy });
+      const search = new TextSearch(["a", "aa"], {
+        allLiteral: true,
+        overlapStrategy,
+      });
       const engine = Reflect.get(search, "engines")[0];
       const ac = engine.ac;
       let nativeCalls = 0;
@@ -247,7 +301,9 @@ describe("TextSearch", () => {
   });
 
   test("eligible replaceAll matches global selection on a generated corpus", () => {
-    const patterns = Array.from({ length: 24 }, (_, index) => "a".repeat(index + 1));
+    const patterns = Array.from({ length: 24 }, (_, index) =>
+      "a".repeat(index + 1),
+    );
     const replacements = patterns.map((_, index) => `[${index}]`);
     const haystack = Array.from(
       { length: 40 },
@@ -262,7 +318,9 @@ describe("TextSearch", () => {
   });
 
   test("duplicate empty literals are rejected with their index and name", () => {
-    expect(() => new TextSearch(["", ""], { allLiteral: true })).toThrow(new EmptyPatternError(0));
+    expect(() => new TextSearch(["", ""], { allLiteral: true })).toThrow(
+      new EmptyPatternError(0),
+    );
     expect(
       () =>
         new TextSearch([
@@ -273,13 +331,18 @@ describe("TextSearch", () => {
   });
 
   test('overlap "all" rejects duplicate empty literals', () => {
-    expect(() => new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" })).toThrow(
-      EmptyPatternError,
-    );
+    expect(
+      () =>
+        new TextSearch(["", ""], { allLiteral: true, overlapStrategy: "all" }),
+    ).toThrow(EmptyPatternError);
   });
 
   test("split literal route rejects duplicate empty literals", () => {
-    const patterns = ["", "", ...Array.from({ length: 19_998 }, (_, index) => `missing-${index}`)];
+    const patterns = [
+      "",
+      "",
+      ...Array.from({ length: 19_998 }, (_, index) => `missing-${index}`),
+    ];
     expect(
       () =>
         new TextSearch(patterns, {
@@ -298,16 +361,66 @@ describe("TextSearch", () => {
       return (state >>> 8) % upperBound;
     };
     const atoms = ["a", "A", "ab", "é", "𐐀", "_", " "];
-    const haystackAtoms = ["a", "A", "b", "é", "𐐀", " ", "_", "\uD800", "\uDC00"];
+    const haystackAtoms = [
+      "a",
+      "A",
+      "b",
+      "é",
+      "𐐀",
+      " ",
+      "_",
+      "\uD800",
+      "\uDC00",
+    ];
     const optionCombinations = [
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: false },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: false, unicodeBoundaries: true },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: false },
-      { allLiteral: true, overlapStrategy: "longest", wholeWords: true, unicodeBoundaries: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: false },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: false, unicodeBoundaries: true },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: false },
-      { allLiteral: true, overlapStrategy: "all", wholeWords: true, unicodeBoundaries: true },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: false,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: false,
+        unicodeBoundaries: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "longest",
+        wholeWords: true,
+        unicodeBoundaries: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: false,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: false,
+        unicodeBoundaries: true,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: false,
+      },
+      {
+        allLiteral: true,
+        overlapStrategy: "all",
+        wholeWords: true,
+        unicodeBoundaries: true,
+      },
       {
         allLiteral: true,
         overlapStrategy: "longest",
@@ -397,7 +510,10 @@ describe("TextSearch", () => {
         expect(split.replaceAll(haystack, replacements)).toBe(
           ordinary.replaceAll(haystack, replacements),
         );
-        exercisedCombinations.set(combination, (exercisedCombinations.get(combination) ?? 0) + 1);
+        exercisedCombinations.set(
+          combination,
+          (exercisedCombinations.get(combination) ?? 0) + 1,
+        );
       }
     }
 
@@ -430,9 +546,16 @@ describe("TextSearch", () => {
     }> = [
       { patterns: [""] },
       { patterns: [{ pattern: "", literal: true }] },
-      { patterns: [{ pattern: "", literal: true, name: "named" }], name: "named" },
+      {
+        patterns: [{ pattern: "", literal: true, name: "named" }],
+        name: "named",
+      },
       { patterns: [""], options: { allLiteral: true } },
-      { patterns: [{ pattern: "", name: "named" }], options: { allLiteral: true }, name: "named" },
+      {
+        patterns: [{ pattern: "", name: "named" }],
+        options: { allLiteral: true },
+        name: "named",
+      },
     ];
 
     for (const { patterns, options, name } of cases) {
@@ -516,7 +639,9 @@ describe("TextSearch", () => {
 
     expect(search.isMatch("a ".repeat(5_000))).toBe(true);
     expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBe(1);
-    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
+    expect(
+      textSearchTestHooks.getAsciiWholeWordMaxCandidateCount(),
+    ).toBeLessThanOrEqual(1_000_000);
   });
 
   test("ASCII whole-word isMatch bounds distinct-heavy candidate windows", () => {
@@ -530,8 +655,12 @@ describe("TextSearch", () => {
     );
 
     expect(search.isMatch("a".repeat(20_000))).toBe(false);
-    expect(textSearchTestHooks.getAsciiWholeWordNativeCallCount()).toBeGreaterThan(1);
-    expect(textSearchTestHooks.getAsciiWholeWordMaxCandidateCount()).toBeLessThanOrEqual(1_000_000);
+    expect(
+      textSearchTestHooks.getAsciiWholeWordNativeCallCount(),
+    ).toBeGreaterThan(1);
+    expect(
+      textSearchTestHooks.getAsciiWholeWordMaxCandidateCount(),
+    ).toBeLessThanOrEqual(1_000_000);
   });
 
   test("ASCII whole-word isMatch finds a candidate across a window boundary", () => {
@@ -550,7 +679,11 @@ describe("TextSearch", () => {
       { options: { allLiteral: true }, eligible: true },
       { options: { allLiteral: true, wholeWords: true }, eligible: true },
       {
-        options: { allLiteral: true, wholeWords: true, unicodeBoundaries: false },
+        options: {
+          allLiteral: true,
+          wholeWords: true,
+          unicodeBoundaries: false,
+        },
         eligible: false,
       },
       {
@@ -600,25 +733,35 @@ describe("TextSearch", () => {
   test("selects literal candidates globally across engine routes", () => {
     const first = new TextSearch([/ab/, "b", "bcdef", "fg"]);
     expect(
-      first.findIter("abcdefg").map(({ pattern, start, end }) => ({ pattern, start, end })),
+      first
+        .findIter("abcdefg")
+        .map(({ pattern, start, end }) => ({ pattern, start, end })),
     ).toEqual([
       { pattern: 0, start: 0, end: 2 },
       { pattern: 3, start: 5, end: 7 },
     ]);
-    expect(first.replaceAll("abcdefg", ["<AB>", "<B>", "<BCDEF>", "<FG>"])).toBe("<AB>cde<FG>");
+    expect(
+      first.replaceAll("abcdefg", ["<AB>", "<B>", "<BCDEF>", "<FG>"]),
+    ).toBe("<AB>cde<FG>");
 
     const second = new TextSearch(["a", "abcd", "dEF", /zab/]);
     expect(
-      second.findIter("zabcdEF").map(({ pattern, start, end }) => ({ pattern, start, end })),
+      second
+        .findIter("zabcdEF")
+        .map(({ pattern, start, end }) => ({ pattern, start, end })),
     ).toEqual([
       { pattern: 3, start: 0, end: 3 },
       { pattern: 2, start: 4, end: 7 },
     ]);
-    expect(second.replaceAll("zabcdEF", ["<A>", "<ABCD>", "<DEF>", "<ZAB>"])).toBe("<ZAB>c<DEF>");
+    expect(
+      second.replaceAll("zabcdEF", ["<A>", "<ABCD>", "<DEF>", "<ZAB>"]),
+    ).toBe("<ZAB>c<DEF>");
   });
 
   test("whichMatch reports overlapping literal patterns", () => {
-    expect(new TextSearch(["a", "aa"], { allLiteral: true }).whichMatch("aa")).toEqual([0, 1]);
+    expect(
+      new TextSearch(["a", "aa"], { allLiteral: true }).whichMatch("aa"),
+    ).toEqual([0, 1]);
   });
 
   test("named patterns", () => {
@@ -643,7 +786,10 @@ describe("TextSearch", () => {
 
   test("replaceAll", () => {
     const ts = new TextSearch(["\\d{2}\\.\\d{2}\\.\\d{4}", "\\+?\\d{9,12}"]);
-    const result = ts.replaceAll("Born 15.03.1990, phone +420123456789", ["[DATE]", "[PHONE]"]);
+    const result = ts.replaceAll("Born 15.03.1990, phone +420123456789", [
+      "[DATE]",
+      "[PHONE]",
+    ]);
     expect(result).toBe("Born [DATE], phone [PHONE]");
   });
 
@@ -669,8 +815,12 @@ describe("TextSearch", () => {
       '(this "Agreement"), is made by and among Twitter, Inc., ' +
       'a Delaware corporation (the "Company"), X Holdings I, Inc.';
 
-    const wideMatches = new TextSearch([wideBoundary]).findIter(text).map((m) => m.text);
-    const asciiMatches = new TextSearch([asciiBoundary]).findIter(text).map((m) => m.text);
+    const wideMatches = new TextSearch([wideBoundary])
+      .findIter(text)
+      .map((m) => m.text);
+    const asciiMatches = new TextSearch([asciiBoundary])
+      .findIter(text)
+      .map((m) => m.text);
 
     expect(wideMatches).toEqual(asciiMatches);
     expect(wideMatches).toEqual(["Twitter, Inc.", "X Holdings I, Inc."]);
@@ -687,7 +837,9 @@ describe("auto-optimization", () => {
     const smallPattern = "\\d+";
 
     // Should not throw or be slow
-    const ts = new TextSearch([bigPattern, smallPattern], { maxAlternations: 50 });
+    const ts = new TextSearch([bigPattern, smallPattern], {
+      maxAlternations: 50,
+    });
 
     expect(ts.isMatch("title42 test")).toBe(true);
     expect(ts.isMatch("123")).toBe(true);
@@ -700,49 +852,62 @@ describe("auto-optimization", () => {
   });
 
   test("simple regex patterns auto-chunk", () => {
-    const patterns = Array.from({ length: 100 }, (_, i) => `field${i}\\s*:\\s*\\d+`);
+    const patterns = Array.from(
+      { length: 100 },
+      (_, i) => `field${i}\\s*:\\s*\\d+`,
+    );
 
     const ts = new TextSearch(patterns, { maxAlternations: 50 });
     const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+    const regexEngines = engines.filter(
+      (engine: { type: string }) => engine.type === "regex",
+    );
 
     expect(regexEngines.length).toBeGreaterThan(1);
     expect(regexEngines.length).toBeLessThan(patterns.length);
-    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
-      patterns.length,
-    );
+    expect(
+      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
+    ).toHaveLength(patterns.length);
   });
 
   test("complex regex patterns auto-isolate", () => {
     const patterns = Array.from(
       { length: 10 },
-      (_, i) => `(?<![\\p{L}\\p{N}])entity${i}[\\p{L}\\p{N}]{1,20}(?![\\p{L}\\p{N}])`,
+      (_, i) =>
+        `(?<![\\p{L}\\p{N}])entity${i}[\\p{L}\\p{N}]{1,20}(?![\\p{L}\\p{N}])`,
     );
 
     const ts = new TextSearch(patterns, { maxAlternations: 50 });
     const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+    const regexEngines = engines.filter(
+      (engine: { type: string }) => engine.type === "regex",
+    );
 
     expect(regexEngines).toHaveLength(patterns.length);
-    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
-      patterns.length,
-    );
+    expect(
+      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
+    ).toHaveLength(patterns.length);
   });
 
   test("regexChunkSize opts into bounded shared chunks", () => {
-    const patterns = Array.from({ length: 100 }, (_, i) => `field${i}\\s*:\\s*\\d+`);
+    const patterns = Array.from(
+      { length: 100 },
+      (_, i) => `field${i}\\s*:\\s*\\d+`,
+    );
 
     const ts = new TextSearch(patterns, {
       maxAlternations: 50,
       regexChunkSize: 32,
     });
     const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter((engine: { type: string }) => engine.type === "regex");
+    const regexEngines = engines.filter(
+      (engine: { type: string }) => engine.type === "regex",
+    );
 
     expect(regexEngines).toHaveLength(4);
-    expect(regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap)).toHaveLength(
-      patterns.length,
-    );
+    expect(
+      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
+    ).toHaveLength(patterns.length);
   });
 
   test("single regex slots infer mandatory leading literal prefilters", () => {
@@ -751,12 +916,18 @@ describe("auto-optimization", () => {
 
     expect(engines[0]?.prefilter).toBeDefined();
     expect(ts.findIter("CZ123456789")).toEqual([]);
-    expect(ts.findIter("DE123456789").map((match) => match.text)).toEqual(["DE123456789"]);
+    expect(ts.findIter("DE123456789").map((match) => match.text)).toEqual([
+      "DE123456789",
+    ]);
   });
 
   test("leading literal prefilters avoid optional and alternating prefixes", () => {
-    expect(new TextSearch(["AB?C"]).findIter("AC").map((match) => match.text)).toEqual(["AC"]);
-    expect(new TextSearch(["DE|FR"]).findIter("FR").map((match) => match.text)).toEqual(["FR"]);
+    expect(
+      new TextSearch(["AB?C"]).findIter("AC").map((match) => match.text),
+    ).toEqual(["AC"]);
+    expect(
+      new TextSearch(["DE|FR"]).findIter("FR").map((match) => match.text),
+    ).toEqual(["FR"]);
   });
 
   test("pattern indices preserved after split", () => {
@@ -812,8 +983,9 @@ describe("auto-optimization", () => {
       },
     ]);
     const engines = Reflect.get(ts, "engines");
-    const lazySlot = engines.find((engine: { build?: unknown; indexMap: number[]; rs?: unknown }) =>
-      engine.indexMap.includes(1),
+    const lazySlot = engines.find(
+      (engine: { build?: unknown; indexMap: number[]; rs?: unknown }) =>
+        engine.indexMap.includes(1),
     );
 
     expect(lazySlot?.build).toBeDefined();
@@ -846,11 +1018,16 @@ describe("auto-optimization", () => {
     expect(engines[0]!.type).toBe("ac");
     expect(engines[0]!.identityMap).toBe(true);
     expect(engines[0]!.patternCount).toBe(3);
-    expect(ts.findIter("ALPHA beta alphabet").map((match) => match.pattern)).toEqual([0, 1]);
+    expect(
+      ts.findIter("ALPHA beta alphabet").map((match) => match.pattern),
+    ).toEqual([0, 1]);
   });
 
   test("large all-literal whole-word sets split without changing global selection", () => {
-    const patterns = Array.from({ length: 120_001 }, (_, index) => `term-${index}`);
+    const patterns = Array.from(
+      { length: 120_001 },
+      (_, index) => `term-${index}`,
+    );
     patterns[0] = "alpha";
     patterns[40_000] = "alpha beta";
 
@@ -927,7 +1104,11 @@ describe("fuzzy matching", () => {
   });
 
   test("fuzzy pattern indices preserved", () => {
-    const ts = new TextSearch(["literal", { pattern: "Novak", distance: 1 }, "\\d+"]);
+    const ts = new TextSearch([
+      "literal",
+      { pattern: "Novak", distance: 1 },
+      "\\d+",
+    ]);
     const matches = ts.findIter("literal Nowak 42");
     const byPattern = new Map(matches.map((m) => [m.pattern, m.text]));
     expect(byPattern.get(0)).toBe("literal");

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
 import { EntityIndex, EntityIndexBuilder } from "../src";
 import { getEngines, initEngines } from "../src/engines";
 import type {
@@ -25,7 +26,12 @@ const alias = {
   entityGroup: 7,
   quality: 1,
   forms: [
-    { form: 0, tokens: [{ id: 3, weight: 1, minimumWeight: 1 }], joins: [], minimumTotal: 1 },
+    {
+      form: 0,
+      tokens: [{ id: 3, weight: 1, minimumWeight: 1 }],
+      joins: [],
+      minimumTotal: 1,
+    },
   ],
 } satisfies EntityAliasInput;
 const query = {
@@ -49,7 +55,9 @@ const packedResult = {
 
 const installFake = () => {
   const bytes = new Uint8Array([1, 2, 3]);
-  const search = mock((_query: EntityQuery, _params: EntitySearchParams) => packedResult);
+  const search = mock(
+    (_query: EntityQuery, _params: EntitySearchParams) => packedResult,
+  );
   const engine = {
     nativeBytes: 128,
     postingCount: 17,
@@ -78,8 +86,22 @@ const installFake = () => {
     }
   }
   const fromBytes = mock((_bytes: Uint8Array) => engine);
-  initEngines({ ...registeredEngines, EntityIndexBuilder: Builder, EntityIndex: { fromBytes } });
-  return { bytes, search, construct, intern, addAlias, finish, finishAsync, stepCalls, fromBytes };
+  initEngines({
+    ...registeredEngines,
+    EntityIndexBuilder: Builder,
+    EntityIndex: { fromBytes },
+  });
+  return {
+    bytes,
+    search,
+    construct,
+    intern,
+    addAlias,
+    finish,
+    finishAsync,
+    stepCalls,
+    fromBytes,
+  };
 };
 
 const expectWrappedIndex = (index: EntityIndex, bytes: Uint8Array) => {
@@ -92,7 +114,9 @@ const expectWrappedIndex = (index: EntityIndex, bytes: Uint8Array) => {
 
 describe("EntityIndex facade", () => {
   test("registered placeholder refuses construction and deserialization", () => {
-    expect(() => new EntityIndexBuilder(options)).toThrow("requires @stll/fuzzy-search >= 1.2.0");
+    expect(() => new EntityIndexBuilder(options)).toThrow(
+      "requires @stll/fuzzy-search >= 1.2.0",
+    );
     expect(() => EntityIndex.fromBytes(new Uint8Array())).toThrow(
       "requires @stll/fuzzy-search >= 1.2.0",
     );
@@ -114,7 +138,10 @@ describe("EntityIndex facade", () => {
   test("asynchronous completion wraps the engine result", async () => {
     const fake = installFake();
     const weights = [new Float64Array([1])];
-    expectWrappedIndex(await new EntityIndexBuilder(options).finishAsync(weights), fake.bytes);
+    expectWrappedIndex(
+      await new EntityIndexBuilder(options).finishAsync(weights),
+      fake.bytes,
+    );
     expect(fake.finishAsync.mock.calls.at(0)?.at(0)).toBe(weights);
   });
 
@@ -123,7 +150,10 @@ describe("EntityIndex facade", () => {
     (maxUnits) => {
       const fake = installFake();
       const weights = [new Float64Array([1])];
-      const steps = new EntityIndexBuilder(options).finishSteps(weights, maxUnits);
+      const steps = new EntityIndexBuilder(options).finishSteps(
+        weights,
+        maxUnits,
+      );
       expect(steps.next()).toEqual({ value: undefined, done: false });
       expect(steps.next()).toEqual({ value: undefined, done: false });
       const final = steps.next();
@@ -141,11 +171,14 @@ describe("EntityIndex facade", () => {
     const index = EntityIndex.fromBytes(bytes);
     expect(fake.fromBytes.mock.calls.at(0)?.at(0)).toBe(bytes);
     expectWrappedIndex(index, fake.bytes);
-    expect(index.search(query, { cutoff: 0.8, boostProduct: 0.5, maxCost: 123 })).toBe(
-      packedResult,
-    );
+    expect(
+      index.search(query, { cutoff: 0.8, boostProduct: 0.5, maxCost: 123 }),
+    ).toBe(packedResult);
     expect(fake.search.mock.calls.at(0)?.[0]).toBe(query);
-    expect(fake.search.mock.calls.at(0)?.[1]).toMatchObject({ quality: 1, maxCost: 123 });
+    expect(fake.search.mock.calls.at(0)?.[1]).toMatchObject({
+      quality: 1,
+      maxCost: 123,
+    });
     expect(fake.search.mock.calls.at(0)?.[1].tau).toBeCloseTo(0.6 - 1e-9, 12);
   });
 
@@ -153,20 +186,35 @@ describe("EntityIndex facade", () => {
     const fake = installFake();
     const index = EntityIndex.fromBytes(fake.bytes);
     for (const cutoff of [0, 0.1, 0.5, 0.8, 1]) {
-      for (const boostProduct of [0, Number.MIN_VALUE, 1e-20, 1e-10, 0.1, 0.5, 1]) {
-        index.search(query, { cutoff, boostProduct, maxCost: Number.MAX_SAFE_INTEGER });
+      for (const boostProduct of [
+        0,
+        Number.MIN_VALUE,
+        1e-20,
+        1e-10,
+        0.1,
+        0.5,
+        1,
+      ]) {
+        index.search(query, {
+          cutoff,
+          boostProduct,
+          maxCost: Number.MAX_SAFE_INTEGER,
+        });
         const params = fake.search.mock.lastCall?.[1];
-        if (params === undefined) throw new Error("Expected forwarded search parameters");
+        if (params === undefined)
+          throw new Error("Expected forwarded search parameters");
         expect(params.quality).toBe(1);
         expect(params.maxCost).toBe(Number.MAX_SAFE_INTEGER);
         expect(Number.isFinite(params.tau)).toBe(true);
         expect(params.tau).toBeGreaterThanOrEqual(0);
         expect(params.tau).toBeLessThanOrEqual(1);
         if (boostProduct === 0 || cutoff === 0) expect(params.tau).toBe(0);
-        if (boostProduct === 1) expect(params.tau).toBeCloseTo(Math.max(0, cutoff - 1e-9), 12);
+        if (boostProduct === 1)
+          expect(params.tau).toBeCloseTo(Math.max(0, cutoff - 1e-9), 12);
         for (const baseScore of [0, 0.1, 0.5, 0.6, 0.8, 1]) {
           const boostedScore = 1 - (1 - baseScore) * boostProduct;
-          if (boostedScore >= cutoff) expect(baseScore).toBeGreaterThanOrEqual(params.tau);
+          if (boostedScore >= cutoff)
+            expect(baseScore).toBeGreaterThanOrEqual(params.tau);
         }
       }
     }
@@ -176,8 +224,16 @@ describe("EntityIndex facade", () => {
     "valid work ceiling reaches the engine: %s",
     (maxCost) => {
       const fake = installFake();
-      EntityIndex.fromBytes(fake.bytes).search(query, { cutoff: 0, boostProduct: 1, maxCost });
-      expect(fake.search).toHaveBeenCalledWith(query, { tau: 0, quality: 1, maxCost });
+      EntityIndex.fromBytes(fake.bytes).search(query, {
+        cutoff: 0,
+        boostProduct: 1,
+        maxCost,
+      });
+      expect(fake.search).toHaveBeenCalledWith(query, {
+        tau: 0,
+        quality: 1,
+        maxCost,
+      });
     },
   );
 
@@ -189,20 +245,30 @@ describe("EntityIndex facade", () => {
       maxCost: 0,
     });
     expect(1 - Number.MIN_VALUE).toBe(1);
-    expect(fake.search.mock.lastCall?.[1]).toEqual({ tau: 0, quality: 1, maxCost: 0 });
+    expect(fake.search.mock.lastCall?.[1]).toEqual({
+      tau: 0,
+      quality: 1,
+      maxCost: 0,
+    });
   });
 
-  test.each([Number.NaN, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, -0.01, 1.01])(
+  test.each([
+    Number.NaN,
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    -0.01,
+    1.01,
+  ])(
     "invalid threshold inputs fail before reaching the engine: %s",
     (invalid) => {
       const fake = installFake();
       const index = EntityIndex.fromBytes(fake.bytes);
-      expect(() => index.search(query, { cutoff: invalid, boostProduct: 1, maxCost: 0 })).toThrow(
-        RangeError,
-      );
-      expect(() => index.search(query, { cutoff: 0.5, boostProduct: invalid, maxCost: 0 })).toThrow(
-        RangeError,
-      );
+      expect(() =>
+        index.search(query, { cutoff: invalid, boostProduct: 1, maxCost: 0 }),
+      ).toThrow(RangeError);
+      expect(() =>
+        index.search(query, { cutoff: 0.5, boostProduct: invalid, maxCost: 0 }),
+      ).toThrow(RangeError);
       expect(fake.search).not.toHaveBeenCalled();
     },
   );
@@ -217,9 +283,9 @@ describe("EntityIndex facade", () => {
   ])("invalid work ceiling fails before reaching the engine: %s", (maxCost) => {
     const fake = installFake();
     const index = EntityIndex.fromBytes(fake.bytes);
-    expect(() => index.search(query, { cutoff: 0.5, boostProduct: 1, maxCost })).toThrow(
-      RangeError,
-    );
+    expect(() =>
+      index.search(query, { cutoff: 0.5, boostProduct: 1, maxCost }),
+    ).toThrow(RangeError);
     expect(fake.search).not.toHaveBeenCalled();
   });
 });

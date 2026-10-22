@@ -13,8 +13,8 @@ delete process.env.NAPI_RS_FORCE_WASI;
 const fuzzySearchModuleLoads = Object.keys(require.cache).filter((modulePath) =>
   modulePath.includes("@stll/fuzzy-search"),
 );
-const nativeFuzzySearchBindingLoads = fuzzySearchModuleLoads.filter((modulePath) =>
-  modulePath.endsWith(".node"),
+const nativeFuzzySearchBindingLoads = fuzzySearchModuleLoads.filter(
+  (modulePath) => modulePath.endsWith(".node"),
 );
 const wasiFuzzySearchModuleLoads = fuzzySearchModuleLoads.filter((modulePath) =>
   modulePath.includes("wasi"),
@@ -38,7 +38,11 @@ const matches = readRuntimeSmokeMatches(nativeMatches);
 assert.equal(search.isMatch(haystack), true);
 assert.equal(matches.length, 4);
 assert(matches.some((match) => match.text === "Ing. Jan"));
-assert(matches.some((match) => match.text === "s.r.o." && match.name === "company-type"));
+assert(
+  matches.some(
+    (match) => match.text === "s.r.o." && match.name === "company-type",
+  ),
+);
 assert(
   matches.some(
     (match) =>
