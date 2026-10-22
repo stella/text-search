@@ -168,7 +168,10 @@ export function scoreRegexComplexity(
 /**
  * Classify and normalize pattern entries.
  */
-export function classifyPatterns(entries: PatternEntry[], allLiteral = false): ClassifiedPattern[] {
+export function classifyPatterns(
+  entries: PatternEntry[],
+  allLiteral = false,
+): ClassifiedPattern[] {
   return entries.map((entry, i) => {
     if (typeof entry === "string") {
       const alternationCount = allLiteral ? 0 : countAlternations(entry);
@@ -208,7 +211,8 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
 
     // Explicit literal: skip metachar detection
     if (entry.literal === true) {
-      const hasPerPatternOpts = "caseInsensitive" in entry || "wholeWords" in entry;
+      const hasPerPatternOpts =
+        "caseInsensitive" in entry || "wholeWords" in entry;
       const result: ClassifiedPattern = {
         originalIndex: i,
         pattern: entry.pattern,
@@ -219,7 +223,8 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
       if (entry.name !== undefined) result.name = entry.name;
       if (hasPerPatternOpts) {
         const opts: NonNullable<ClassifiedPattern["acOptions"]> = {};
-        if (entry.caseInsensitive !== undefined) opts.caseInsensitive = entry.caseInsensitive;
+        if (entry.caseInsensitive !== undefined)
+          opts.caseInsensitive = entry.caseInsensitive;
         if (entry.wholeWords !== undefined) opts.wholeWords = entry.wholeWords;
         result.acOptions = opts;
       }
@@ -234,16 +239,19 @@ export function classifyPatterns(entries: PatternEntry[], allLiteral = false): C
       originalIndex: i,
       pattern: pat,
       alternationCount,
-      isLiteral: typeof pat === "string" && (allLiteral || isLiteralPattern(pat)),
+      isLiteral:
+        typeof pat === "string" && (allLiteral || isLiteralPattern(pat)),
       regexComplexity: scoreRegexComplexity(source, alternationCount),
     };
     if (entry.name !== undefined) result.name = entry.name;
     const regexOptions: NonNullable<ClassifiedPattern["regexOptions"]> = {};
     if (entry.lazy === true) regexOptions.lazy = true;
-    if (entry.prefilterAny !== undefined) regexOptions.prefilterAny = entry.prefilterAny;
+    if (entry.prefilterAny !== undefined)
+      regexOptions.prefilterAny = entry.prefilterAny;
     if (entry.prefilterCaseInsensitive !== undefined)
       regexOptions.prefilterCaseInsensitive = entry.prefilterCaseInsensitive;
-    if (entry.prefilterRegex !== undefined) regexOptions.prefilterRegex = entry.prefilterRegex;
+    if (entry.prefilterRegex !== undefined)
+      regexOptions.prefilterRegex = entry.prefilterRegex;
     if (Object.keys(regexOptions).length > 0) {
       result.regexOptions = regexOptions;
     }

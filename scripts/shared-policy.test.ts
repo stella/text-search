@@ -31,7 +31,12 @@ test("change detection follows trust and the CI dependency graph stays acyclic",
   );
   for (const scenario of [
     { event: "pull_request", trust: "true", cancelled: false, expected: true },
-    { event: "pull_request", trust: "false", cancelled: false, expected: false },
+    {
+      event: "pull_request",
+      trust: "false",
+      cancelled: false,
+      expected: false,
+    },
     { event: "pull_request", trust: "", cancelled: false, expected: false },
     { event: "push", trust: "", cancelled: false, expected: true },
     { event: "workflow_dispatch", trust: "", cancelled: false, expected: true },
@@ -52,12 +57,17 @@ test("change detection follows trust and the CI dependency graph stays acyclic",
     if (typeof job !== "object" || job === null || !("needs" in job)) return [];
     const needs = job.needs;
     if (typeof needs === "string") return [needs];
-    if (Array.isArray(needs) && needs.every((value: unknown) => typeof value === "string"))
+    if (
+      Array.isArray(needs) &&
+      needs.every((value: unknown) => typeof value === "string")
+    )
       return needs;
     throw new Error("invalid CI dependency declaration");
   };
   const graph = new Map(
-    Object.entries(jobs).map(([name, job]) => [name, dependencies(job)] as const),
+    Object.entries(jobs).map(
+      ([name, job]) => [name, dependencies(job)] as const,
+    ),
   );
   const visited = new Set<string>();
   const visiting = new Set<string>();
@@ -82,7 +92,9 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
     expect(name).not.toContain("*");
     const line = text
       .split("\n")
-      .find((entry) => entry.trimStart().startsWith(JSON.stringify(name) + ","));
+      .find((entry) =>
+        entry.trimStart().startsWith(JSON.stringify(name) + ","),
+      );
     expect(line).toMatch(
       /^\s*"[^"]+",?\s*#\s*quarantine-excluded-since:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\s*$/u,
     );
@@ -90,7 +102,9 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
 });
 
 test("delegates package quarantine enforcement with least privilege", () => {
-  const policy = Bun.YAML.parse(read(".github/workflows/quarantine-policy.yml"));
+  const policy = Bun.YAML.parse(
+    read(".github/workflows/quarantine-policy.yml"),
+  );
   expect(policy).toEqual({
     name: "Package quarantine policy",
     on: {
@@ -138,14 +152,18 @@ test("delegates package quarantine enforcement with least privilege", () => {
 
 test("quarantines Bun scripts and crates.io dependencies", () => {
   expect(JSON.parse(read("package.json")).trustedDependencies).toEqual([]);
-  expect(read(".cargo/config.toml")).toBe('[registry]\nglobal-min-publish-age = "5 days"\n');
+  expect(read(".cargo/config.toml")).toBe(
+    '[registry]\nglobal-min-publish-age = "5 days"\n',
+  );
   const quarantine = read(".cargo/quarantine.toml");
   for (const [name, timestamp] of [
     ["stella-aho-corasick-core", "2026-08-12T12:43:23.000Z"],
     ["stella-fuzzy-search-core", "2026-09-30T17:28:44.000Z"],
     ["stella-regex-set-core", "2026-08-12T12:43:30.000Z"],
   ]) {
-    expect(quarantine).toContain(`"${name}", # quarantine-excluded-since: ${timestamp}`);
+    expect(quarantine).toContain(
+      `"${name}", # quarantine-excluded-since: ${timestamp}`,
+    );
   }
   const manifest = read("crates/core/Cargo.toml");
   for (const [name, version] of [

@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const workflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+const workflow = readFileSync(
+  new URL("../.github/workflows/release.yml", import.meta.url),
+  "utf8",
+);
 
 const readJob = (name: string) => {
   const marker = `  ${name}:\n`;
@@ -13,7 +16,9 @@ const readJob = (name: string) => {
   const remainder = workflow.slice(bodyStart);
   const nextJob = remainder.search(/^  [A-Za-z_][A-Za-z0-9_-]*:\n/m);
 
-  return nextJob === -1 ? workflow.slice(start) : workflow.slice(start, bodyStart + nextJob);
+  return nextJob === -1
+    ? workflow.slice(start)
+    : workflow.slice(start, bodyStart + nextJob);
 };
 
 test("builds packages without npm publishing credentials", () => {
@@ -43,7 +48,9 @@ test("delegates synchronized publishing with the guarded release contract", () =
   expect(finalize).toMatch(
     /uses: stella\/\.github\/\.github\/workflows\/npm-version-finalize\.yml@[0-9a-f]{40}\n/,
   );
-  expect(finalize).toContain("permissions:\n      contents: write\n      id-token: write");
+  expect(finalize).toContain(
+    "permissions:\n      contents: write\n      id-token: write",
+  );
   expect(finalize).not.toContain("pull-requests: write");
   expect(finalize).not.toContain("secrets: inherit");
   expect(finalize).not.toContain("CHANGELOG_APP_ID");
@@ -58,7 +65,9 @@ test("forwards release app credentials to every finalizer", () => {
 
   expect(finalizers.length).toBeGreaterThan(0);
   for (const finalizer of finalizers) {
-    expect(finalizer).toContain("RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}");
+    expect(finalizer).toContain(
+      "RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}",
+    );
     expect(finalizer).toContain(
       "RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}",
     );
@@ -74,6 +83,7 @@ test("uses the finalizer pin required by the release policy caller", () => {
     /uses: stella\/\.github\/\.github\/workflows\/release-policy\.yml@([0-9a-f]{40})/u,
   );
   const pin = policyUse?.at(1);
-  if (pin === undefined) throw new Error("Release policy must use an immutable shared pin");
+  if (pin === undefined)
+    throw new Error("Release policy must use an immutable shared pin");
   expect(readJob("finalize")).toContain(`npm-version-finalize.yml@${pin}`);
 });

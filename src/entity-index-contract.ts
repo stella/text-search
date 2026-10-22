@@ -65,7 +65,10 @@ export type EntityIndexEngine = {
   nativeBytes: number;
   postingCount: number;
   toBytes: () => Uint8Array;
-  search: (query: EntityQuery, params: EntitySearchParams) => EntitySearchResult;
+  search: (
+    query: EntityQuery,
+    params: EntitySearchParams,
+  ) => EntitySearchResult;
 };
 
 export type EntityIndexBuilderEngine = {

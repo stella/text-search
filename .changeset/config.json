@@ -1,12 +1,15 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
-  "changelog": ["@changesets/changelog-github", { "repo": "stella/text-search" }],
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "stella/text-search" }
+  ],
   "commit": false,
   "fixed": [],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
-  "format": "oxfmt",
+  "format": false,
   "updateInternalDependencies": "patch",
   "ignore": []
 }

@@ -28,7 +28,9 @@ test("ci-result covers every CI validation job", () => {
   const workflow = readWorkflow(".github/workflows/ci.yml");
   const jobs = workflow.jobs;
   const aggregate = jobs["ci-result"];
-  const validationJobs = Object.keys(jobs).filter((name) => name !== "ci-result");
+  const validationJobs = Object.keys(jobs).filter(
+    (name) => name !== "ci-result",
+  );
 
   expect(aggregate.needs).toEqual(expect.arrayContaining(validationJobs));
   expect(aggregate.needs).toHaveLength(validationJobs.length);
@@ -43,7 +45,8 @@ test("ci-result covers every CI validation job", () => {
   });
 
   const verdictStep = aggregate.steps.find(
-    (step: { name?: string }) => step.name === "Require every selected validation job",
+    (step: { name?: string }) =>
+      step.name === "Require every selected validation job",
   );
   expect(verdictStep.if).toBe(
     "github.event_name != 'pull_request' || needs.trust-check.outputs.trusted == 'true'",
@@ -54,7 +57,10 @@ test("ci-result covers every CI validation job", () => {
 });
 
 test("CI and CLA workflows handle merge groups", () => {
-  for (const path of [".github/workflows/ci.yml", ".github/workflows/cla.yml"]) {
+  for (const path of [
+    ".github/workflows/ci.yml",
+    ".github/workflows/cla.yml",
+  ]) {
     const workflow = readWorkflow(path);
     expect(workflow.on.merge_group.types).toEqual(["checks_requested"]);
   }

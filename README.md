@@ -95,7 +95,7 @@ The native and WASM entity engines will be connected with the 1.2.0 dependency
 update.
 
 ```ts
-import { EntityIndexBuilder, EntityIndex } from "@stll/text-search";
+import { EntityIndex, EntityIndexBuilder } from "@stll/text-search";
 
 const builder = new EntityIndexBuilder({
   forms: 1,

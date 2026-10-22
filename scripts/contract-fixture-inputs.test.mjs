@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readDenyListData, readRegexMetadata } from "./contract-fixture-inputs.mjs";
+import {
+  readDenyListData,
+  readRegexMetadata,
+} from "./contract-fixture-inputs.mjs";
 
 void test("external deny-list data retains custom source membership and missing-index behavior", () => {
   const data = readDenyListData({
@@ -16,7 +19,11 @@ void test("external deny-list data retains custom source membership and missing-
   assert.equal(data.sources.at(0)?.includes("custom-deny-list"), false);
   assert.equal(data.sources.at(1)?.includes("custom-deny-list"), true);
   assert.deepEqual(data.sources.at(2) ?? [], []);
-  assert.deepEqual(data.originals, ["Example Company", "Secret Client", "Unannotated"]);
+  assert.deepEqual(data.originals, [
+    "Example Company",
+    "Secret Client",
+    "Unannotated",
+  ]);
   assert.equal(
     readDenyListData({ originals: [], sources: [] }).sources.some((sources) =>
       sources.includes("custom-deny-list"),

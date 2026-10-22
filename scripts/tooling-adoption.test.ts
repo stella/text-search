@@ -2,15 +2,22 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { library } from "@stll/oxlint-config";
-import { portableSafetyPluginSpecifiers, portableSafetyRules } from "@stll/oxlint-plugin";
+import {
+  portableSafetyPluginSpecifiers,
+  portableSafetyRules,
+} from "@stll/oxlint-plugin";
 
 import config from "../oxlint.config";
 
-const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path: string) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("uses shared library defaults and the complete portable safety pack", () => {
   expect(config).toEqual(
-    library({ jsPlugins: portableSafetyPluginSpecifiers, rules: portableSafetyRules }),
+    library({
+      jsPlugins: portableSafetyPluginSpecifiers,
+      rules: portableSafetyRules,
+    }),
   );
   for (const override of config.overrides ?? []) {
     for (const [rule, severity] of Object.entries(portableSafetyRules)) {
@@ -40,8 +47,16 @@ test("keeps third-party quarantine and exact first-party tooling exemptions", ()
   const bunfig = Bun.TOML.parse(read("bunfig.toml"));
   expect(bunfig.install.minimumReleaseAge).toBe(432_000);
   const exceptions = bunfig.install.minimumReleaseAgeExcludes;
-  for (const name of ["@stll/oxlint-config", "@stll/oxlint-plugin", "@stll/typescript-config"]) {
+  for (const name of [
+    "@stll/oxlint-config",
+    "@stll/oxlint-plugin",
+    "@stll/typescript-config",
+  ]) {
     expect(exceptions).toContain(name);
   }
-  expect(exceptions.every((name: string) => name.startsWith("@stll/") && !name.includes("*"))).toBe(true);
+  expect(
+    exceptions.every(
+      (name: string) => name.startsWith("@stll/") && !name.includes("*"),
+    ),
+  ).toBe(true);
 });

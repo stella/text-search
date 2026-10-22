@@ -6,7 +6,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?$/;
+const VERSION_PATTERN =
+  /^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[0-9]+)?$/;
 
 function repoPath(...segments) {
   return path.join(ROOT, ...segments);
@@ -30,7 +31,9 @@ function writeVersion(version) {
 
 function readCargoVersion() {
   const manifest = fs.readFileSync(repoPath("Cargo.toml"), "utf8");
-  return manifest.match(/\[workspace\.package\][\s\S]*?\nversion = "([^"]+)"\n/)?.[1];
+  return manifest.match(
+    /\[workspace\.package\][\s\S]*?\nversion = "([^"]+)"\n/,
+  )?.[1];
 }
 
 function readCargoLockVersion() {
@@ -110,11 +113,15 @@ function describeMismatches(expectedVersion) {
   }
   const cargoVersion = readCargoVersion();
   if (cargoVersion !== expectedVersion) {
-    mismatches.push(`${repoPath("Cargo.toml")}: workspace.package.version=${cargoVersion}`);
+    mismatches.push(
+      `${repoPath("Cargo.toml")}: workspace.package.version=${cargoVersion}`,
+    );
   }
   const cargoLockVersion = readCargoLockVersion();
   if (cargoLockVersion !== expectedVersion) {
-    mismatches.push(`${repoPath("Cargo.lock")}: package.version=${cargoLockVersion}`);
+    mismatches.push(
+      `${repoPath("Cargo.lock")}: package.version=${cargoLockVersion}`,
+    );
   }
 
   return mismatches;
@@ -130,7 +137,8 @@ function main() {
     process.exit(1);
   }
 
-  const version = args.get("version") ?? args.get("tag")?.replace(/^v/, "") ?? readVersion();
+  const version =
+    args.get("version") ?? args.get("tag")?.replace(/^v/, "") ?? readVersion();
   if (!VERSION_PATTERN.test(version)) {
     throw new Error(`Invalid release version '${version}'`);
   }

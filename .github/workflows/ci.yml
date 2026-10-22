@@ -213,6 +213,8 @@ jobs:
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.code-changed == 'true'
+      - run: bun fmt --check
+        if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run check:toolchain
         if: needs.check-changes.outputs.code-changed == 'true'
       - run: bun run typecheck

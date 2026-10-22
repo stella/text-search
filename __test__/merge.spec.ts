@@ -41,7 +41,10 @@ describe("mergeAndSelect", () => {
   });
 
   test("equal zero-width spans are preserved", () => {
-    expect(mergeAndSelect([m(3, 0, 0), m(1, 0, 0)])).toEqual([m(1, 0, 0), m(3, 0, 0)]);
+    expect(mergeAndSelect([m(3, 0, 0), m(1, 0, 0)])).toEqual([
+      m(1, 0, 0),
+      m(3, 0, 0),
+    ]);
   });
 
   test("sorts by position", () => {

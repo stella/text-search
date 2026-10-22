@@ -7,7 +7,14 @@ void test("validates the consumed fields of actual-shaped engine matches", () =>
   /** @satisfies {import("../src/types").Match[]} */
   const matches = [
     { pattern: 0, start: 0, end: 8, text: "Ing. Jan" },
-    { pattern: 1, start: 9, end: 14, text: "Novak", name: "surname", distance: 0 },
+    {
+      pattern: 1,
+      start: 9,
+      end: 14,
+      text: "Novak",
+      name: "surname",
+      distance: 0,
+    },
   ];
   assert.deepEqual(readRuntimeSmokeMatches(matches), [
     { text: "Ing. Jan" },
