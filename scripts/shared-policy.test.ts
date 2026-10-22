@@ -88,15 +88,22 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
   const text = read("bunfig.toml");
   const configuration = Bun.TOML.parse(text);
   for (const name of configuration.install.minimumReleaseAgeExcludes) {
-    expect(name).toStartWith("@stll/");
     expect(name).not.toContain("*");
     const line = text
       .split("\n")
       .find((entry) =>
         entry.trimStart().startsWith(JSON.stringify(name) + ","),
       );
+    // First-party exemptions are permanent; a third-party exclusion names
+    // the instant the normal quarantine admits it.
+    const marker = name.startsWith("@stll/")
+      ? "quarantine-excluded-since"
+      : "quarantine-expires";
     expect(line).toMatch(
-      /^\s*"[^"]+",?\s*#\s*quarantine-excluded-since:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\s*$/u,
+      new RegExp(
+        `^\\s*"[^"]+",?\\s*#\\s*${marker}:\\s*\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\s*$`,
+        "u",
+      ),
     );
   }
 });

@@ -54,9 +54,16 @@ test("keeps third-party quarantine and exact first-party tooling exemptions", ()
   ]) {
     expect(exceptions).toContain(name);
   }
-  expect(
-    exceptions.every(
-      (name: string) => name.startsWith("@stll/") && !name.includes("*"),
-    ),
-  ).toBe(true);
+  expect(exceptions.every((name: string) => !name.includes("*"))).toBe(true);
+  // A third-party exclusion is temporary: it names when quarantine admits it.
+  const lines = read("bunfig.toml").split("\n");
+  for (const name of exceptions.filter(
+    (entry: string) => !entry.startsWith("@stll/"),
+  ))
+    expect(
+      lines.some(
+        (line) =>
+          line.includes(`"${name}"`) && line.includes("# quarantine-expires:"),
+      ),
+    ).toBe(true);
 });
