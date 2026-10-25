@@ -224,7 +224,8 @@ cargo test --locked
 
 Run `bun run typecheck` to check types with `bun check --no-pretty --all --project=tsconfig.json`.
 Editors continue to use the TypeScript language service because Bun has no language server.
-tsdown generates declaration files with its oxc isolated-declarations generator, so the repository does not install `typescript`.
+tsdown generates declaration files with its oxc isolated-declarations generator, without a TypeScript compiler.
+The root `typescript` devDependency stays only for `stll-toolchain-check` from `@stll/oxlint-config`, which runs its `tsc` to list the type-aware lint projects; it is removed after the next `@stll/oxlint-config` release.
 
 ## Built on
 
