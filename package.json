@@ -48,7 +48,6 @@
     "test:runtime:node": "node scripts/runtime-smoke.mjs",
     "rust:hawk": "cargo +1.97.1 hawk check --manifest-path Cargo.toml --target-dir target/hawk -D warnings -A hawk::dead_public -A hawk::unnecessary_public -D hawk::unnecessary_restricted_visibility -D hawk::unnecessary_crate_visibility",
     "typecheck": "bun check --no-pretty --all --project=tsconfig.json",
-    "check:typecheck-parity": "stll-typecheck-parity",
     "lint": "bun --bun oxlint -c oxlint.config.ts --report-unused-disable-directives-severity=error --deny-warnings --type-aware .",
     "lint:fix": "bun --bun oxlint -c oxlint.config.ts --type-aware --fix .",
     "version:check": "node scripts/version-sync.mjs check",
@@ -78,7 +77,6 @@
     "oxlint": "1.87.0",
     "oxlint-tsgolint": "7.0.2003",
     "tsdown": "0.23.1",
-    "typescript": "7.0.2",
     "unrun": "^0.3.1",
     "vite": "8.3.4"
   },
