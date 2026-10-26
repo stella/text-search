@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "daachorse"
-version = "3.0.3"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5614204febbc33cc07a2806aa6440b904ac012b68eecc37f4493ea4a76455a3d"
+checksum = "6662915a20ca97f4c293df4b589dda442f852429f50fda4f1d779f12cb7fe98f"
 
 [[package]]
 name = "darling"
@@ -212,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.18.0"
+version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1e1dacd0d2082dfcf1351c4bdd566bbe89a2b263235a2b50058f1e130a47277"
+checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
@@ -232,6 +232,12 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "fst"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab85b9b05e3978cc9a9cf8fea7f01b494e1a09ed3037e16ba39edc7a29eb61a"
 
 [[package]]
 name = "futures-core"
@@ -533,21 +539,23 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "stella-aho-corasick-core"
-version = "1.0.4"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5c641a78c371edb99be86c6ed4adc847748942187a8f29e6951b8aaf13ada9d"
+checksum = "9a33a6117dc85b35c19a6cac26bfb9d6093a100b3ae1efc491df6216c71b8253"
 dependencies = [
+ "bon",
  "daachorse",
  "unicode-case-mapping",
 ]
 
 [[package]]
 name = "stella-fuzzy-search-core"
-version = "1.1.5"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "387faac4036323de589afe9f50a2bcff6a00d434542535ca0df074adeed562b6"
+checksum = "20de2df00c73881ff76d6593a830fa407bd7ccf4a21edac9bf08ef38896e2909"
 dependencies = [
  "bon",
+ "fst",
  "unicode-case-mapping",
  "unicode-normalization",
  "unicode-segmentation",
@@ -555,10 +563,11 @@ dependencies = [
 
 [[package]]
 name = "stella-regex-set-core"
-version = "1.0.5"
+version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56f9ea377a16c4380b6e92d479ed7557c7bfdb6da731cd0cbe6826c11f8f38fe"
+checksum = "0fc335c1ce637d9eedb1dfe1f388637b6e33d9fe712766d2afc013f48dbda297"
 dependencies = [
+ "bon",
  "fancy-regex",
  "regex",
  "regex-automata",
