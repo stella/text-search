@@ -980,8 +980,9 @@ function engineIsMatch(engine: EngineSlot, haystack: string): boolean {
         return false;
       }
       return getRegexSlotEngine(engine).isMatch(haystack);
+    default:
+      throw new Error("Unsupported engine type");
   }
-  throw new Error("Unsupported engine type");
 }
 
 function asciiWholeWordIsMatch(engine: AcSlot, haystack: string): boolean {
@@ -1065,8 +1066,9 @@ function engineFindIter(engine: EngineSlot, haystack: string): Match[] {
         return [];
       }
       return getRegexSlotEngine(engine).findIter(haystack);
+    default:
+      throw new Error("Unsupported engine type");
   }
-  throw new Error("Unsupported engine type");
 }
 
 /** Collect every literal candidate before cross-engine selection. Regex and
