@@ -6,6 +6,8 @@ import { runInNewContext } from "node:vm";
 const root = new URL("../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 
+// The guard takes about 1.5 s in CI; on pull requests it can also fetch the
+// base commit of a shallow checkout over the network, so allow 30 s.
 test("repository workflows satisfy the installed shared toolchain guard", () => {
   const result = spawnSync("bunx", ["--no-install", "stll-toolchain-check"], {
     cwd: root,
@@ -17,7 +19,7 @@ test("repository workflows satisfy the installed shared toolchain guard", () => 
   expect(workflow).toContain('toolchain: "1.97.1"');
   const manifest = JSON.parse(read("package.json"));
   expect(manifest.scripts["rust:hawk"]).toContain("cargo +1.97.1 hawk");
-});
+}, 30_000);
 
 test("change detection follows trust and the CI dependency graph stays acyclic", () => {
   const workflow = Bun.YAML.parse(read(".github/workflows/ci.yml"));
