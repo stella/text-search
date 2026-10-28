@@ -44,7 +44,7 @@
   "dependencies": {
     "@stll/aho-corasick-wasm": "^1.0.4",
     "@stll/fuzzy-search-wasm": "^1.4.0",
-    "@stll/regex-set-wasm": "^1.0.5"
+    "@stll/regex-set-wasm": "^1.0.9"
   },
   "peerDependencies": {
     "vite": ">=5 <10"
