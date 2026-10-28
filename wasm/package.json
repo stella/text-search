@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@stll/aho-corasick-wasm": "^1.0.4",
-    "@stll/fuzzy-search-wasm": "^1.1.5",
+    "@stll/fuzzy-search-wasm": "^1.4.0",
     "@stll/regex-set-wasm": "^1.0.5"
   },
   "peerDependencies": {

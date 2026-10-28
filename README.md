@@ -89,10 +89,8 @@ the shared DFA for simpler patterns.
 
 `EntityIndexBuilder` and `EntityIndex` provide candidate retrieval over
 caller-normalized tokens and aliases. They are exported by both entry points.
-The current dependency uses a temporary typed stub: construction and
-deserialization throw `EntityIndex requires @stll/fuzzy-search >= 1.2.0`.
-The native and WASM entity engines will be connected with the 1.2.0 dependency
-update.
+Both entry points use the published fuzzy-search entity engines, including
+synchronous, asynchronous and incremental construction and serialized indices.
 
 ```ts
 import { EntityIndex, EntityIndexBuilder } from "@stll/text-search";
