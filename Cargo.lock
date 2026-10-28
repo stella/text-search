@@ -568,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "stella-text-search-core"
-version = "1.1.0"
+version = "2.0.0"
 dependencies = [
  "bon",
  "proptest",
