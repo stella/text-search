@@ -40,7 +40,7 @@ jobs:
       github.event_name != 'workflow_dispatch'
       || inputs.publish_to_npm != true
       || github.ref == 'refs/heads/main'
-    uses: stella/.github/.github/workflows/npm-version-preflight.yml@5764ab66e4df84cfd2e642c7d7e4678261e668f8
+    uses: stella/.github/.github/workflows/npm-version-preflight.yml@ba5f7da76aededf6f22814de93c72a49843fcc8e
     with:
       package-files: |
         package.json
@@ -70,7 +70,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
 
-      - uses: stella/.github/actions/provenance-check@8f19eb7220047e5b06f6e75f0b9f908bfd01f5f6
+      - uses: stella/.github/actions/provenance-check@ba5f7da76aededf6f22814de93c72a49843fcc8e
         with:
           provenance-version: v0.1.3
 
@@ -156,7 +156,7 @@ jobs:
       && (needs.preflight.outputs.already-released != 'true'
           && (github.event_name == 'push'
               || (inputs.publish_to_npm && github.ref == 'refs/heads/main')))
-    uses: stella/.github/.github/workflows/npm-version-finalize.yml@04c86bb54f4ae022354d72f8a40400bc7cf7428c
+    uses: stella/.github/.github/workflows/npm-version-finalize.yml@ba5f7da76aededf6f22814de93c72a49843fcc8e
     with:
       package-files: |
         package.json
