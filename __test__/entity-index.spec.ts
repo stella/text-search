@@ -313,6 +313,8 @@ test("published entity engines preserve candidates across construction modes and
           while (!step.done) step = iterator.next();
           return step.value;
         }
+        default:
+          throw new Error(`Unexpected construction mode: ${mode satisfies never}`);
       }
     })();
     for (const candidate of [index, EntityIndex.fromBytes(index.toBytes())]) {
