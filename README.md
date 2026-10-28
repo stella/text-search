@@ -18,7 +18,7 @@ Part of the
 
 ## Install
 
-Node.js / Bun:
+Node.js 20.19+, 22.13+, or 23.5+; Bun 1.4.1+:
 
 ```bash
 npm install @stll/text-search
