@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import toolchainPolicy from "@stll/oxlint-config/toolchain.json" with { type: "json" };
 
 const read = (path: string) =>
