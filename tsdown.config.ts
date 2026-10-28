@@ -1,6 +1,6 @@
 import { defineConfig } from "tsdown";
 
-import wasmManifest from "./wasm/package.json";
+import wasmManifest from "./wasm/package.json" with { type: "json" };
 
 const wasmImports = Object.keys({
   ...wasmManifest.dependencies,
