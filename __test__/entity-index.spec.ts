@@ -314,7 +314,9 @@ test("published entity engines preserve candidates across construction modes and
           return step.value;
         }
         default:
-          throw new Error(`Unexpected construction mode: ${mode satisfies never}`);
+          throw new Error(
+            `Unexpected construction mode: ${mode satisfies never}`,
+          );
       }
     })();
     for (const candidate of [index, EntityIndex.fromBytes(index.toBytes())]) {
