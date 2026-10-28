@@ -2,21 +2,21 @@
  * engines and re-exports the public API. */
 
 import { AhoCorasick } from "@stll/aho-corasick-wasm";
-import { FuzzySearch } from "@stll/fuzzy-search-wasm";
+import {
+  EntityIndex as EngineEntityIndex,
+  EntityIndexBuilder as EngineEntityIndexBuilder,
+  FuzzySearch,
+} from "@stll/fuzzy-search-wasm";
 import { RegexSet } from "@stll/regex-set-wasm";
 
 import { initEngines } from "./engines";
-import {
-  UnavailableEntityIndex,
-  UnavailableEntityIndexBuilder,
-} from "./entity-index-unavailable";
 
 initEngines({
   AhoCorasick,
   FuzzySearch,
   RegexSet,
-  EntityIndex: UnavailableEntityIndex,
-  EntityIndexBuilder: UnavailableEntityIndexBuilder,
+  EntityIndex: EngineEntityIndex,
+  EntityIndexBuilder: EngineEntityIndexBuilder,
 });
 
 export { EmptyPatternError, TextSearch } from "./text-search";

@@ -113,13 +113,8 @@ const expectWrappedIndex = (index: EntityIndex, bytes: Uint8Array) => {
 };
 
 describe("EntityIndex facade", () => {
-  test("registered placeholder refuses construction and deserialization", () => {
-    expect(() => new EntityIndexBuilder(options)).toThrow(
-      "requires @stll/fuzzy-search >= 1.2.0",
-    );
-    expect(() => EntityIndex.fromBytes(new Uint8Array())).toThrow(
-      "requires @stll/fuzzy-search >= 1.2.0",
-    );
+  test("registered entity engine rejects invalid serialized indices", () => {
+    expect(() => EntityIndex.fromBytes(new Uint8Array())).toThrow();
   });
 
   test("builder forwards construction, intern, aliases and synchronous completion", () => {
@@ -288,4 +283,48 @@ describe("EntityIndex facade", () => {
     ).toThrow(RangeError);
     expect(fake.search).not.toHaveBeenCalled();
   });
+});
+
+test("published entity engines preserve candidates across construction modes and serialization", async () => {
+  for (const mode of ["sync", "async", "steps"] as const) {
+    const builder = new EntityIndexBuilder(options);
+    const id = builder.intern(0, "alpha");
+    const expectedAlias = builder.addAlias({
+      ...alias,
+      forms: [
+        {
+          form: 0,
+          tokens: [{ id, weight: 1, minimumWeight: 1 }],
+          joins: [],
+          minimumTotal: 1,
+        },
+      ],
+    });
+    const weights = [new Float64Array([1])];
+    const index = await (async () => {
+      switch (mode) {
+        case "sync":
+          return builder.finish(weights);
+        case "async":
+          return builder.finishAsync(weights);
+        case "steps": {
+          const iterator = builder.finishSteps(weights, 1);
+          let step = iterator.next();
+          while (!step.done) step = iterator.next();
+          return step.value;
+        }
+      }
+    })();
+    for (const candidate of [index, EntityIndex.fromBytes(index.toBytes())]) {
+      const result = candidate.search(query, {
+        cutoff: 0.9,
+        boostProduct: 1,
+        maxCost: candidate.workCap,
+      });
+      expect(result.exhausted).toBe(false);
+      expect([...result.survivors]).toEqual([expectedAlias]);
+      expect([...result.matchKeys]).toEqual([0, 0, id]);
+      expect([...result.similarities]).toEqual([1]);
+    }
+  }
 });
