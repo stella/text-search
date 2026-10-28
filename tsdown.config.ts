@@ -1,5 +1,12 @@
 import { defineConfig } from "tsdown";
 
+import wasmManifest from "./wasm/package.json";
+
+const wasmImports = Object.keys({
+  ...wasmManifest.dependencies,
+  ...wasmManifest.peerDependencies,
+});
+
 export default defineConfig([
   {
     entry: ["src/index.ts"],
@@ -19,11 +26,11 @@ export default defineConfig([
     sourcemap: true,
     hash: false,
     deps: {
-      neverBundle: [
-        /^@stll\/aho-corasick-wasm$/,
-        /^@stll\/fuzzy-search-wasm$/,
-        /^@stll\/regex-set-wasm$/,
-      ],
+      neverBundle: Object.keys(wasmManifest.dependencies),
+      // The shared entity contract derives from native types; browser consumers
+      // receive those declarations inline without installing native binaries.
+      dts: { alwaysBundle: ["@stll/fuzzy-search"] },
+      onlyImport: wasmImports,
     },
   },
   {
@@ -34,6 +41,6 @@ export default defineConfig([
     clean: false,
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: [/^vite$/] },
+    deps: { neverBundle: [/^vite$/], onlyImport: wasmImports },
   },
 ]);
