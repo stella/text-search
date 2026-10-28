@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0
+
+### Major Changes
+
+- [#169](https://github.com/stella/text-search/pull/169) [`02ab728`](https://github.com/stella/text-search/commit/02ab728c04ac9099a80fec04eb026915365c41e5) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Select literal matches globally across engine routes, preserve every literal occurrence for overlap-all searches, and make longest selection independent of pattern order. Empty literal patterns are rejected with EmptyPatternError.
+
+### Minor Changes
+
+- [#194](https://github.com/stella/text-search/pull/194) [`6939e7e`](https://github.com/stella/text-search/commit/6939e7e7a501d6d24f6f4226ef0828c4d6e3ee13) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Wire the published fuzzy-search 1.4 native and WASM entity engines into EntityIndex, replacing the unavailable placeholder. Derive entity data contracts from the upstream API and gain compact postings and faster vocabulary search.
+
+### Patch Changes
+
+- [#192](https://github.com/stella/text-search/pull/192) [`8564460`](https://github.com/stella/text-search/commit/85644607e1e961d5701808af24366a20f670e77a) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Refresh build dependencies and generated development environment configuration.
+
+- [#197](https://github.com/stella/text-search/pull/197) [`f488db6`](https://github.com/stella/text-search/commit/f488db6424c58cd81cac133665f037708ce087f8) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Update the native and WebAssembly regex engines to 1.0.9 while preserving the search orchestrator match and offset contracts.
+
 ## 1.1.0
 
 ### Minor Changes
