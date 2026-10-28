@@ -315,7 +315,7 @@ test("published entity engines preserve candidates across construction modes and
         }
         default:
           throw new Error(
-            `Unexpected construction mode: ${mode satisfies never}`,
+            `Unexpected construction mode: ${String(mode satisfies never)}`,
           );
       }
     })();
