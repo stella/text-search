@@ -350,12 +350,12 @@ fetch_verified() {
 
 export RUSTUP_HOME=/opt/stll-cloud/rustup
 export CARGO_HOME=/opt/stll-cloud/cargo
-export RUSTUP_TOOLCHAIN='1.99.0'
+export RUSTUP_TOOLCHAIN='1.99.1'
 export RUSTUP_AUTO_INSTALL=0
 rust_run() {
   local mode="$1"
   shift
-  set -- runuser -u "$OUTPUT_USER" -- env HOME="$OUTPUT_HOME" RUSTUP_HOME="$RUSTUP_HOME" CARGO_HOME="$CARGO_HOME" RUSTUP_AUTO_INSTALL=0 RUSTUP_TOOLCHAIN=1.99.0 RUSTUP_DIST_SERVER=https://static.rust-lang.org RUSTUP_UPDATE_ROOT=https://static.rust-lang.org/rustup PATH="$PATH" "$@"
+  set -- runuser -u "$OUTPUT_USER" -- env HOME="$OUTPUT_HOME" RUSTUP_HOME="$RUSTUP_HOME" CARGO_HOME="$CARGO_HOME" RUSTUP_AUTO_INSTALL=0 RUSTUP_TOOLCHAIN=1.99.1 RUSTUP_DIST_SERVER=https://static.rust-lang.org RUSTUP_UPDATE_ROOT=https://static.rust-lang.org/rustup PATH="$PATH" "$@"
   case "$mode" in
     local) "$@" ;;
     network) network_run static.rust-lang.org 180 "$@" ;;
@@ -369,12 +369,12 @@ primary_rust_ready() {
   done
   [[ -x "$CARGO_HOME/bin/rustup" ]] || return 1
   [[ "$(rust_run local "$CARGO_HOME/bin/rustup" --version 2>/dev/null)" == 'rustup 1.29.1 '* ]] || return 1
-  [[ "$(rust_run local "$CARGO_HOME/bin/rustc" +1.99.0 --version)" == 'rustc 1.99.0 '* ]] || return 1
+  [[ "$(rust_run local "$CARGO_HOME/bin/rustc" +1.99.1 --version)" == 'rustc 1.99.1 '* ]] || return 1
   local host
-  host="$(rust_run local "$CARGO_HOME/bin/rustc" +1.99.0 -vV | awk '$1 == "host:" { print $2 }')" || return 1
-  rust_run local "$CARGO_HOME/bin/rustup" component list --toolchain '1.99.0' --installed | awk -v name='clippy' -v host="$host" '$1 == name || $1 == name "-" host { found=1 } END { exit !found }' || return 1
-  rust_run local "$CARGO_HOME/bin/rustup" component list --toolchain '1.99.0' --installed | awk -v name='rustfmt' -v host="$host" '$1 == name || $1 == name "-" host { found=1 } END { exit !found }' || return 1
-  rust_run local "$CARGO_HOME/bin/rustup" target list --toolchain '1.99.0' --installed | awk -v name='wasm32-unknown-unknown' '$1 == name { found=1 } END { exit !found }' || return 1
+  host="$(rust_run local "$CARGO_HOME/bin/rustc" +1.99.1 -vV | awk '$1 == "host:" { print $2 }')" || return 1
+  rust_run local "$CARGO_HOME/bin/rustup" component list --toolchain '1.99.1' --installed | awk -v name='clippy' -v host="$host" '$1 == name || $1 == name "-" host { found=1 } END { exit !found }' || return 1
+  rust_run local "$CARGO_HOME/bin/rustup" component list --toolchain '1.99.1' --installed | awk -v name='rustfmt' -v host="$host" '$1 == name || $1 == name "-" host { found=1 } END { exit !found }' || return 1
+  rust_run local "$CARGO_HOME/bin/rustup" target list --toolchain '1.99.1' --installed | awk -v name='wasm32-unknown-unknown' '$1 == name { found=1 } END { exit !found }' || return 1
   return 0
 }
 rust_ready() {
@@ -412,14 +412,14 @@ esac
   fi
   rust_run local "$CARGO_HOME/bin/rustup" set auto-self-update disable
   if ! primary_rust_ready; then
-    rust_run network "$CARGO_HOME/bin/rustup" toolchain install 1.99.0 --profile minimal --no-self-update '--component' 'clippy' '--component' 'rustfmt' '--target' 'wasm32-unknown-unknown'
+    rust_run network "$CARGO_HOME/bin/rustup" toolchain install 1.99.1 --profile minimal --no-self-update '--component' 'clippy' '--component' 'rustfmt' '--target' 'wasm32-unknown-unknown'
   fi
 
-  rust_run local "$CARGO_HOME/bin/rustup" default 1.99.0
+  rust_run local "$CARGO_HOME/bin/rustup" default 1.99.1
   verify_rust
   for tool in rustup cargo rustc rustdoc cargo-clippy clippy-driver rustfmt cargo-fmt; do
     # Launchers persist the system homes in fresh shells without profile sourcing.
-    printf '%s\n' '#!/bin/sh' 'export RUSTUP_HOME=/opt/stll-cloud/rustup' 'export CARGO_HOME=/opt/stll-cloud/cargo' 'export RUSTUP_AUTO_INSTALL=0' 'export RUSTUP_TOOLCHAIN=1.99.0' "exec /opt/stll-cloud/cargo/bin/$tool \"\$@\"" > "$scratch/$tool"
+    printf '%s\n' '#!/bin/sh' 'export RUSTUP_HOME=/opt/stll-cloud/rustup' 'export CARGO_HOME=/opt/stll-cloud/cargo' 'export RUSTUP_AUTO_INSTALL=0' 'export RUSTUP_TOOLCHAIN=1.99.1' "exec /opt/stll-cloud/cargo/bin/$tool \"\$@\"" > "$scratch/$tool"
     if ! cmp -s "$scratch/$tool" "/usr/local/bin/$tool"; then
       [[ ! -d "/usr/local/bin/$tool" ]] || fail 'Install target is a directory; remove it and rerun install:' "/usr/local/bin/$tool"
       install -m 755 "$scratch/$tool" "/usr/local/bin/$tool"
@@ -465,7 +465,7 @@ export PATH='/opt/stll-cloud/node/26.10.0/bin:/opt/stll-cloud/bun/1.4.4:/usr/loc
 unset _stll_cloud_remaining _stll_cloud_result _stll_cloud_separator _stll_cloud_part _stll_cloud_more
 export RUSTUP_HOME=/opt/stll-cloud/rustup
 export CARGO_HOME=/opt/stll-cloud/cargo
-export RUSTUP_TOOLCHAIN='1.99.0'
+export RUSTUP_TOOLCHAIN='1.99.1'
 export RUSTUP_AUTO_INSTALL=0
 STLL_CLOUD_PROFILE
   if ! cmp -s "$temporary" '/etc/profile.d/stll-cloud.sh'; then install -m 644 "$temporary" '/etc/profile.d/stll-cloud.sh'; fi
@@ -502,7 +502,7 @@ done
 )
 verify_shell_environment() {
   [[ -f '/etc/profile.d/stll-cloud.sh' && ! -L '/etc/profile.d/stll-cloud.sh' && "$(stat -c '%h:%u' '/etc/profile.d/stll-cloud.sh')" == 1:0 ]] || fail 'Managed shell environment is unavailable; run install'
-  [[ "$(sha256sum -- '/etc/profile.d/stll-cloud.sh' | cut -d ' ' -f1)" == '2e96da10364dade2b051fb77195abb3c42a3e848804b86ef26ada7aa6d392858' ]] || fail 'Managed shell environment differs; run install'
+  [[ "$(sha256sum -- '/etc/profile.d/stll-cloud.sh' | cut -d ' ' -f1)" == '24dfcdbf02036ed628e0fbc62bc76ec11f67e2df81f9e1ae4e3709bab30a0fb1' ]] || fail 'Managed shell environment differs; run install'
 }
 
 

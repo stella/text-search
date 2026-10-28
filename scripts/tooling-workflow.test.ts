@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import toolchainPolicy from "@stll/oxlint-config/toolchain.json" with { type: "json" };
+
 const read = (path: string) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -39,7 +41,7 @@ test("preserves shared detector changes and domain checks", () => {
 
 test("pins ordinary runtimes and bounds the Hawk compiler exception", () => {
   const workflow = read(".github/workflows/ci.yml");
-  expect(workflow).toContain('toolchain: "1.99.0"');
+  expect(workflow).toContain(`toolchain: "${toolchainPolicy.rust}"`);
   expect(workflow).toContain('HAWK_RUST_TOOLCHAIN: "1.97.1"');
   expect(read(".node-version").trim()).toBe("26.10.0");
   const declaration = JSON.parse(read("stll-toolchain.json"));
