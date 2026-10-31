@@ -18,7 +18,7 @@ jobs:
       contents: read
       pull-requests: read
       checks: read
-    uses: stella/.github/.github/workflows/changeset-release-pr.yml@ba5f7da76aededf6f22814de93c72a49843fcc8e
+    uses: stella/.github/.github/workflows/changeset-release-pr.yml@042baebaf071329b956555c05caf5736504c278d
     with:
       sync-cargo-inherited-lock: true
     secrets:
