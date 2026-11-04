@@ -519,9 +519,9 @@ jobs:
           tarballs=("$RUNNER_TEMP"/pack/*.tgz)
           test "${#tarballs[@]}" -eq 1
           cd "$app"
-          bun install --frozen-lockfile --config "$config"
+          bun install --frozen-lockfile --config="$config"
           # The tarball changes with every build, so it stays out of the lockfile.
-          bun add --no-save --config "$config" "${tarballs[0]}"
+          bun add --no-save --config="$config" "${tarballs[0]}"
           bunx --no-install playwright install --with-deps --only-shell chromium
       - name: Build with Vite and run in Chromium
         if: needs.check-changes.outputs.code-changed == 'true'
