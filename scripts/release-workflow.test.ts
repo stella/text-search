@@ -87,3 +87,39 @@ test("uses the finalizer pin required by the release policy caller", () => {
     throw new Error("Release policy must use an immutable shared pin");
   expect(readJob("finalize")).toContain(`npm-version-finalize.yml@${pin}`);
 });
+
+test("the release reconciler checks the packages the release publishes", () => {
+  const reconcile = readFileSync(
+    new URL("../.github/workflows/npm-release-reconcile.yml", import.meta.url),
+    "utf8",
+  ).replaceAll("\r\n", "\n");
+  const packageFiles = (source: string) =>
+    [...source.matchAll(/package-files: \|\n((?: {8}\S.*\n)+)/gu)].map(
+      ([, list]) => list,
+    );
+  const [reconciled, ...extra] = packageFiles(reconcile);
+  expect(reconciled).toBeDefined();
+  expect(extra).toEqual([]);
+  // Preflight and the finalizer.
+  const released = packageFiles(workflow.replaceAll("\r\n", "\n"));
+  expect(released).toHaveLength(2);
+  for (const list of released) expect(list).toBe(reconciled);
+  const pin = reconcile.match(
+    /uses: stella\/\.github\/\.github\/workflows\/npm-release-reconcile\.yml@([0-9a-f]{40})\n/u,
+  )?.[1];
+  const finalizerPin = readJob("finalize").match(
+    /uses: stella\/\.github\/\.github\/workflows\/npm-version-finalize\.yml@([0-9a-f]{40})\n/u,
+  )?.[1];
+  expect(pin).toBeDefined();
+  expect(pin).toBe(finalizerPin);
+  const releaseAppSecrets = (source: string) =>
+    [
+      ...source.matchAll(
+        /^ {6}(RELEASE_APP_(?:ID|PRIVATE_KEY)): (\$\{\{ secrets\.[A-Z0-9_]+ \}\})$/gmu,
+      ),
+    ].map(([, name, value]) => `${name}=${value}`);
+  expect(releaseAppSecrets(reconcile)).toHaveLength(2);
+  expect(releaseAppSecrets(reconcile)).toEqual(
+    releaseAppSecrets(readJob("finalize")),
+  );
+});
