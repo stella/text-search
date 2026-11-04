@@ -3,6 +3,7 @@ updates:
   - package-ecosystem: bun
     directories:
       - /
+      - /__test__/browser
       - /wasm
     schedule:
       interval: weekly

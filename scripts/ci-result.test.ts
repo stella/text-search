@@ -21,6 +21,7 @@ const runVerdict = (script: string, trustResult: string) =>
       RUNTIME_RESULT: "success",
       PACK_RESULT: "success",
       PROVENANCE_RESULT: "success",
+      BROWSER_RESULT: "success",
     },
   }).exitCode;
 
