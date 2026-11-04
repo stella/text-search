@@ -59,18 +59,18 @@
     "cloud:setup": "stll-cloud-setup"
   },
   "dependencies": {
-    "@stll/aho-corasick": "^2.0.2",
-    "@stll/fuzzy-search": "^1.4.0",
-    "@stll/regex-set": "^1.0.9"
+    "@stll/aho-corasick": "^2.0.3",
+    "@stll/fuzzy-search": "^1.4.2",
+    "@stll/regex-set": "^1.1.0"
   },
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
-    "@stll/aho-corasick-wasm": "^2.0.2",
-    "@stll/fuzzy-search-wasm": "^1.4.0",
+    "@stll/aho-corasick-wasm": "^2.0.3",
+    "@stll/fuzzy-search-wasm": "^1.4.2",
     "@stll/oxlint-config": "3.2.1",
     "@stll/oxlint-plugin": "0.7.0",
-    "@stll/regex-set-wasm": "^1.0.9",
+    "@stll/regex-set-wasm": "^1.1.0",
     "@stll/typescript-config": "0.10.0",
     "@types/node": "26.6.5",
     "bun-types": "1.4.4",
