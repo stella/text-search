@@ -36,7 +36,27 @@ const buildEntityIndex = (EntityIndexBuilder) => {
   return builder;
 };
 
+// Load each engine on its own first, so a failure names the engine package.
+const engines = {};
+for (const [name, load] of [
+  ["@stll/aho-corasick-wasm", () => import("@stll/aho-corasick-wasm")],
+  ["@stll/fuzzy-search-wasm", () => import("@stll/fuzzy-search-wasm")],
+  ["@stll/regex-set-wasm", () => import("@stll/regex-set-wasm")],
+]) {
+  try {
+    await load();
+    engines[name] = "ok";
+  } catch (error) {
+    engines[name] = String(error);
+  }
+}
+
 try {
+  if (Object.values(engines).some((status) => status !== "ok")) {
+    throw new Error(
+      `engine packages failed to load: ${JSON.stringify(engines)}`,
+    );
+  }
   const { EntityIndexBuilder, TextSearch } =
     await import("@stll/text-search-wasm");
 
