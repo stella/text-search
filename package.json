@@ -59,14 +59,14 @@
     "cloud:setup": "stll-cloud-setup"
   },
   "dependencies": {
-    "@stll/aho-corasick": "^1.0.4",
+    "@stll/aho-corasick": "^2.0.2",
     "@stll/fuzzy-search": "^1.4.0",
     "@stll/regex-set": "^1.0.9"
   },
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
-    "@stll/aho-corasick-wasm": "^1.0.4",
+    "@stll/aho-corasick-wasm": "^2.0.2",
     "@stll/fuzzy-search-wasm": "^1.4.0",
     "@stll/oxlint-config": "3.2.1",
     "@stll/oxlint-plugin": "0.7.0",
@@ -81,7 +81,7 @@
     "vite": "8.3.5"
   },
   "engines": {
-    "node": ">= 18"
+    "node": "^20.19.0 || ^22.13.0 || >=23.5.0"
   },
   "packageManager": "bun@1.4.4",
   "trustedDependencies": []
