@@ -1,0 +1,7 @@
+{
+  "extends": "@stll/typescript-config/bun.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["*.js", "*.mjs"]
+}

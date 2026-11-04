@@ -54,6 +54,12 @@ export default {
 };
 ```
 
+The engines use shared WebAssembly memory and
+workers, so pages that load them must be
+cross-origin isolated: serve them with
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`.
+
 ## Usage
 
 ```ts
