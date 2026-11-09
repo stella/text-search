@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "daachorse"
-version = "3.0.3"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5614204febbc33cc07a2806aa6440b904ac012b68eecc37f4493ea4a76455a3d"
+checksum = "6662915a20ca97f4c293df4b589dda442f852429f50fda4f1d779f12cb7fe98f"
 
 [[package]]
 name = "darling"
@@ -539,10 +539,11 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "stella-aho-corasick-core"
-version = "1.0.4"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5c641a78c371edb99be86c6ed4adc847748942187a8f29e6951b8aaf13ada9d"
+checksum = "a8f64b5e96dd183458d05bedc9dfe0ff8cc5057667ab43d2b8f93578127da297"
 dependencies = [
+ "bon",
  "daachorse",
  "unicode-case-mapping",
 ]

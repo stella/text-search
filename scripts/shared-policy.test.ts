@@ -177,7 +177,7 @@ test("quarantines Bun scripts and crates.io dependencies", () => {
   }
   const manifest = read("crates/core/Cargo.toml");
   for (const [name, version] of [
-    ["stella-aho-corasick-core", "1.0.4"],
+    ["stella-aho-corasick-core", "2.0.3"],
     ["stella-fuzzy-search-core", "1.4.2"],
     ["stella-regex-set-core", "1.1.0"],
   ]) {
