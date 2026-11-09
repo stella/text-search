@@ -126,7 +126,7 @@ type FuzzySlot = {
   identityMap?: true;
 };
 
-type EngineSlot = RegexSlot | AcSlot | SplitAcSlot | FuzzySlot;
+export type EngineSlot = RegexSlot | AcSlot | SplitAcSlot | FuzzySlot;
 
 /**
  * Multi-engine text search orchestrator.

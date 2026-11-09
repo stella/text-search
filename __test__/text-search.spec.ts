@@ -3,7 +3,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { EmptyPatternError, TextSearch } from "../src";
 import { getEngines, initEngines } from "../src/engines";
 import { textSearchTestHooks } from "../src/text-search";
-import type { Match, PatternEntry } from "../src/types";
+import type { Match, PatternEntry, TextSearchOptions } from "../src/types";
+import {
+  built,
+  engineSlot,
+  engineSlots,
+  engineSlotsOf,
+  regexOrFuzzyEngine,
+} from "./engine-slots";
 
 const registeredEngines = getEngines();
 // The merge behavior from main before equal non-empty spans were collapsed.
@@ -104,8 +111,7 @@ describe("TextSearch", () => {
     const search = new TextSearch([
       { pattern: "a", literal: true, name: "letter" },
     ]);
-    const engine = Reflect.get(search, "engines")[0];
-    const ac = engine.ac;
+    const { ac } = engineSlot(search, 0, "ac");
     let nativeCalls = 0;
     const nativeFindIter = ac.findIter.bind(ac);
     ac.findIter = (haystack: string) => {
@@ -129,8 +135,7 @@ describe("TextSearch", () => {
       new TextSearch([/a+/]),
       new TextSearch([{ pattern: "alpha", distance: 1 }]),
     ]) {
-      const slot = Reflect.get(search, "engines")[0];
-      const engine = slot.type === "regex" ? slot.rs : slot.fs;
+      const engine = regexOrFuzzyEngine(engineSlots(search)[0]);
       const expected = engine.findIter("alpha");
       let calls = 0;
       engine.findIter = () => {
@@ -268,8 +273,7 @@ describe("TextSearch", () => {
         allLiteral: true,
         overlapStrategy,
       });
-      const engine = Reflect.get(search, "engines")[0];
-      const ac = engine.ac;
+      const { ac } = engineSlot(search, 0, "ac");
       let nativeCalls = 0;
       const nativeFindIter = ac.findIter.bind(ac);
       ac.findIter = (haystack: string) => {
@@ -600,14 +604,15 @@ describe("TextSearch", () => {
   test("isMatch short-circuits without match iteration", () => {
     for (const options of [{}, { overlapStrategy: "all" as const }]) {
       const search = new TextSearch(["alpha", /omega/], options);
-      const [literal, regex] = Reflect.get(search, "engines");
+      const literal = engineSlot(search, 0, "ac");
+      const regex = built(engineSlot(search, 1, "regex").rs, "regex engine");
       literal.ac.findIter = () => {
         throw new Error("native iterator should not run");
       };
       literal.ac.findOverlappingIter = () => {
         throw new Error("overlapping iterator should not run");
       };
-      regex.rs.isMatch = () => {
+      regex.isMatch = () => {
         throw new Error("later engine should not run");
       };
 
@@ -675,7 +680,12 @@ describe("TextSearch", () => {
   });
 
   test("literal fast-path eligibility follows the shared option table", () => {
-    const cases = [
+    const cases: {
+      options: TextSearchOptions;
+      eligible: boolean;
+      replacementEligible?: boolean;
+      patterns?: string[];
+    }[] = [
       { options: { allLiteral: true }, eligible: true },
       { options: { allLiteral: true, wholeWords: true }, eligible: true },
       {
@@ -700,8 +710,7 @@ describe("TextSearch", () => {
       patterns = ["a", "a b"],
     } of cases) {
       const search = new TextSearch(patterns, options);
-      const slot = Reflect.get(search, "engines")[0];
-      const ac = slot.ac;
+      const { ac } = engineSlot(search, 0, "ac");
       let nativeCalls = 0;
       let overlappingCalls = 0;
       const nativeFindIter = ac.findIter.bind(ac);
@@ -858,16 +867,13 @@ describe("auto-optimization", () => {
     );
 
     const ts = new TextSearch(patterns, { maxAlternations: 50 });
-    const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter(
-      (engine: { type: string }) => engine.type === "regex",
-    );
+    const regexEngines = engineSlotsOf(ts, "regex");
 
     expect(regexEngines.length).toBeGreaterThan(1);
     expect(regexEngines.length).toBeLessThan(patterns.length);
-    expect(
-      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
-    ).toHaveLength(patterns.length);
+    expect(regexEngines.flatMap((engine) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
   });
 
   test("complex regex patterns auto-isolate", () => {
@@ -878,15 +884,12 @@ describe("auto-optimization", () => {
     );
 
     const ts = new TextSearch(patterns, { maxAlternations: 50 });
-    const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter(
-      (engine: { type: string }) => engine.type === "regex",
-    );
+    const regexEngines = engineSlotsOf(ts, "regex");
 
     expect(regexEngines).toHaveLength(patterns.length);
-    expect(
-      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
-    ).toHaveLength(patterns.length);
+    expect(regexEngines.flatMap((engine) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
   });
 
   test("regexChunkSize opts into bounded shared chunks", () => {
@@ -899,22 +902,17 @@ describe("auto-optimization", () => {
       maxAlternations: 50,
       regexChunkSize: 32,
     });
-    const engines = Reflect.get(ts, "engines");
-    const regexEngines = engines.filter(
-      (engine: { type: string }) => engine.type === "regex",
-    );
+    const regexEngines = engineSlotsOf(ts, "regex");
 
     expect(regexEngines).toHaveLength(4);
-    expect(
-      regexEngines.flatMap((engine: { indexMap: number[] }) => engine.indexMap),
-    ).toHaveLength(patterns.length);
+    expect(regexEngines.flatMap((engine) => engine.indexMap)).toHaveLength(
+      patterns.length,
+    );
   });
 
   test("single regex slots infer mandatory leading literal prefilters", () => {
     const ts = new TextSearch(["(?<!\\w)DE[\\s\\-./]?\\d{9}(?!\\w)"]);
-    const engines = Reflect.get(ts, "engines");
-
-    expect(engines[0]?.prefilter).toBeDefined();
+    expect(engineSlot(ts, 0, "regex").prefilter).toBeDefined();
     expect(ts.findIter("CZ123456789")).toEqual([]);
     expect(ts.findIter("DE123456789").map((match) => match.text)).toEqual([
       "DE123456789",
@@ -960,8 +958,7 @@ describe("auto-optimization", () => {
         prefilterAny: ["secret"],
       },
     ]);
-    const engines = Reflect.get(ts, "engines");
-    const slot = engines[0]!;
+    const slot = engineSlot(ts, 0, "regex");
 
     expect(slot.rs).toBeUndefined();
     expect(ts.findIter("public 123")).toEqual([]);
@@ -982,10 +979,8 @@ describe("auto-optimization", () => {
         prefilterAny: ["EUR"],
       },
     ]);
-    const engines = Reflect.get(ts, "engines");
-    const lazySlot = engines.find(
-      (engine: { build?: unknown; indexMap: number[]; rs?: unknown }) =>
-        engine.indexMap.includes(1),
+    const lazySlot = engineSlotsOf(ts, "regex").find((engine) =>
+      engine.indexMap.includes(1),
     );
 
     expect(lazySlot?.build).toBeDefined();
@@ -1012,12 +1007,11 @@ describe("auto-optimization", () => {
       caseInsensitive: true,
       overlapStrategy: "all",
     });
-    const engines = Reflect.get(ts, "engines");
-
-    expect(engines).toHaveLength(1);
-    expect(engines[0]!.type).toBe("ac");
-    expect(engines[0]!.identityMap).toBe(true);
-    expect(engines[0]!.patternCount).toBe(3);
+    expect(engineSlots(ts)).toHaveLength(1);
+    const slot = engineSlot(ts, 0, "ac");
+    expect(slot.type).toBe("ac");
+    expect(slot.identityMap).toBe(true);
+    expect(slot.patternCount).toBe(3);
     expect(
       ts.findIter("ALPHA beta alphabet").map((match) => match.pattern),
     ).toEqual([0, 1]);
@@ -1037,10 +1031,8 @@ describe("auto-optimization", () => {
       caseInsensitive: true,
       overlapStrategy: "all",
     });
-    const engines = Reflect.get(ts, "engines");
-
-    expect(engines).toHaveLength(1);
-    expect(engines[0]!.type).toBe("split-ac");
+    expect(engineSlots(ts)).toHaveLength(1);
+    expect(engineSlot(ts, 0, "split-ac").type).toBe("split-ac");
     expect(ts.findIter("alpha beta")).toEqual([
       {
         pattern: 0,

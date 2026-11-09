@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { TextSearch } from "../src";
+import { engineSlots } from "./engine-slots";
 
 describe("literal overlapStrategy all", () => {
   test("preserves every occurrence independent of insertion order", () => {
@@ -73,8 +74,8 @@ describe("literal overlapStrategy all", () => {
       ...options,
       unicodeBoundaries: false,
     });
-    expect(Reflect.get(split, "engines")[0]?.type).toBe("split-ac");
-    expect(Reflect.get(unsplit, "engines")[0]?.type).toBe("ac");
+    expect(engineSlots(split)[0]?.type).toBe("split-ac");
+    expect(engineSlots(unsplit)[0]?.type).toBe("ac");
     expect(split.findIter("alpha beta")).toEqual(
       unsplit.findIter("alpha beta"),
     );
