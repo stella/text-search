@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 
-const root = new URL("../", import.meta.url);
-const readWorkflow = (path: string) =>
-  Bun.YAML.parse(readFileSync(new URL(path, root), "utf8"));
+import { at, entries, list, readYaml, text } from "./structured-data";
 
 const runVerdict = (script: string, trustResult: string) =>
   Bun.spawnSync(["bash", "-c", script], {
@@ -26,35 +23,37 @@ const runVerdict = (script: string, trustResult: string) =>
   }).exitCode;
 
 test("ci-result covers every CI validation job", () => {
-  const workflow = readWorkflow(".github/workflows/ci.yml");
-  const jobs = workflow.jobs;
-  const aggregate = jobs["ci-result"];
-  const validationJobs = Object.keys(jobs).filter(
-    (name) => name !== "ci-result",
+  const jobs = at(readYaml(".github/workflows/ci.yml"), "jobs");
+  const aggregate = at(jobs, "ci-result");
+  const validationJobs = entries(jobs)
+    .map(([name]) => name)
+    .filter((name) => name !== "ci-result");
+
+  expect(at(aggregate, "needs")).toEqual(
+    expect.arrayContaining(validationJobs),
   );
+  expect(list(aggregate, "needs")).toHaveLength(validationJobs.length);
+  expect(at(aggregate, "if")).toBe("always()");
 
-  expect(aggregate.needs).toEqual(expect.arrayContaining(validationJobs));
-  expect(aggregate.needs).toHaveLength(validationJobs.length);
-  expect(aggregate.if).toBe("always()");
-
-  const rejectStep = aggregate.steps.find(
-    (step: { name?: string }) => step.name === "Reject untrusted pull requests",
+  const steps = list(aggregate, "steps");
+  const rejectStep = steps.find(
+    (step) => at(step, "name") === "Reject untrusted pull requests",
   );
   expect(rejectStep).toMatchObject({
     if: "github.event_name == 'pull_request' && needs.trust-check.outputs.trusted != 'true'",
     run: "exit 1",
   });
 
-  const verdictStep = aggregate.steps.find(
-    (step: { name?: string }) =>
-      step.name === "Require every selected validation job",
+  const verdictStep = steps.find(
+    (step) => at(step, "name") === "Require every selected validation job",
   );
-  expect(verdictStep.if).toBe(
+  expect(at(verdictStep, "if")).toBe(
     "github.event_name != 'pull_request' || needs.trust-check.outputs.trusted == 'true'",
   );
-  expect(runVerdict(verdictStep.run, "failure")).not.toBe(0);
-  expect(runVerdict(verdictStep.run, "cancelled")).not.toBe(0);
-  expect(runVerdict(verdictStep.run, "success")).toBe(0);
+  const verdict = text(verdictStep, "run");
+  expect(runVerdict(verdict, "failure")).not.toBe(0);
+  expect(runVerdict(verdict, "cancelled")).not.toBe(0);
+  expect(runVerdict(verdict, "success")).toBe(0);
 });
 
 test("CI and CLA workflows handle merge groups", () => {
@@ -62,7 +61,8 @@ test("CI and CLA workflows handle merge groups", () => {
     ".github/workflows/ci.yml",
     ".github/workflows/cla.yml",
   ]) {
-    const workflow = readWorkflow(path);
-    expect(workflow.on.merge_group.types).toEqual(["checks_requested"]);
+    expect(at(readYaml(path), "on", "merge_group", "types")).toEqual([
+      "checks_requested",
+    ]);
   }
 });
