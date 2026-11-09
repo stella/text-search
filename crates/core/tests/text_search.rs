@@ -8,7 +8,7 @@ use proptest::strategy::Just;
 use proptest::test_runner::Config as ProptestConfig;
 use stella_text_search_core::{
   EngineKind, Error, FuzzyDistance, FuzzyMetric, FuzzyPattern, LiteralPattern,
-  OverlapStrategy, PatternEntry, PreparedAhoArtifact, PreparedArtifactPolicy,
+  OverlapStrategy, PatternEntry, PreparedArtifactPolicy,
   PreparedTextSearchArtifacts, RegexArtifactPolicy, RegexPattern, TextSearch,
   TextSearchOptions, classify_patterns, count_alternations,
 };
