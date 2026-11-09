@@ -21,7 +21,7 @@ export function mergeAndSelect(matches: Match[]): Match[] {
   // Greedily select non-overlapping
   const selected: Match[] = [];
   let lastEnd = 0;
-  let previousSpan = { start: -1, end: -1 };
+  const previousSpan = { start: -1, end: -1 };
 
   for (const m of matches) {
     if (

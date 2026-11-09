@@ -836,7 +836,7 @@ function buildAcEngine(
         unicodeBoundaries: options.unicodeBoundaries,
         caseInsensitive: options.caseInsensitive,
         matchKind: "leftmost-longest",
-      }) as OverlapEngine,
+      }),
   };
 }
 
@@ -865,7 +865,7 @@ function buildIdentityAcEngine(
           unicodeBoundaries: options.unicodeBoundaries,
           caseInsensitive: options.caseInsensitive,
           matchKind: "leftmost-longest",
-        }) as OverlapEngine,
+        }),
         patternOffset: i,
       });
     }
@@ -904,7 +904,7 @@ function buildIdentityAcEngine(
         unicodeBoundaries: options.unicodeBoundaries,
         caseInsensitive: options.caseInsensitive,
         matchKind: "leftmost-longest",
-      }) as OverlapEngine,
+      }),
   };
 }
 
