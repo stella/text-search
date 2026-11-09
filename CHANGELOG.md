@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2
+
+### Patch Changes
+
+- [#209](https://github.com/stella/text-search/pull/209) [`8fc5805`](https://github.com/stella/text-search/commit/8fc58058e9c69639458f126d5183623fb3dbd625) Thanks [@jan-kubica](https://github.com/jan-kubica)! - Apply the shared library lint rules to the search core; behaviour is unchanged.
+
 ## 2.0.1
 
 ### Patch Changes
