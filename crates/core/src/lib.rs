@@ -717,7 +717,7 @@ pub struct TextSearch {
 }
 
 enum EngineSlot {
-  Literal(LiteralSlot),
+  Literal(Box<LiteralSlot>),
   SplitLiteral(SplitLiteralSlot),
   Regex(RegexSlot),
   Fuzzy(FuzzySlot),
@@ -1292,7 +1292,7 @@ impl TextSearch {
           pattern_count,
         )
       } else {
-        (EngineSlot::Literal(slot), pattern_count)
+        (EngineSlot::Literal(Box::new(slot)), pattern_count)
       }
     };
 
@@ -1750,11 +1750,11 @@ fn push_literal_engines(
       aho_mode,
       regex_mode,
       |aho_mode, _| {
-        Ok(EngineSlot::Literal(build_literal_engine(
+        Ok(EngineSlot::Literal(Box::new(build_literal_engine(
           group,
           literal_options,
           aho_mode,
-        )?))
+        )?)))
       },
     )?;
   }
@@ -2334,14 +2334,14 @@ fn build_identity_literal_engine(
     pattern_strings.push(value);
   }
 
-  Ok(EngineSlot::Literal(LiteralSlot {
+  Ok(EngineSlot::Literal(Box::new(LiteralSlot {
     engine: build_aho(pattern_strings, options.into(), true, aho_mode)?,
     index_map: Vec::new(),
     name_map: Vec::new(),
     identity_map: true,
     requires_overlap_selection: options.whole_words
       && !options.unicode_boundaries,
-  }))
+  })))
 }
 
 fn push_split_literal_engine(
@@ -2443,7 +2443,7 @@ fn literal_fast_path_slot(
   let [EngineSlot::Literal(slot)] = engines else {
     return None;
   };
-  (!slot.requires_overlap_selection).then_some(slot)
+  (!slot.requires_overlap_selection).then_some(slot.as_ref())
 }
 
 fn native_non_literal_slot(engines: &[EngineSlot]) -> Option<&EngineSlot> {
