@@ -3132,22 +3132,24 @@ fn load_prepared_aho_any(
   let (artifact, options, identity, fingerprint, bytes) =
     aho_mode.next_prepared_aho()?;
   let engine = aho_core::AhoCorasick::from_prepared(bytes)
-    .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-  let empty_matches = engine
-    .find_overlapping_iter_packed_bytes("")
-    .map_err(|error| Error::BuildLiteral(error.to_string()))?;
-  if let Some(pattern) = empty_matches.first() {
-    let local_index = usize::try_from(*pattern)
-      .map_err(|_| Error::PatternIndexOutOfRange { index: usize::MAX })?;
-    return Err(Error::EmptyPattern {
-      index: pattern_offset
-        .checked_add(local_index)
-        .ok_or(Error::PatternIndexOutOfRange { index: usize::MAX })?,
-      name: None,
-    });
-  }
+    .map_err(|error| prepared_aho_error(&error, pattern_offset))?;
   let actual = engine.pattern_count();
   Ok((artifact, options, identity, fingerprint, engine, actual))
+}
+
+/// The aho-corasick core refuses prepared automata that match the empty
+/// string and names the pattern; report it at its index in the full set.
+fn prepared_aho_error(error: &aho_core::Error, pattern_offset: usize) -> Error {
+  let Some(local_index) = error.empty_pattern_index() else {
+    return Error::BuildLiteral(error.to_string());
+  };
+  usize::try_from(local_index)
+    .ok()
+    .and_then(|local_index| pattern_offset.checked_add(local_index))
+    .map_or(
+      Error::PatternIndexOutOfRange { index: usize::MAX },
+      |index| Error::EmptyPattern { index, name: None },
+    )
 }
 
 fn validate_prepared_aho_options(
@@ -4854,5 +4856,37 @@ impl From<TextSearchOptions> for LiteralOptions {
       whole_words: value.whole_words,
       unicode_boundaries: value.unicode_boundaries,
     }
+  }
+}
+
+#[cfg(test)]
+mod prepared_aho_error_tests {
+  use super::{Error, aho_core, prepared_aho_error};
+
+  #[test]
+  fn empty_prepared_patterns_report_their_index_in_the_full_set() {
+    assert_eq!(
+      prepared_aho_error(&aho_core::Error::empty_pattern(0), 0),
+      Error::EmptyPattern {
+        index: 0,
+        name: None
+      }
+    );
+    assert_eq!(
+      prepared_aho_error(&aho_core::Error::empty_pattern(2), 100_000),
+      Error::EmptyPattern {
+        index: 100_002,
+        name: None
+      }
+    );
+  }
+
+  #[test]
+  fn other_prepared_errors_stay_build_errors() {
+    let error = aho_core::Error::PatternIndexDoesNotFit;
+    assert_eq!(
+      prepared_aho_error(&error, 7),
+      Error::BuildLiteral(error.to_string())
+    );
   }
 }
