@@ -3,6 +3,16 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
+import {
+  at,
+  entries,
+  readJson,
+  readToml,
+  readYaml,
+  text,
+  texts,
+} from "./structured-data";
+
 const root = new URL("../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 
@@ -17,17 +27,18 @@ test("repository workflows satisfy the installed shared toolchain guard", () => 
   const workflow = read(".github/workflows/ci.yml");
   expect(workflow).toContain('HAWK_RUST_TOOLCHAIN: "1.97.1"');
   expect(workflow).toContain('toolchain: "1.97.1"');
-  const manifest = JSON.parse(read("package.json"));
-  expect(manifest.scripts["rust:hawk"]).toContain("cargo +1.97.1 hawk");
+  expect(text(readJson("package.json"), "scripts", "rust:hawk")).toContain(
+    "cargo +1.97.1 hawk",
+  );
 }, 30_000);
 
 test("change detection follows trust and the CI dependency graph stays acyclic", () => {
-  const workflow = Bun.YAML.parse(read(".github/workflows/ci.yml"));
-  const jobs = workflow.jobs;
-  const detector = jobs["check-changes"];
-  expect(detector.needs).toEqual(["trust-check"]);
-  expect(jobs["trust-check"].needs).toBeUndefined();
-  const condition = detector.if.trim().replace(/\s+/gu, " ");
+  const jobs = at(readYaml(".github/workflows/ci.yml"), "jobs");
+  expect(at(jobs, "check-changes", "needs")).toEqual(["trust-check"]);
+  expect(at(jobs, "trust-check", "needs")).toBeUndefined();
+  const condition = text(jobs, "check-changes", "if")
+    .trim()
+    .replace(/\s+/gu, " ");
   expect(condition).toBe(
     "always() && !cancelled() && (github.event_name != 'pull_request' || needs.trust-check.outputs.trusted == 'true')",
   );
@@ -67,9 +78,7 @@ test("change detection follows trust and the CI dependency graph stays acyclic",
     throw new Error("invalid CI dependency declaration");
   };
   const graph = new Map(
-    Object.entries(jobs).map(
-      ([name, job]) => [name, dependencies(job)] as const,
-    ),
+    entries(jobs).map(([name, job]) => [name, dependencies(job)] as const),
   );
   const visited = new Set<string>();
   const visiting = new Set<string>();
@@ -87,21 +96,23 @@ test("change detection follows trust and the CI dependency graph stays acyclic",
 });
 
 test("first-party quarantine exemptions use exact supported annotations", () => {
-  const text = read("bunfig.toml");
-  const configuration = Bun.TOML.parse(text);
-  for (const name of configuration.install.minimumReleaseAgeExcludes) {
+  const bunfig = read("bunfig.toml");
+  for (const name of texts(
+    readToml("bunfig.toml"),
+    "install",
+    "minimumReleaseAgeExcludes",
+  )) {
     expect(name).not.toContain("*");
-    const line = text
+    const line = bunfig
       .split("\n")
       .find((entry) =>
         entry.trimStart().startsWith(JSON.stringify(name) + ","),
       );
     // First-party exemptions are permanent; a third-party exclusion names
     // the instant the normal quarantine admits it.
-    const marker =
-      typeof name === "string" && name.startsWith("@stll/")
-        ? "quarantine-excluded-since"
-        : "quarantine-expires";
+    const marker = name.startsWith("@stll/")
+      ? "quarantine-excluded-since"
+      : "quarantine-expires";
     expect(line).toMatch(
       new RegExp(
         `^\\s*"[^"]+",?\\s*#\\s*${marker}:\\s*\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z\\s*$`,
@@ -112,9 +123,7 @@ test("first-party quarantine exemptions use exact supported annotations", () => 
 });
 
 test("delegates package quarantine enforcement with least privilege", () => {
-  const policy = Bun.YAML.parse(
-    read(".github/workflows/quarantine-policy.yml"),
-  );
+  const policy = readYaml(".github/workflows/quarantine-policy.yml");
   expect(policy).toEqual({
     name: "Package quarantine policy",
     on: {
@@ -135,7 +144,7 @@ test("delegates package quarantine enforcement with least privilege", () => {
     },
   });
 
-  const prune = Bun.YAML.parse(read(".github/workflows/quarantine-prune.yml"));
+  const prune = readYaml(".github/workflows/quarantine-prune.yml");
   expect(prune).toEqual({
     name: "Package quarantine prune",
     on: { schedule: [{ cron: "11 4 * * *" }] },
@@ -155,13 +164,13 @@ test("delegates package quarantine enforcement with least privilege", () => {
       },
     },
   });
-  expect(policy.jobs.enforce.uses.split("@").at(1)).toBe(
-    prune.jobs.prune.uses.split("@").at(1),
+  expect(text(policy, "jobs", "enforce", "uses").split("@").at(1)).toBe(
+    text(prune, "jobs", "prune", "uses").split("@").at(1),
   );
 });
 
 test("quarantines Bun scripts and crates.io dependencies", () => {
-  expect(JSON.parse(read("package.json")).trustedDependencies).toEqual([]);
+  expect(at(readJson("package.json"), "trustedDependencies")).toEqual([]);
   expect(read(".cargo/config.toml")).toBe(
     '[registry]\nglobal-min-publish-age = "5 days"\n',
   );

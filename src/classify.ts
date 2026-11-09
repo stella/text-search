@@ -152,7 +152,7 @@ export function scoreRegexComplexity(
   if (pattern.length > 80) score += 2;
   if (pattern.length > 160) score += 2;
   if (alternationCount > 1) score += alternationCount >= 4 ? 2 : 1;
-  if (/\\p\{/.test(pattern)) score += 3;
+  if (pattern.includes("\\p{")) score += 3;
   if (/\(\?<?[!=]/.test(pattern)) score += 4;
   if (/\\[bBAZz]/.test(pattern)) score += 1;
   if (/\.\*|\.\+/.test(pattern)) score += 3;

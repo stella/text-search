@@ -126,7 +126,7 @@ type FuzzySlot = {
   identityMap?: true;
 };
 
-type EngineSlot = RegexSlot | AcSlot | SplitAcSlot | FuzzySlot;
+export type EngineSlot = RegexSlot | AcSlot | SplitAcSlot | FuzzySlot;
 
 /**
  * Multi-engine text search orchestrator.
@@ -836,7 +836,7 @@ function buildAcEngine(
         unicodeBoundaries: options.unicodeBoundaries,
         caseInsensitive: options.caseInsensitive,
         matchKind: "leftmost-longest",
-      }) as OverlapEngine,
+      }),
   };
 }
 
@@ -865,7 +865,7 @@ function buildIdentityAcEngine(
           unicodeBoundaries: options.unicodeBoundaries,
           caseInsensitive: options.caseInsensitive,
           matchKind: "leftmost-longest",
-        }) as OverlapEngine,
+        }),
         patternOffset: i,
       });
     }
@@ -904,7 +904,7 @@ function buildIdentityAcEngine(
         unicodeBoundaries: options.unicodeBoundaries,
         caseInsensitive: options.caseInsensitive,
         matchKind: "leftmost-longest",
-      }) as OverlapEngine,
+      }),
   };
 }
 
