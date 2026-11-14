@@ -21,7 +21,7 @@ jobs:
   sync:
     permissions:
       contents: read
-    uses: stella/.github/.github/workflows/provenance-sync.yml@6a095097f5f9dc7e157ced38f978802d335baf08
+    uses: stella/.github/.github/workflows/provenance-sync.yml@28dce62a9e1916b19ce03c8c47a1c44e1a145fdf
     with:
       install-command: bun install --frozen-lockfile
       provenance-version: v0.1.3
