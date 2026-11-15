@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 import toolchainPolicy from "@stll/oxlint-config/toolchain.json" with { type: "json" };
 
-import { list, readJson } from "./structured-data";
+import { readJson } from "./structured-data";
 
 const read = (path: string) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -41,19 +41,10 @@ test("preserves shared detector changes and domain checks", () => {
   }
 });
 
-test("pins ordinary runtimes and bounds the Hawk compiler exception", () => {
+test("pins ordinary runtimes and Hawk to the shared compiler", () => {
   const workflow = read(".github/workflows/ci.yml");
   expect(workflow).toContain(`toolchain: "${toolchainPolicy.rust}"`);
-  expect(workflow).toContain('HAWK_RUST_TOOLCHAIN: "1.97.1"');
+  expect(workflow).toContain(`HAWK_RUST_TOOLCHAIN: "${toolchainPolicy.rust}"`);
   expect(read(".node-version").trim()).toBe("26.10.0");
-  const rustExceptions = list(
-    readJson("stll-toolchain.json"),
-    "rustExceptions",
-  );
-  expect(rustExceptions).toHaveLength(1);
-  expect(rustExceptions.at(0)).toMatchObject({
-    pin: "1.97.1",
-    tracking: "https://github.com/stella/tooling/issues/99",
-    expires: "2026-11-11",
-  });
+  expect(readJson("stll-toolchain.json")).not.toHaveProperty("rustExceptions");
 });

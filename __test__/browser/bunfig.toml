@@ -1,0 +1,3 @@
+[install]
+# 5-day quarantine, as in the repository root.
+minimumReleaseAge = 432000
