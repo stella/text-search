@@ -1,0 +1,27 @@
+name: Provenance Commit
+
+# Privileged half of Provenance Sync: default-branch code with the App
+# credentials. The triggering run and its artifact are untrusted data; nothing
+# from the pull request executes here.
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] the triggering run is untrusted data and nothing from it executes
+    workflows: [Provenance Sync]
+    types: [completed]
+
+concurrency:
+  group: provenance-commit-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  commit:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    uses: stella/.github/.github/workflows/provenance-commit.yml@156afa9596e6a469c10e329f459168d34a00e0fd
+    secrets:
+      app_id: ${{ secrets.CHANGELOG_APP_ID }}
+      app_private_key: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}
