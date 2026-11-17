@@ -1,7 +1,10 @@
 name: Provenance Sync
 
+# Unprivileged: runs pull request code with no secrets. Provenance Commit
+# commits any drift from the default branch through `workflow_run`.
+
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] the shared workflow runs pull request code without secrets and commits only generated provenance
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "bun.lock"
@@ -21,10 +24,7 @@ jobs:
   sync:
     permissions:
       contents: read
-    uses: stella/.github/.github/workflows/provenance-sync.yml@6a095097f5f9dc7e157ced38f978802d335baf08
+    uses: stella/.github/.github/workflows/provenance-sync.yml@156afa9596e6a469c10e329f459168d34a00e0fd
     with:
       install-command: bun install --frozen-lockfile
       provenance-version: v0.1.3
-    secrets:
-      app_id: ${{ secrets.CHANGELOG_APP_ID }}
-      app_private_key: ${{ secrets.CHANGELOG_APP_PRIVATE_KEY }}
