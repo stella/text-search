@@ -46,7 +46,7 @@
     "perf:contracts": "bun scripts/contract-fixture-perf.mjs",
     "test:runtime:bun": "bun scripts/runtime-smoke.mjs",
     "test:runtime:node": "node scripts/runtime-smoke.mjs",
-    "rust:hawk": "cargo +1.97.1 hawk check --manifest-path Cargo.toml --target-dir target/hawk -D warnings -A hawk::dead_public -A hawk::unnecessary_public -D hawk::unnecessary_restricted_visibility -D hawk::unnecessary_crate_visibility",
+    "rust:hawk": "cargo +1.99.1 hawk check --manifest-path Cargo.toml --target-dir target/hawk -D warnings -A hawk::dead_public -A hawk::unnecessary_public -D hawk::unnecessary_restricted_visibility -D hawk::unnecessary_crate_visibility",
     "typecheck": "bun check --no-pretty --all --project=tsconfig.json",
     "lint": "bun --bun oxlint -c oxlint.config.ts --report-unused-disable-directives-severity=error --deny-warnings --type-aware .",
     "lint:fix": "bun --bun oxlint -c oxlint.config.ts --type-aware --fix .",
@@ -68,17 +68,17 @@
     "@changesets/cli": "3.0.3",
     "@stll/aho-corasick-wasm": "^2.0.3",
     "@stll/fuzzy-search-wasm": "^1.4.2",
-    "@stll/oxlint-config": "4.0.0",
-    "@stll/oxlint-plugin": "0.7.1",
+    "@stll/oxlint-config": "4.1.0",
+    "@stll/oxlint-plugin": "0.7.2",
     "@stll/regex-set-wasm": "^1.1.0",
     "@stll/typescript-config": "0.10.0",
     "@types/node": "26.6.6",
     "bun-types": "1.4.4",
-    "oxlint": "1.89.0",
-    "oxlint-tsgolint": "7.0.2005",
-    "tsdown": "0.23.5",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "tsdown": "0.23.7",
     "unrun": "^0.3.1",
-    "vite": "8.3.5"
+    "vite": "8.3.7"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=23.5.0"

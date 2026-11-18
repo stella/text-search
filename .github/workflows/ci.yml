@@ -292,9 +292,8 @@ jobs:
     permissions:
       contents: read
     env:
-      HAWK_RUST_TOOLCHAIN: "1.97.1"
-      HAWK_VERSION: "0.1.12"
-      HAWK_SHA256: f9cafbbc5777b2b00c362619b8b62af942d2900a121acae2e73210a8ebffd857
+      HAWK_RUST_TOOLCHAIN: "1.99.1"
+      HAWK_VERSION: "0.1.17"
     steps:
       - name: Skip when Hawk is not required
         if: needs.check-changes.outputs.code-changed != 'true'
@@ -305,7 +304,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          toolchain: "1.97.1"
+          toolchain: "1.99.1"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
@@ -319,17 +318,10 @@ jobs:
           expected_hawk_script="cargo +${HAWK_RUST_TOOLCHAIN} hawk check --manifest-path Cargo.toml --target-dir target/hawk -D warnings -A hawk::dead_public -A hawk::unnecessary_public -D hawk::unnecessary_restricted_visibility -D hawk::unnecessary_crate_visibility"
           jq -e --arg expected "$expected_hawk_script" \
             '.scripts["rust:hawk"] == $expected' package.json >/dev/null
-          archive="${RUNNER_TEMP}/cargo-hawk.tar.gz"
-          install_dir="${RUNNER_TEMP}/cargo-hawk"
-          curl --proto '=https' --tlsv1.2 --retry 3 -fsSL \
-            --output "$archive" \
-            "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-x86_64-unknown-linux-gnu.tar.gz"
-          echo "${HAWK_SHA256}  ${archive}" | sha256sum --check -
-          mkdir -p "$install_dir"
-          tar -xzf "$archive" -C "$install_dir" --strip-components=1 \
-            cargo-hawk-x86_64-unknown-linux-gnu/cargo-hawk \
-            cargo-hawk-x86_64-unknown-linux-gnu/cargo-hawk-driver
-          echo "$install_dir" >> "$GITHUB_PATH"
+          rustup component add rustc-dev --toolchain 1.99.1
+          RUSTC_BOOTSTRAP=1 cargo +1.99.1 install cargo-hawk \
+            --version "${HAWK_VERSION}" --locked --root "$RUNNER_TEMP/hawk"
+          echo "$RUNNER_TEMP/hawk/bin" >> "$GITHUB_PATH"
       - name: Check internal Rust visibility
         if: needs.check-changes.outputs.code-changed == 'true'
         run: bun run rust:hawk
