@@ -23,6 +23,9 @@ unused_macros = "deny"
 unused_mut = "deny"
 unused_variables = "deny"
 
+[workspace.lints.cargo]
+unused_dependencies = "deny"
+
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 bare_urls = "deny"
