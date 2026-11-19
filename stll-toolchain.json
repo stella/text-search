@@ -2,7 +2,7 @@
   "cloud": {
     "install": "bun install --frozen-lockfile",
     "rust": {
-      "toolchain": "1.99.1",
+      "toolchain": "1.100.0",
       "components": ["clippy", "rustfmt"],
       "targets": ["wasm32-unknown-unknown"]
     }
