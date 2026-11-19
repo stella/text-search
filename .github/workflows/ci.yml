@@ -266,7 +266,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          toolchain: "1.99.1"
+          toolchain: "1.100.0"
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -292,8 +292,8 @@ jobs:
     permissions:
       contents: read
     env:
-      HAWK_RUST_TOOLCHAIN: "1.99.1"
-      HAWK_VERSION: "0.1.17"
+      HAWK_RUST_TOOLCHAIN: "1.100.0"
+      HAWK_VERSION: "0.1.18"
     steps:
       - name: Skip when Hawk is not required
         if: needs.check-changes.outputs.code-changed != 'true'
@@ -304,7 +304,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         if: needs.check-changes.outputs.code-changed == 'true'
         with:
-          toolchain: "1.99.1"
+          toolchain: "1.100.0"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
@@ -318,8 +318,8 @@ jobs:
           expected_hawk_script="cargo +${HAWK_RUST_TOOLCHAIN} hawk check --manifest-path Cargo.toml --target-dir target/hawk -D warnings -A hawk::dead_public -A hawk::unnecessary_public -D hawk::unnecessary_restricted_visibility -D hawk::unnecessary_crate_visibility"
           jq -e --arg expected "$expected_hawk_script" \
             '.scripts["rust:hawk"] == $expected' package.json >/dev/null
-          rustup component add rustc-dev --toolchain 1.99.1
-          RUSTC_BOOTSTRAP=1 cargo +1.99.1 install cargo-hawk \
+          rustup component add rustc-dev --toolchain 1.100.0
+          RUSTC_BOOTSTRAP=1 cargo +1.100.0 install cargo-hawk \
             --version "${HAWK_VERSION}" --locked --root "$RUNNER_TEMP/hawk"
           echo "$RUNNER_TEMP/hawk/bin" >> "$GITHUB_PATH"
       - name: Check internal Rust visibility
