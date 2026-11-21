@@ -118,7 +118,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: stella/.github/.github/actions/changeset-policy@44f843221e7c2652dca6fd6c13e345ca96802bc9
+      - uses: stella/.github/.github/actions/changeset-policy@2664e46f02aea7164ba71bcdd485a686166993a4
         with:
           release-paths: |
             src/**
@@ -453,7 +453,7 @@ jobs:
         if: needs.check-changes.outputs.provenance-changed == 'true'
       - run: bun install --frozen-lockfile
         if: needs.check-changes.outputs.provenance-changed == 'true'
-      - uses: stella/.github/actions/provenance-check@44f843221e7c2652dca6fd6c13e345ca96802bc9
+      - uses: stella/.github/actions/provenance-check@2664e46f02aea7164ba71bcdd485a686166993a4
         if: needs.check-changes.outputs.provenance-changed == 'true'
         with:
           provenance-version: v0.1.3

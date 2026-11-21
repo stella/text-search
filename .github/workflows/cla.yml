@@ -41,7 +41,7 @@ jobs:
           )
         )
       )
-    uses: stella/.github/.github/workflows/cla.yml@44f843221e7c2652dca6fd6c13e345ca96802bc9
+    uses: stella/.github/.github/workflows/cla.yml@2664e46f02aea7164ba71bcdd485a686166993a4
     with:
       # Automation accounts cannot sign a CLA, so any app that opens PRs here
       # has to be listed or its every PR fails the check permanently.
